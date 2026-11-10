@@ -1,5 +1,6 @@
 import {
   AfterViewInit, Component, computed, inject, OnDestroy, signal,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive, NavigationEnd } from '@angular/router';
@@ -16,18 +17,33 @@ interface PrimaryTab {
   icon: IconName;
 }
 
+type Role = 'owner' | 'admin' | 'manager' | 'cashier' | 'viewer';
+
 interface SecondaryItem {
   path: string;
   labelKey: string;
   subKey: string;
   icon: IconName;
+  /** Plain <a href target="_blank"> instead of a routerLink — leaves the app's own routes, e.g. the static staff guide. */
+  external?: boolean;
+  /**
+   * Roles allowed to see this item — must mirror the `roleGuard([...])` on
+   * the matching route in app.routes.ts exactly (see
+   * docs/32-permission-enforcement-ux-design.md §3.1). Omit for an item
+   * whose route carries no roleGuard.
+   */
+  roles?: Role[];
+}
+
+interface SecondaryGroup {
+  labelKey: string;
+  items: SecondaryItem[];
 }
 
 @Component({
-  selector: 'ap-bottom-nav',
-  standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent],
-  template: `
+    selector: 'ap-bottom-nav',
+    imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent],
+    template: `
     <!-- ── Bottom tab bar (phone only, CSS hides on ≥769px) ── -->
     <nav class="bottom-nav" [class.hidden]="navHidden()" aria-label="Main navigation">
 
@@ -78,21 +94,42 @@ interface SecondaryItem {
       <div class="sheet-handle" (click)="closeMore()"></div>
 
       <div class="sheet-items">
-        @for (item of secondaryItems; track item.path) {
-          <a
-            [routerLink]="item.path"
-            routerLinkActive="active"
-            class="sheet-item"
-            (click)="closeMore()"
-          >
-            <span class="sheet-item-icon">
-              <ap-icon [name]="item.icon" [size]="18"/>
-            </span>
-            <span class="sheet-item-body">
-              <span class="sheet-item-label">{{ t(item.labelKey) }}</span>
-              <span class="sheet-item-sub">{{ t(item.subKey) }}</span>
-            </span>
-          </a>
+        @for (group of visibleGroups(); track group.labelKey) {
+          <div class="sheet-section-label">{{ t(group.labelKey) }}</div>
+          @for (item of group.items; track item.path) {
+            @if (item.external) {
+              <a
+                [href]="item.path"
+                target="_blank"
+                rel="noopener"
+                class="sheet-item"
+                (click)="closeMore()"
+              >
+                <span class="sheet-item-icon">
+                  <ap-icon [name]="item.icon" [size]="18"/>
+                </span>
+                <span class="sheet-item-body">
+                  <span class="sheet-item-label">{{ t(item.labelKey) }}</span>
+                  <span class="sheet-item-sub">{{ t(item.subKey) }}</span>
+                </span>
+              </a>
+            } @else {
+              <a
+                [routerLink]="item.path"
+                routerLinkActive="active"
+                class="sheet-item"
+                (click)="closeMore()"
+              >
+                <span class="sheet-item-icon">
+                  <ap-icon [name]="item.icon" [size]="18"/>
+                </span>
+                <span class="sheet-item-body">
+                  <span class="sheet-item-label">{{ t(item.labelKey) }}</span>
+                  <span class="sheet-item-sub">{{ t(item.subKey) }}</span>
+                </span>
+              </a>
+            }
+          }
         }
       </div>
 
@@ -109,7 +146,8 @@ interface SecondaryItem {
       </div>
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     /* ── Only visible on phones ── */
     :host { display: contents; }
 
@@ -214,6 +252,10 @@ interface SecondaryItem {
         position: fixed;
         inset-inline: 0;
         bottom: 0;
+        /* Cap the sheet below the top of the viewport so a long grouped list
+           scrolls inside .sheet-items instead of the whole sheet growing
+           past the screen edge with nothing to scroll. */
+        max-height: min(80dvh, calc(100dvh - 64px - env(safe-area-inset-top, 0px)));
         z-index: 170;
         background: var(--surface);
         border-radius: 20px 20px 0 0;
@@ -243,6 +285,16 @@ interface SecondaryItem {
         flex: 1;
         min-height: 0;
       }
+
+      .sheet-section-label {
+        padding: 14px 20px 4px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .sheet-section-label:first-child { padding-top: 4px; }
 
       .sheet-item {
         display: flex;
@@ -309,7 +361,7 @@ interface SecondaryItem {
         -webkit-tap-highlight-color: transparent;
       }
     }
-  `],
+  `]
 })
 export class BottomNavComponent implements AfterViewInit, OnDestroy {
   private readonly i18n   = inject(I18nService);
@@ -335,15 +387,74 @@ export class BottomNavComponent implements AfterViewInit, OnDestroy {
     { path: '/customers',  labelKey: 'nav.customers',  icon: 'users'   },
   ];
 
-  readonly secondaryItems: SecondaryItem[] = [
-    { path: '/media',       labelKey: 'nav.media',       subKey: 'nav.media.sub',       icon: 'media'    },
-    { path: '/feedback',    labelKey: 'nav.feedback',    subKey: 'nav.feedback.sub',    icon: 'star'     },
-    { path: '/storefront',  labelKey: 'nav.storefront',  subKey: 'nav.storefront.sub',  icon: 'store'    },
-    { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'collections'  },
-    { path: '/analytics',   labelKey: 'nav.analytics',   subKey: 'nav.analytics.sub',   icon: 'chart'    },
-    { path: '/reference',   labelKey: 'nav.reference',   subKey: 'nav.reference.sub',   icon: 'reference'     },
-    { path: '/settings',    labelKey: 'nav.settings',    subKey: 'nav.settings.sub',    icon: 'settings' },
+  // Mirrors the sidebar's grouping (minus Dashboard/Catalog/Orders/Customers,
+  // already covered by the always-visible primaryTabs above) so the "More"
+  // sheet and the desktop sidebar read as the same nav, not two different apps.
+  private readonly secondaryGroups: SecondaryGroup[] = [
+    {
+      labelKey: 'nav.section.storefront',
+      items: [
+        { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'collections' },
+        { path: '/media',       labelKey: 'nav.media',       subKey: 'nav.media.sub',       icon: 'media' },
+        { path: '/storefront',  labelKey: 'nav.storefront',  subKey: 'nav.storefront.sub',  icon: 'store' },
+      ],
+    },
+    {
+      labelKey: 'nav.section.sales',
+      items: [
+        // Excludes viewer, matching roleGuard(['owner','admin','manager','cashier']) on /pos.
+        { path: '/pos',            labelKey: 'nav.pos',            subKey: 'nav.pos.sub',            icon: 'barcode', roles: ['owner', 'admin', 'manager', 'cashier'] },
+        { path: '/inventory',      labelKey: 'nav.inventory',      subKey: 'nav.inventory.sub',      icon: 'cube', roles: ['owner', 'admin', 'manager'] },
+        // No cashier access, matching roleGuard(['owner','admin','manager']) on /reconciliation and /reports.
+        { path: '/reconciliation', labelKey: 'nav.reconciliation', subKey: 'nav.reconciliation.sub', icon: 'scale', roles: ['owner', 'admin', 'manager'] },
+        { path: '/reports',        labelKey: 'nav.reports',        subKey: 'nav.reports.sub',        icon: 'csv', roles: ['owner', 'admin', 'manager'] },
+        // Owner/admin only — matches roleGuard on /expenses.
+        { path: '/expenses',       labelKey: 'nav.expenses',       subKey: 'nav.expenses.sub',       icon: 'expenses', roles: ['owner', 'admin'] },
+      ],
+    },
+    {
+      labelKey: 'nav.section.engagement',
+      items: [
+        { path: '/feedback',  labelKey: 'nav.feedback',  subKey: 'nav.feedback.sub',  icon: 'star' },
+        { path: '/policies',  labelKey: 'nav.policies',  subKey: 'nav.policies.sub',  icon: 'docs' },
+        { path: '/analytics', labelKey: 'nav.analytics', subKey: 'nav.analytics.sub', icon: 'chart' },
+      ],
+    },
+    {
+      labelKey: 'nav.section.system',
+      items: [
+        // Matches roleGuard(['owner','admin']) on /reference and /settings.
+        { path: '/reference', labelKey: 'nav.reference', subKey: 'nav.reference.sub', icon: 'reference', roles: ['owner', 'admin'] },
+        { path: '/settings',  labelKey: 'nav.settings',  subKey: 'nav.settings.sub',  icon: 'settings', roles: ['owner', 'admin'] },
+        { path: 'assets/docs/staff-guide.html', labelKey: 'nav.documentation', subKey: 'nav.documentation.sub', icon: 'externalLink', external: true },
+      ],
+    },
   ];
+
+  private readonly myPinItem: SecondaryItem = { path: '/my-pin', labelKey: 'nav.myPin', subKey: 'nav.myPin.sub', icon: 'lock' };
+
+  // Mirrors sidebar.component.ts. This list is parallel, not shared, so a page
+  // added to only one of them is unreachable on the other surface — and the
+  // register's touch screen uses this one.
+  private readonly stocktakeItem: SecondaryItem = { path: '/stocktake', labelKey: 'nav.stocktake', subKey: 'nav.stocktake.sub', icon: 'list' };
+
+  private readonly diagnosticsItem: SecondaryItem = { path: '/diagnostics', labelKey: 'nav.diagnostics', subKey: 'nav.diagnostics.sub', icon: 'warning' };
+
+  readonly visibleGroups = computed<SecondaryGroup[]>(() => {
+    const role = this.auth.user()?.role as Role | undefined;
+    const extras: SecondaryItem[] = [];
+    if (role === 'manager') extras.push(this.myPinItem);
+    if (role === 'owner' || role === 'admin') extras.push(this.diagnosticsItem, this.stocktakeItem);
+    return this.secondaryGroups
+      .map((group) => ({
+        ...group,
+        items: [
+          ...group.items.filter((item) => !item.roles || !role || item.roles.includes(role)),
+          ...(group.labelKey === 'nav.section.system' ? extras : []),
+        ],
+      }))
+      .filter((group) => group.items.length > 0);
+  });
 
   ngAfterViewInit(): void {
     this.scrollEl = document.querySelector('.scroll-area');

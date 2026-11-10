@@ -10,16 +10,38 @@ export interface SaveCustomerPayload {
   city: string;
   sizePref: number;
   notes: string;
-  ltv?: number;
-  orders?: number;
+}
+
+export interface CustomerListParams {
+  page?: number;
+  limit?: number;
+  q?: string;
+  /** Server-side sort. Column keys are whitelisted in admin-customers.route.js. */
+  sort?: string;
+  dir?: 'asc' | 'desc';
+}
+
+export interface CustomerListResponse {
+  customers: Customer[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
 }
 
 @Injectable({ providedIn: 'root' })
 export class AdminCustomersService {
   private readonly api = inject(ApiClient);
 
-  list(): Promise<Customer[]> {
-    return firstValueFrom(this.api.get<Customer[]>('/admin/customers'));
+  list(params: CustomerListParams = {}): Promise<CustomerListResponse> {
+    const qs = new URLSearchParams();
+    if (params.page  != null) qs.set('page',  String(params.page));
+    if (params.limit != null) qs.set('limit', String(params.limit));
+    if (params.q)             qs.set('q',     params.q);
+    if (params.sort)          qs.set('sort',  params.sort);
+    if (params.dir)           qs.set('dir',   params.dir);
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return firstValueFrom(this.api.get<CustomerListResponse>(`/admin/customers${suffix}`));
   }
 
   get(id: string): Promise<Customer> {

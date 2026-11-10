@@ -3,8 +3,31 @@ const { Router } = require('express');
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, notFound, ok, validationError } = require('./lib');
+const { sendInvitationEmail } = require('../lib/invitation-email');
+const { requireAuth } = require('../middleware/require-auth');
+const { PosError } = require('../lib/pos/errors');
+const {
+  MAX_RECIPIENTS,
+  REMINDER_MIN,
+  REMINDER_MAX,
+  NotificationSettingsError,
+  normalizeRecipients,
+  readNotificationSettings,
+  sendTestEmail,
+} = require('../lib/staff-notify');
+const { notificationTestLimiter } = require('../middleware/rate-limit');
 
 const router = Router();
+
+// This router mixes broad-read endpoints (any authenticated role can GET
+// store settings / team / integrations / invitations — see index.js's
+// mount comment) with owner/admin-only writes. requireAuth() at the
+// router-mount level only proves "logged in," so every write route below
+// applies this explicitly — it was previously missing entirely, meaning
+// the client's roleGuard(['owner','admin']) on the /settings route was the
+// *only* thing stopping a manager/cashier/viewer session from calling
+// these directly (docs/32-permission-enforcement-ux-design.md §1).
+const ownerOrAdmin = requireAuth({ roles: ['owner', 'admin'] });
 
 router.get('/store', asyncHandler(async (_req, res) => {
   const client = await db.pool.connect();
@@ -12,7 +35,7 @@ router.get('/store', asyncHandler(async (_req, res) => {
     const tenant = await ensureDefaultTenant(client);
     const result = await client.query(
       `
-        SELECT t.slug, t.name, t.currency, t.timezone, t.config, bp.*, ss.*
+        SELECT t.slug, t.name, t.currency, t.timezone, t.config - 'notifications' AS config, bp.*, ss.*
         FROM tenants t
         LEFT JOIN brand_profiles bp ON bp.tenant_id = t.id
         LEFT JOIN store_settings ss ON ss.tenant_id = t.id
@@ -26,7 +49,7 @@ router.get('/store', asyncHandler(async (_req, res) => {
   }
 }));
 
-router.patch('/store', asyncHandler(async (req, res) => {
+router.patch('/store', ownerOrAdmin, asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
@@ -53,6 +76,20 @@ router.patch('/store', asyncHandler(async (req, res) => {
       `,
       [tenant.id, req.body.storeName || req.body.name, req.body.contactEmail, req.body.supportPhone, req.body.checkoutEnabled],
     );
+    // logoUrl is a distinct key (not COALESCE-skippable like the fields
+    // above) because "remove the logo" is a valid action — the client sends
+    // an explicit null to clear it, which must not be treated as "field
+    // omitted, keep existing value."
+    if (req.body.logoUrl !== undefined) {
+      await client.query(
+        `
+          INSERT INTO brand_profiles (tenant_id, logo_url)
+          VALUES ($1, $2)
+          ON CONFLICT (tenant_id) DO UPDATE SET logo_url = EXCLUDED.logo_url
+        `,
+        [tenant.id, req.body.logoUrl],
+      );
+    }
     await client.query('COMMIT');
     ok(res, { tenantId: tenant.id }, 'Store settings updated.');
   } catch (err) {
@@ -63,12 +100,138 @@ router.patch('/store', asyncHandler(async (req, res) => {
   }
 }));
 
+// ─── Notifications (Settings → Notifications) ────────────────────────────────
+// Who gets the new-order email. Owner/admin only on read as well as write:
+// the list is staff email addresses, and GET /store (readable by every role)
+// strips it from `config` for the same reason. Changes are audited, because
+// adding an outside address would forward every order to it.
+
+function smtpConfigured() {
+  return Boolean(process.env.SMTP_HOST);
+}
+
+// Recorded so emails sent from a webhook (no browser origin to borrow) can
+// still link back into this admin portal. Only a plain http(s) origin is kept.
+function requestOrigin(req) {
+  const origin = req.get('origin');
+  return origin && /^https?:\/\/[^/\s]+$/i.test(origin) ? origin : null;
+}
+
+router.get('/notifications', ownerOrAdmin, asyncHandler(async (req, res) => {
+  const settings = await readNotificationSettings(db, req.user.tenantId);
+  ok(res, {
+    orderEmails: settings.orderEmails,
+    reminderAfterMinutes: settings.reminderAfterMinutes,
+    maxRecipients: MAX_RECIPIENTS,
+    smtpConfigured: smtpConfigured(),
+  });
+}));
+
+router.put('/notifications', ownerOrAdmin, asyncHandler(async (req, res) => {
+  let orderEmails;
+  try {
+    orderEmails = normalizeRecipients(req.body?.orderEmails);
+  } catch (err) {
+    if (err instanceof NotificationSettingsError) return validationError(res, [err.message]);
+    throw err;
+  }
+  const reminderRaw = req.body?.reminderAfterMinutes;
+  const reminderAfterMinutes = reminderRaw === undefined || reminderRaw === null || reminderRaw === '' ? undefined : Number(reminderRaw);
+  if (reminderAfterMinutes !== undefined
+    && (!Number.isSafeInteger(reminderAfterMinutes) || reminderAfterMinutes < REMINDER_MIN || reminderAfterMinutes > REMINDER_MAX)) {
+    return validationError(res, [`The reminder must be between ${REMINDER_MIN} and ${REMINDER_MAX} minutes.`]);
+  }
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const before = await readNotificationSettings(client, req.user.tenantId);
+    const adminOrigin = requestOrigin(req) || before.adminOrigin;
+    await client.query(
+      `UPDATE tenants
+          SET config = jsonb_set(COALESCE(config, '{}'::jsonb), '{notifications}',
+                COALESCE(config->'notifications', '{}'::jsonb) || $2::jsonb, true)
+        WHERE id = $1`,
+      [req.user.tenantId, JSON.stringify({
+        orderEmails,
+        ...(reminderAfterMinutes !== undefined ? { reminderAfterMinutes } : {}),
+        ...(adminOrigin ? { adminOrigin } : {}),
+      })],
+    );
+    await client.query(
+      `INSERT INTO audit_events
+         (tenant_id, actor_user_id, action, entity_type, entity_id, before_state, after_state, ip_address, user_agent, request_id)
+       VALUES ($1,$2,'settings.notifications.update','tenant',$1,$3::jsonb,$4::jsonb,$5,$6,$7)`,
+      [
+        req.user.tenantId,
+        req.user.id,
+        JSON.stringify({ orderEmails: before.orderEmails }),
+        JSON.stringify({ orderEmails }),
+        req.ip || null,
+        req.headers['user-agent'] || null,
+        req.requestId || null,
+      ],
+    );
+    await client.query('COMMIT');
+    const after = await readNotificationSettings(db, req.user.tenantId);
+    ok(res, {
+      orderEmails, reminderAfterMinutes: after.reminderAfterMinutes, maxRecipients: MAX_RECIPIENTS, smtpConfigured: smtpConfigured(),
+    }, 'Notification settings saved.');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}));
+
+router.post('/notifications/test-email', ownerOrAdmin, notificationTestLimiter, asyncHandler(async (req, res) => {
+  let recipients;
+  try {
+    // Tests the list on screen (possibly unsaved) so staff can check an
+    // address before committing to it; falls back to the saved list.
+    recipients = req.body?.orderEmails !== undefined
+      ? normalizeRecipients(req.body.orderEmails)
+      : (await readNotificationSettings(db, req.user.tenantId)).orderEmails;
+  } catch (err) {
+    if (err instanceof NotificationSettingsError) return validationError(res, [err.message]);
+    throw err;
+  }
+  if (!recipients.length) return validationError(res, ['Add at least one email address first.']);
+  try {
+    const saved = await readNotificationSettings(db, req.user.tenantId);
+    await sendTestEmail(recipients, { adminOrigin: requestOrigin(req) || saved.adminOrigin });
+  } catch (err) {
+    // 424 rather than 5xx: the admin portal's error interceptor collapses
+    // every 5xx into a generic "Server error", which would hide the one thing
+    // the owner needs to know here (SMTP is missing / the address bounced).
+    if (err.code === 'SMTP_NOT_CONFIGURED') {
+      return res.status(424).json({
+        success: false,
+        code: 'SMTP_NOT_CONFIGURED',
+        message: 'Email sending is not set up on the server yet (SMTP). Ask your developer to configure it.',
+      });
+    }
+    return res.status(424).json({
+      success: false,
+      code: 'EMAIL_SEND_FAILED',
+      message: 'The email server rejected the message. Check the addresses and try again.',
+    });
+  }
+  ok(res, { sentTo: recipients }, 'Test email sent.');
+}));
+
 router.get('/team', asyncHandler(async (_req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
     const result = await client.query(
-      'SELECT id, full_name AS name, email, role, initials, created_at AS joined, status FROM admin_users WHERE tenant_id = $1 ORDER BY created_at',
+      `SELECT u.id, u.full_name AS name, u.email, u.role, u.initials, u.created_at AS joined,
+              u.status, u.last_login_at,
+              u.pos_branch_id AS "posBranchId", b.name AS "posBranchName"
+         FROM admin_users u
+         LEFT JOIN pos_branches b ON b.id = u.pos_branch_id AND b.tenant_id = u.tenant_id
+        WHERE u.tenant_id = $1 AND u.status != 'removed'
+        ORDER BY u.created_at`,
       [tenant.id],
     );
     ok(res, result.rows);
@@ -77,8 +240,11 @@ router.get('/team', asyncHandler(async (_req, res) => {
   }
 }));
 
-router.post('/team', asyncHandler(async (req, res) => {
+router.post('/team', ownerOrAdmin, asyncHandler(async (req, res) => {
   if (!req.body.email || !req.body.name) return validationError(res, ['Team member name and email are required.']);
+  const role = normalizeRole(req.body.role);
+  if (!role) return validationError(res, [`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`]);
+  if (!canAssignRole(req.user.role, role)) return validationError(res, ['Only the owner can grant the owner role.']);
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
@@ -87,10 +253,13 @@ router.post('/team', asyncHandler(async (req, res) => {
         INSERT INTO admin_users (tenant_id, email, full_name, initials, role, status)
         VALUES ($1, $2, $3, $4, $5, 'active')
         ON CONFLICT (tenant_id, email) DO UPDATE
-        SET full_name = EXCLUDED.full_name, initials = EXCLUDED.initials, role = EXCLUDED.role
+        SET full_name = EXCLUDED.full_name,
+            initials = EXCLUDED.initials,
+            role = EXCLUDED.role,
+            status = 'active'
         RETURNING id, full_name AS name, email, role, initials, created_at AS joined, status
       `,
-      [tenant.id, req.body.email, req.body.name, req.body.initials || initials(req.body.name), normalizeRole(req.body.role)],
+      [tenant.id, req.body.email, req.body.name, req.body.initials || initials(req.body.name), role],
     );
     created(res, result.rows[0], 'Team member saved.');
   } finally {
@@ -98,24 +267,83 @@ router.post('/team', asyncHandler(async (req, res) => {
   }
 }));
 
-router.patch('/team/:id', asyncHandler(async (req, res) => {
+router.patch('/team/:id', ownerOrAdmin, asyncHandler(async (req, res) => {
+  let role = null;
+  if (req.body.role) {
+    role = normalizeRole(req.body.role);
+    if (!role) return validationError(res, [`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`]);
+    if (!canAssignRole(req.user.role, role)) return validationError(res, ['Only the owner can grant the owner role.']);
+  }
+  // Which branch this person works at, and so which tills the POS picker
+  // offers them (migration 035). Three states, hence the explicit flag: absent
+  // from the body means "leave it alone", null means "clear it, they work
+  // across all branches", an id means "scope them to that branch".
+  const branchProvided = Object.prototype.hasOwnProperty.call(req.body, 'posBranchId');
+  const posBranchId = branchProvided ? (req.body.posBranchId || null) : null;
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
+    const removesPosAccess = req.body.status === 'disabled'
+      || req.body.status === 'removed'
+      || role === 'viewer';
+    if (removesPosAccess || branchProvided) {
+      const activeShift = await client.query(
+        `SELECT id, state FROM pos_shifts
+          WHERE tenant_id = $1 AND cashier_id = $2 AND state IN ('open', 'closing')
+          LIMIT 1`,
+        [tenant.id, req.params.id],
+      );
+      if (activeShift.rowCount) {
+        throw new PosError(
+          409,
+          'USER_HAS_ACTIVE_SHIFT',
+          'Close and reconcile this user\'s active POS shift before disabling, removing, moving branches, or removing POS access.',
+          { shiftId: activeShift.rows[0].id, shiftState: activeShift.rows[0].state },
+        );
+      }
+    }
+    if (branchProvided && posBranchId) {
+      const branch = await client.query(
+        'SELECT 1 FROM pos_branches WHERE tenant_id = $1 AND id = $2',
+        [tenant.id, posBranchId],
+      );
+      if (branch.rowCount === 0) return validationError(res, ['That branch does not exist.']);
+    }
     const result = await client.query(
       `
-        UPDATE admin_users
-        SET full_name = COALESCE($3, full_name),
-            email = COALESCE($4, email),
-            role = COALESCE($5, role),
-            status = COALESCE($6, status)
-        WHERE tenant_id = $1 AND id = $2
-        RETURNING id, full_name AS name, email, role, initials, created_at AS joined, status
+        UPDATE admin_users u
+        SET full_name = COALESCE($3, u.full_name),
+            email = COALESCE($4, u.email),
+            role = COALESCE($5, u.role),
+            status = COALESCE($6, u.status),
+            pos_branch_id = CASE WHEN $7 THEN $8::uuid ELSE u.pos_branch_id END
+        WHERE u.tenant_id = $1 AND u.id = $2
+        RETURNING u.id, u.full_name AS name, u.email, u.role, u.initials,
+                  u.created_at AS joined, u.status, u.pos_branch_id AS "posBranchId"
       `,
-      [tenant.id, req.params.id, req.body.name, req.body.email, req.body.role ? normalizeRole(req.body.role) : null, req.body.status],
+      [tenant.id, req.params.id, req.body.name, req.body.email, role, req.body.status, branchProvided, posBranchId],
     );
     if (result.rowCount === 0) return notFound(res, 'Team member not found.');
-    ok(res, result.rows[0], 'Team member updated.');
+    const row = result.rows[0];
+    if (req.body.status === 'disabled' || req.body.status === 'removed') {
+      // Defense in depth with requireAuth's live status check: remove every
+      // existing browser session now so the account disappears immediately,
+      // including from idle tabs that would otherwise wait for their next API
+      // request to discover the status change.
+      await client.query(
+        `DELETE FROM admin_sessions
+          WHERE sess::jsonb -> 'user' ->> 'id' = $1`,
+        [row.id],
+      );
+      if (row.id === req.user.id) req.session.destroy(() => undefined);
+    }
+    if (row.posBranchId) {
+      const branch = await client.query('SELECT name FROM pos_branches WHERE id = $1', [row.posBranchId]);
+      row.posBranchName = branch.rows[0]?.name || null;
+    } else {
+      row.posBranchName = null;
+    }
+    ok(res, row, 'Team member updated.');
   } finally {
     client.release();
   }
@@ -132,7 +360,7 @@ router.get('/integrations', asyncHandler(async (_req, res) => {
   }
 }));
 
-router.post('/integrations', asyncHandler(async (req, res) => {
+router.post('/integrations', ownerOrAdmin, asyncHandler(async (req, res) => {
   if (!req.body.key && !req.body.integrationKey) return validationError(res, ['Integration key is required.']);
   const client = await db.pool.connect();
   try {
@@ -160,7 +388,7 @@ router.get('/invitations', asyncHandler(async (req, res) => {
   try {
     const tenant = await ensureDefaultTenant(client);
     const result = await client.query(
-      `SELECT i.id, i.email, i.role, i.expires_at, i.created_at,
+      `SELECT i.id, i.email, i.role, i.expires_at, i.created_at, i.last_sent_at, i.email_sent, i.resend_count,
               u.full_name AS invited_by_name
        FROM team_invitations i
        LEFT JOIN admin_users u ON u.id = i.invited_by
@@ -174,33 +402,108 @@ router.get('/invitations', asyncHandler(async (req, res) => {
   }
 }));
 
-router.post('/invitations', asyncHandler(async (req, res) => {
-  const { email, role } = req.body;
-  if (!email) return validationError(res, ['Email is required.']);
+// Shared by POST /invitations (new invite) and POST /invitations/:id/resend
+// (same email, fresh token) — both boil down to "issue a token, mail it,
+// record what happened," they only differ in how the row gets there.
+async function dispatchInvitation(client, { tenant, email, role, invitedBy, req, resend }) {
+  const token     = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+  await client.query(
+    resend
+      ? `UPDATE team_invitations
+         SET token_hash = $3, expires_at = NOW() + INTERVAL '48 hours',
+             last_sent_at = NOW(), resend_count = resend_count + 1
+         WHERE tenant_id = $1 AND email = $2`
+      : `INSERT INTO team_invitations (tenant_id, email, role, token_hash, invited_by, last_sent_at)
+         VALUES ($1, $2, $4, $3, $5, NOW())
+         ON CONFLICT (tenant_id, email) DO UPDATE
+         SET role = EXCLUDED.role, token_hash = EXCLUDED.token_hash,
+             invited_by = EXCLUDED.invited_by,
+             expires_at = NOW() + INTERVAL '48 hours',
+             created_at = NOW(), last_sent_at = NOW(), resend_count = 0`,
+    resend ? [tenant.id, email, tokenHash] : [tenant.id, email, tokenHash, role, invitedBy],
+  );
+
+  // Prefer the actual origin this request came from over a hardcoded
+  // fallback — a request from the real admin portal always carries its own
+  // origin, so this needs no separate env var to stay in sync with
+  // wherever the admin portal is actually deployed. ADMIN_ORIGIN remains a
+  // manual override for the rare case of no Origin header (e.g. a
+  // server-to-server call); localhost:4300 is a dev-only last resort and
+  // must never be reached in production once CORS_ORIGINS is set.
+  const inviteBase = req.get('origin') || process.env.ADMIN_ORIGIN || 'http://localhost:4300';
+  const inviteLink = `${inviteBase}/accept-invite?token=${token}`;
+
+  let inviterName = null;
+  if (invitedBy) {
+    const inviter = await client.query('SELECT full_name FROM admin_users WHERE id = $1', [invitedBy]);
+    inviterName = inviter.rows[0]?.full_name || null;
+  }
+
+  // The invite link above is always returned regardless of what happens
+  // here — email is a delivery convenience on top of it, never the only
+  // way to get it, matching the .catch-and-log convention every other
+  // sendMail() caller in this codebase uses (see order-receipt.js).
+  let emailSent = false;
+  try {
+    await sendInvitationEmail({ to: email, role, inviteLink, inviterName, tenantName: tenant.name });
+    emailSent = true;
+  } catch (err) {
+    console.warn('[settings] Invitation email failed:', err.message);
+  }
+  await client.query('UPDATE team_invitations SET email_sent = $3 WHERE tenant_id = $1 AND email = $2', [tenant.id, email, emailSent]);
+
+  return { inviteLink, emailSent };
+}
+
+router.post('/invitations', ownerOrAdmin, asyncHandler(async (req, res) => {
+  const { email: rawEmail, role: rawRole } = req.body;
+  if (!rawEmail) return validationError(res, ['Email is required.']);
+  const role = normalizeRole(rawRole);
+  if (!role) return validationError(res, [`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`]);
+  if (!canAssignRole(req.user.role, role)) return validationError(res, ['Only the owner can grant the owner role.']);
+  const email = rawEmail.toLowerCase().trim();
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
-    const token     = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const invitedBy = req.session?.userId || null;
-    await client.query(
-      `INSERT INTO team_invitations (tenant_id, email, role, token_hash, invited_by)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (tenant_id, email) DO UPDATE
-       SET role = EXCLUDED.role, token_hash = EXCLUDED.token_hash,
-           invited_by = EXCLUDED.invited_by,
-           expires_at = NOW() + INTERVAL '48 hours',
-           created_at = NOW()`,
-      [tenant.id, email.toLowerCase().trim(), normalizeRole(role), tokenHash, invitedBy],
+
+    const existing = await client.query(
+      'SELECT id, created_at FROM team_invitations WHERE tenant_id = $1 AND email = $2 AND expires_at > NOW()',
+      [tenant.id, email],
     );
-    const inviteLink = `${process.env.ADMIN_ORIGIN || 'http://localhost:4300'}/accept-invite?token=${token}`;
-    created(res, { email, inviteLink }, 'Invitation sent.');
+    const hadPendingInvite = existing.rowCount > 0;
+
+    const { inviteLink, emailSent } = await dispatchInvitation(client, { tenant, email, role, invitedBy, req, resend: false });
+
+    created(res, { email, inviteLink, emailSent, hadPendingInvite }, emailSent ? 'Invitation emailed.' : 'Invitation created.');
   } finally {
     client.release();
   }
 }));
 
-router.delete('/invitations/:id', asyncHandler(async (req, res) => {
+router.post('/invitations/:id/resend', ownerOrAdmin, asyncHandler(async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const tenant = await ensureDefaultTenant(client);
+    const existing = await client.query(
+      'SELECT email, role FROM team_invitations WHERE tenant_id = $1 AND id = $2',
+      [tenant.id, req.params.id],
+    );
+    if (existing.rowCount === 0) return notFound(res, 'Invitation not found.');
+    const { email, role } = existing.rows[0];
+    const invitedBy = req.session?.userId || null;
+
+    const { inviteLink, emailSent } = await dispatchInvitation(client, { tenant, email, role, invitedBy, req, resend: true });
+
+    ok(res, { email, inviteLink, emailSent }, emailSent ? 'Invitation re-emailed.' : 'Invitation link renewed.');
+  } finally {
+    client.release();
+  }
+}));
+
+router.delete('/invitations/:id', ownerOrAdmin, asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
@@ -220,8 +523,22 @@ function initials(name) {
   return String(name || 'User').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('') || 'U';
 }
 
+// Owner is assignable like any other role (no separate "promote" flow —
+// picking it in the same role dropdown is the whole action), but only an
+// existing owner can hand it out. Cashier is POS-only
+// (server/routes/pos.route.js).
+const ASSIGNABLE_ROLES = ['owner', 'admin', 'manager', 'cashier', 'viewer'];
+
 function normalizeRole(role) {
-  return String(role || 'viewer').toLowerCase();
+  const value = String(role || 'viewer').toLowerCase();
+  return ASSIGNABLE_ROLES.includes(value) ? value : null;
+}
+
+// Only an owner can grant the owner role — an admin (who otherwise passes
+// `ownerOrAdmin` on every route below) must not be able to hand out the
+// account's top permission tier to themselves or anyone else.
+function canAssignRole(actorRole, targetRole) {
+  return targetRole !== 'owner' || actorRole === 'owner';
 }
 
 module.exports = router;

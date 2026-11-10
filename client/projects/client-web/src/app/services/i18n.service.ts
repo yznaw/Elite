@@ -3,6 +3,11 @@ import { LocaleService } from './locale.service';
 import { STRINGS } from '../i18n/strings';
 import { Product } from '../models/product.model';
 
+const CATALOG_NAME_CORRECTIONS: Record<string, string> = {
+  'elegencecroco': 'Elegance Croco',
+  'luxe blassic': 'Luxe Classic',
+};
+
 @Injectable({ providedIn: 'root' })
 export class I18nService {
   private readonly locale = inject(LocaleService);
@@ -26,10 +31,30 @@ export class I18nService {
     return locale === 'ar' ? `${formatted} ${currency}` : `${currency} ${formatted}`;
   };
 
-  readonly productName = (product: Pick<Product, 'id' | 'name'>): string =>
-    this.t(`productData.${product.id}.name`) !== `productData.${product.id}.name`
-      ? this.t(`productData.${product.id}.name`)
-      : product.name;
+  /**
+   * One price, or a range when a product's variants disagree.
+   *
+   * The currency is printed once, and the whole phrase is a per-locale template rather than
+   * pieces glued together here: Arabic puts the currency after the number and reads "from X
+   * to Y", so a concatenation built for English comes out backwards.
+   */
+  readonly priceSpan = (span: { min: number; max: number; isRange: boolean }): string => {
+    if (!span.isRange) return this.price(span.min);
+    const locale = this.locale.locale();
+    const format = (value: number) => value.toLocaleString(locale === 'ar' ? 'ar-SA' : 'en-SA');
+    return this.t('common.priceRange', {
+      min: format(span.min),
+      max: format(span.max),
+      currency: this.t('common.currency.qar'),
+    });
+  };
+
+  readonly productName = (product: Pick<Product, 'id' | 'name' | 'nameAr'>): string => {
+    if (this.locale.locale() === 'ar' && product.nameAr?.trim()) return product.nameAr.trim();
+    const translated = this.t(`productData.${product.id}.name`);
+    if (translated !== `productData.${product.id}.name`) return translated;
+    return CATALOG_NAME_CORRECTIONS[product.name.trim().toLowerCase()] || product.name;
+  };
 
   readonly productLeather = (value: string): string => this.lookup('leather', value);
   readonly productStyle = (value: string): string => this.lookup('style', value);

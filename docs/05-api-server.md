@@ -80,10 +80,43 @@ app.use(express.urlencoded({ extended: true }));
 ### 3. Request Logging
 
 ```javascript
-app.use(morgan('dev'));
+app.use(requestId());            // before everything else
+app.use(pinoHttp(httpLoggerOptions));
 ```
 
-Logs: `GET /api/health 200 3.421 ms`
+Structured logging via **pino** (`server/lib/logger.js`), replacing `morgan('dev')`, which carried no timestamp, request id, user or tenant and so could not be used to reconstruct an incident after the fact.
+
+- **Production:** one JSON line per request on stdout, captured by pm2 and rotated by `pm2-logrotate` (see [DEPLOYMENT.md](./DEPLOYMENT.md)).
+- **Development:** `pino-pretty`, human-readable.
+- **Test:** silent (`NODE_ENV=test`), so `node --test` output stays readable.
+- Level via `LOG_LEVEL`; secrets (cookies, CSRF/authorization headers, PIN, password, token) are redacted at both the bare key and nested paths.
+- `/api/health` is excluded from request logging so an uptime monitor does not dominate the log.
+
+Every line carries `requestId`, plus `userId`, `tenantId`, `role` and `registerId` when a session exists:
+
+```json
+{"level":30,"time":1785431188965,"requestId":"a3f9c1d40e12","userId":"…","route":"POST /api/pos/transactions","status":201,"msg":"request completed"}
+```
+
+**Correlation id (`server/middleware/request-id.js`).** One id per request, returned as `X-Request-Id` **and** in every JSON error body as `requestId`. The same value is written to the `audit_events` row and the `app_errors` row, and its last 6 characters are shown to the cashier in the POS error toast — so a phone call from the shop resolves to an exact request. A well-formed inbound `X-Request-Id` is honoured (proxy / client shipper), a malformed one is replaced.
+
+### 3b. Error Handling and Persistence
+
+All errors funnel through the single global handler in `server/index.js`. Router-local `PosError` responders were removed deliberately (`pos.route.js`, `admin-pos-security.route.js`, `admin-pos-reconciliation.route.js`) — they bypassed the correlation id, the error record and the log line. **Do not reintroduce them.**
+
+- **Response hygiene:** in production a `5xx` returns a generic message plus `code` and `requestId`; the real message and stack go to the log and `app_errors`. Modelled errors (`PosError`, any explicit `status < 500`) keep their message, since those are written for a cashier to read.
+- **Persistence:** `5xx` always, and `4xx` on `/api/pos/*` as `warn`, are recorded in `app_errors` (`server/lib/error-log.js`) — grouped by fingerprint, so a repeat increments `seen_count` instead of adding a row. Recording is fire-and-forget and can never delay or fail a response.
+
+### 3c. Alerting
+
+`server/lib/alerts.js` sends operational email through the existing mailer, deduplicated to one per key per hour, and no-ops entirely unless `ALERT_EMAIL` (or `BACKUP_ALERT_EMAIL`) is set:
+
+| Alert | Trigger |
+|---|---|
+| `inventory-drift` | the hourly consistency job finds stock that does not reconcile against baseline + ledger |
+| `server-error-surge` | more than 10 recorded 5xx in 5 minutes |
+| `offline-queue-stuck` | a register reports pending offline sales unchanged for 15+ minutes, or any rejected sale (`server/lib/pos/queue-watch-job.js`) |
+| `print-failures` | more than 5 receipt-print failures reported from one register within ~a shift |
 
 ### 4. Route Mounting
 
@@ -120,7 +153,9 @@ app.use((err, req, res, _next) => {
 
 | Method | Path | Description | Response |
 |---|---|---|---|
-| `GET` | `/api/health` | Server liveness check | `{ success, status, timestamp, uptime }` |
+| `GET` | `/api/health` | Liveness **and readiness** — performs a cached (5 s), timeout-bounded (3 s) `SELECT 1`. Returns **503** when the database is unreachable, so an uptime monitor stops going green during an outage. Original fields preserved for existing monitors. | `{ success, status, timestamp, uptime, database: { ok, latencyMs, error? } }` |
+| `POST` | `/api/client-logs` | Authenticated batch ingest of browser-side errors (up to 20 per request, rate limited). Entries land in `app_errors` with `source` `pos-client`/`admin-client`. Secrets are redacted server-side regardless of what the client posted. | `{ success, data: { accepted } }` |
+| `POST` | `/api/client-logs/csp` | CSP violation sink. Public and CSRF-exempt by necessity (the browser sends these with no session and no CSRF header), separately rate limited, always answers **204**. Wired to helmet's `report-uri`. | `204` |
 
 ### Public — Config (`/api/config`)
 
@@ -130,6 +165,50 @@ See `server/routes/config.route.js`. No auth required.
 |---|---|---|
 | `GET` | `/api/config` | Returns public tenant configuration — `{ defaultImage }`. `defaultImage` is stored in `tenants.config` JSONB and set via the media "Set as Default Fallback" button. The client-web reads this on init to use as a product image fallback. |
 
+### Public — Storefront Cart (`/api/carts`)
+
+See `server/routes/carts.route.js`. Session-cookie cart, no auth.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/carts/current` | The session cart. Each item carries `available`: the variant's stock (0 when inactive), or `null` for a line with no variant. |
+| `POST` | `/api/carts/current/items` | Add or increment a line. Price, name and SKU come from the catalog; the request's `price` is ignored. **409 `ITEM_UNAVAILABLE`** when the product is not active, the variant is inactive or belongs to another product, its colour/numeric size differ from those sent, or a product with sizes arrives without `variantId`. **409 `INSUFFICIENT_STOCK`** when the combined bag quantity for that inventory item would exceed stock; the bag is left unchanged. |
+| `DELETE` | `/api/carts/current/items/:productId` | Remove a line (`size`, `variantId`, `color` query params). |
+| `DELETE` | `/api/carts/current/items` | Empty the bag. |
+| `POST` | `/api/carts/shipping-quote` | NBOX delivery quote. |
+| `POST` | `/api/carts/checkout` | Create the pending order. Every line is re-priced from the catalog (same rules and **409 `ITEM_UNAVAILABLE`** as the bag), quantities must be integers from 1 to 100 (invalid values return 422), the delivery fee is re-quoted server-side through NBOX (free when NBOX is not configured), and the order is always `pending`: `payment.status` in the request is ignored, only the payment gateway confirms payment. Aggregates duplicate inventory identities (including UUID/size spelling variants), checks base-product stock too, and re-checks stock under row locks. Returns **409 `INSUFFICIENT_STOCK`** before any order exists. |
+
+Both 409s share one shape, so the storefront can match the failing bag line:
+
+```json
+{ "success": false, "code": "INSUFFICIENT_STOCK", "message": "...",
+  "details": [{ "variantId": "...", "sku": "...", "name": "...", "size": "39", "color": "Green",
+                "requested": 1, "available": 0, "inBag": 1 }],
+  "requestId": "..." }
+```
+
+`inBag` is only present on the add-to-bag response. Covered by `server/test/cart-stock-e2e.test.js`.
+
+**Security contract (September 2026):** Legacy `POST /api/carts` and all cart-ID read/write/checkout endpoints return 410. Use the session-scoped `/current` routes and the single `/checkout` service. Checkout persists a signed-cookie session and stores only a one-way ownership binding in order metadata; payment initiation and order-status requests require that same session. Retry keys and supersession are session-scoped. Old orders without a binding cannot start a new public payment; provider callbacks remain signature-authenticated. Cart/payment responses are not cacheable. Maximum 100 lines and 100 units per inventory identity. Separate unpaid orders do not reserve inventory.
+
+Public `GET/HEAD /api/contact` is removed; `POST /api/contact` still submits enquiries. Authorized owner/admin/manager users can list their tenant's enquiries at `GET /api/admin/contact?limit=25&offset=0` (maximum 100 records). All admin mutations now require owner/admin/manager at the shared boundary; existing narrower owner/admin gates still apply.
+
+Uploaded raster images are decoded and re-encoded to WebP before storage, with a 50 MB input cap, 40 million total pixels and 100 frames. SVG/HTML and corrupt images are rejected. Untrusted names never choose the stored extension. Both Express and nginx block active legacy upload types and serve images with `nosniff` and a sandbox CSP. Deploy the nginx change along with the API because nginx serves production uploads directly.
+
+### Public — Sitemap (`/api/sitemap.xml`)
+
+See `server/routes/sitemap.route.js`. No auth required. Generated from live data on every request and cached for an hour at the edge.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/sitemap.xml` | `application/xml` sitemap covering the storefront's indexable URLs: the static pages (`/`, `/collection`, `/story`, `/contact`), every `status = 'active'` collection (nested ones as `/collection/:parent/:child`), every `status = 'active'` product (`/product/:slug`, falling back to the id for a product saved without one), and every `status = 'active'` policy (`/policy/:handle`). `<lastmod>` comes from each row's `updated_at`. |
+
+Checkout, `/thank-you` and the checkout-result routes are deliberately excluded — transactional dead ends with nothing to index. So is `/experience`, the in-store feedback kiosk. Crawlers reach this at `https://elitecollections.qa/sitemap.xml`; nginx proxies that root path to this endpoint so the storefront's page renderer does not answer it as a `404` page (see `docs/09-nginx-https.md`).
+
+**Product URLs are slugs.** `products.slug` (unique per tenant, generated from the name on save) is what the storefront links to and what the sitemap lists. `GET /api/products/:idOrSlug` accepts either form: a uuid is matched against `id`, anything else against `slug`, and an unknown value answers `404` rather than the `500` a slug used to cause when it reached a uuid column. Both forms keep working, so every link shared or indexed before slugs existed still resolves; the storefront swaps the id for the slug in the address bar. A re-import keeps a product's existing slug unless the file names one, because regenerating it from the name would break every link to a renamed product.
+
+The storefront's server renders also call the public read endpoints (`/api/config`, `/api/products`, `/api/collections`, `/api/storefront-content`, `/api/storefront/published`, `/api/ref/*`, `/api/policies/*`) over loopback from PM2 `elite-web`, without cookies. All of them must stay usable without a session; see *Server-Side Rendering* in `docs/03-client-web.md`. `robots.txt` ships as a static asset with the Angular bundle at `client/projects/client-web/src/robots.txt` and points at the same URL.
+
 ### Admin — Products (`/api/admin/products`)
 
 See `server/routes/admin-products.route.js`. Full CRUD, bulk delete, media gallery management. All endpoints require an active admin session.
@@ -138,7 +217,7 @@ See `server/routes/admin-products.route.js`. Full CRUD, bulk delete, media galle
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/admin/products` | List all products (tenant-scoped) |
+| `GET` | `/api/admin/products` | List all products (tenant-scoped). Each row carries `priceMin`/`priceMax` (the cheapest and dearest active variant, or the product's own price when it has none) beside `price`, because the shop sells at the variant's price and a column showing only `price` reads as a selling price that may not exist. |
 | `GET` | `/api/admin/products/:id` | Single product with variants + images |
 | `POST` | `/api/admin/products` | Create product (upsert by SKU) |
 | `PUT` | `/api/admin/products/:id` | Replace product |
@@ -164,7 +243,29 @@ See `server/routes/admin-media.route.js`. All endpoints require an active admin 
 | `DELETE` | `/api/admin/media/orphaned` | Delete all unlinked media assets and their files. |
 | `DELETE` | `/api/admin/media/:id` | Delete one media asset and its file. |
 
+**Image variants and the empty-object trap.** Every upload is meant to store
+resized derivatives beside the original (`-thumb` 240, `-card` 640, `-grid` 900,
+`-pdp` 1400, `-zoom` 1800; see `server/lib/storage.js`) under
+`media_assets.metadata.imageVariants`. The storefront reads that map to build a
+`srcset` and lets the browser pick a size.
+
+Two states break it, and both fail silently because the page still renders:
+
+- **`imageVariants` is `{}`** — the key exists, so the row looks processed. This
+  is what an upload writes when `sharp` is unavailable or the derive step throws.
+- **`imageVariants` is absent** — the row was created before the pipeline.
+
+In either case `imageSrcset()` returns null on the client, `src` falls back to
+the full-size original, and phones download it. On this catalogue that meant
+single gallery images of 7 MB and 17 MB. Repair with
+`node scripts/backfill-image-variants.js` (see `07-dev-guide.md`).
+
 ### Admin — Orders (`/api/admin/orders`)
+
+> **Role gate (2026-09):** `/admin/orders` and `/admin/customers` are mounted behind `requireWriteRole(['owner','admin','manager'])` (`server/middleware/require-write-role.js`) in addition to `requireAuth()`. GET/HEAD/OPTIONS stay open to any signed-in user; every mutation is 403 for a `viewer`. Previously a viewer could refund an order, cancel it, or delete a customer.
+>
+> **Shipment joins (2026-09):** both list queries and the customer order-history query use a `LEFT JOIN LATERAL … LIMIT 1` instead of a plain `LEFT JOIN shipments`. `shipments.order_id` has no unique index, so an order with both a manual and an NBOX shipment previously appeared twice while `total` used `COUNT(DISTINCT o.id)` — page contents and count disagreed and LIMIT/OFFSET drifted.
+
 
 See `server/routes/admin-orders.route.js`. All endpoints require an active admin session.
 
@@ -180,12 +281,12 @@ See `server/routes/admin-orders.route.js`. All endpoints require an active admin
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/admin/orders` | List orders with server-side pagination and filtering. Query params: `page` (0-based, default 0), `limit` (default 50, max 200), `payment` (paid / pending / refunded / failed — maps to DB enum values automatically), `fulfillment` (awaiting / processing / shipped / delivered / returned), `from` (YYYY-MM-DD), `to` (YYYY-MM-DD), `q` (searches customer name, public number, email). Returns `{ orders[], total, page, limit, pages }`. |
-| `GET` | `/api/admin/orders/:id` | Single order by DB UUID or `public_number`; includes items (with `img`), timeline, notes |
+| `GET` | `/api/admin/orders` | List orders with server-side pagination, filtering and sorting. Query params: `page` (0-based, default 0), `limit` (default 50, max 200), `payment` (paid / pending / refunded / failed — maps to DB enum values automatically), `fulfillment` (awaiting / processing / shipped / delivered / returned), `from` (YYYY-MM-DD), `to` (YYYY-MM-DD), `q` (searches customer name, public number, email), `sort` + `dir`. **Sorting (2026-09)** is applied server-side over the whole result set; `sort` is whitelisted against `ORDER_SORTS` (id / date / customer / total / itemsCount / payment / fulfillment) and anything else falls back to `placed_at DESC`. Returns `{ orders[], total, page, limit, pages }`. List rows carry **no** `timeline` / `notes` keys — see the detail endpoint. |
+| `GET` | `/api/admin/orders/:id` | Single order by DB UUID or `public_number`; includes items (with `img`), timeline, notes, and `delivery` (carrier / service / trackingNumber / trackingUrl / shippedAt / deliveredAt / eta). `delivery` is **absent** when no shipment is booked, so the invoice omits the block rather than printing an empty one. |
 | `POST` | `/api/admin/orders` | Create order. Body: `{ customerName, items[], idempotencyKey?, customerId?, customerEmail?, customerPhone?, shippingAddress?, payment?, fulfillment?, total? }`. Validates `customerId` existence if provided. |
-| `PATCH` | `/api/admin/orders/:id/status` | Update payment/fulfillment status; optionally sets `trackingNumber`. Appends timeline entry. If `payment=paid`, triggers NBOX shipment booking (non-fatal on failure — stored in `orders.metadata.nbox.bookingFailedAt` / `bookingError`). |
+| `PATCH` | `/api/admin/orders/:id/status` | Update payment/fulfillment status; optionally sets `trackingNumber`. Appends a timeline entry carrying `actor_user_id`. Stamps `orders.cancelled_at` when the order becomes cancelled. `payment` / `fulfillment` / `status` / `timelineKind` are validated against the DB enums and return **422** (not a raw 500) when out of range. If `payment=paid`, triggers NBOX shipment booking (non-fatal on failure — stored in `orders.metadata.nbox.bookingFailedAt` / `bookingError`). |
 | `POST` | `/api/admin/orders/:id/rebook-delivery` | Retry NBOX delivery booking for a paid order. Clears previous `bookingFailedAt`/`bookingError` flags, then calls `bookNboxForPaidOrder`. Returns full updated order; 409 if not paid; 502 if NBOX call fails. |
-| `POST` | `/api/admin/orders/:id/notes` | Add an internal note. Body: `{ body }`. Also appends a `note` timeline entry. |
+| `POST` | `/api/admin/orders/:id/notes` | Add an internal note. Body: `{ body }`. Records `author_user_id` and appends a `note` timeline entry with `actor_user_id`; the detail endpoint reads the author's real name back instead of the old hardcoded `Admin` / `AD`. |
 
 ### Admin — Customers (`/api/admin/customers`)
 
@@ -199,11 +300,11 @@ See `server/routes/admin-customers.route.js`. All endpoints require an active ad
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/admin/customers` | List all active (non-deleted) customers with live order stats |
+| `GET` | `/api/admin/customers` | Paginated, searchable, sortable list of active (non-deleted) customers with live order stats. Query params: `page`, `limit` (default 50, max 200), `q` (name / email / city / phone), `sort` + `dir` (whitelisted against `CUSTOMER_SORTS`: name / email / city / orders / ltv / sizePref / lastOrder / joined). Returns `{ customers[], total, page, limit, pages }`. **Breaking change (2026-09):** previously returned a bare unbounded array. |
 | `GET` | `/api/admin/customers/:id` | Single customer with live order stats |
 | `GET` | `/api/admin/customers/:id/orders` | Customer's full order history (matches by `customer_id` OR `customer_email`) |
 | `POST` | `/api/admin/customers` | Upsert customer by email. If email already exists with `deleted_at`, resets `deleted_at = NULL` (restore). Body: `{ name, email, city?, sizePref?, notes?, phone? }` |
-| `PATCH` | `/api/admin/customers/:id` | Update customer. Body: `{ name?, email?, city?, sizePref?, notes?, phone? }` |
+| `PATCH` | `/api/admin/customers/:id` | Update customer. Body: `{ name?, email?, city?, sizePref?, notes?, phone? }`. The SET list is built from the keys actually present, so **a field can be cleared** by sending `''`; the previous blanket `COALESCE` silently kept the old value. Blanking the required `name` / `email` returns 422. |
 | `DELETE` | `/api/admin/customers/:id` | Soft-delete — sets `deleted_at = now()`. Order history preserved. |
 | `PATCH` | `/api/admin/customers/:id/restore` | Restore a soft-deleted customer — sets `deleted_at = NULL` |
 
@@ -230,6 +331,108 @@ See `server/routes/admin-settings.route.js`. All endpoints require an active adm
 | `GET` | `/api/admin/settings/invitations` | List pending (non-expired) invitations |
 | `POST` | `/api/admin/settings/invitations` | Create invitation — body: `{ email, role }`. Generates 32-byte hex token, stores SHA-256 hash, returns raw `inviteLink` URL. Token valid 48 h, single-use. |
 | `DELETE` | `/api/admin/settings/invitations/:id` | Revoke a pending invitation |
+| `GET` | `/api/admin/settings/notifications` | Owner/admin. `{ orderEmails, maxRecipients, smtpConfigured, reminderAfterMinutes }` |
+| `PUT` | `/api/admin/settings/notifications` | Owner/admin. Body `{ orderEmails: string[], reminderAfterMinutes?: 15-1440 }` (default 120; outside the range → 422): trimmed, lower-cased, de-duplicated, strict address check (no whitespace/commas/brackets, so no header injection), max 10. Stored in `tenants.config.notifications` together with the admin's request origin (used for links in emails sent from webhooks). Audited as `settings.notifications.update` with before/after. `GET /store` strips `notifications` from `config`, since every role can read it. |
+| `POST` | `/api/admin/settings/notifications/test-email` | Owner/admin, rate-limited (5 per 15 min). Body `{ orderEmails? }` tests the given list, otherwise the saved one. `424 SMTP_NOT_CONFIGURED` / `424 EMAIL_SEND_FAILED` (424, not 5xx, so the admin interceptor shows the message instead of a generic "Server error"). |
+
+### Admin — Notifications (`/api/admin/notifications`)
+
+See `server/routes/admin-notifications.route.js` and `server/lib/staff-notify.js`. Every signed-in role; tenant from the session.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/admin/notifications?after=<id>` | Newest 30 rows, or only rows with `id > after`. Returns `{ items: [{ id, kind, title, body, route, createdAt }], lastReadId }`. |
+| `POST` | `/api/admin/notifications/read` | Body `{ upToId }`. Moves the caller's read cursor forward (never back), clamped to the newest existing id. |
+
+**New-order notification.** `notifyNewWebOrder(client, tenantId, orderId)` runs next to `sendReceiptForPaidOrder` in the Sadad webhook, the Sadad browser callback (including its already-paid repair branch) and the admin mark-paid path. It only fires for paid orders with `metadata.source = 'client-web-checkout'` (POS and manual orders never notify). Idempotency is the unique index `admin_notifications (tenant_id, kind, entity_id)`: every caller tries the insert and only the one whose insert lands sends the email, so duplicate webhooks cannot double-send. The email and the bell carry order number, item count, items and total only (no customer name, address or phone) because they show on shared counter screens. It never throws. Tables: migration `045_staff_notifications.sql`.
+
+### Per-location stock (`server/lib/location-stock.js`, migration 046)
+
+Each store (one per `pos_branches` row) and the warehouse hold their own quantity in `variant_location_stock`. Locations reuse `stocktake_locations`. The model:
+
+`product_variants.stock_quantity = SUM(variant_location_stock) - SUM(order_stock_holds WHERE status = 'held')`
+
+`stock_quantity` stays the **sellable total** that the storefront, carts, restock alerts and reports read, so none of them changed. Everything is behind a per-tenant switch, `tenants.config.inventory.perLocation`. While it is off, no location balance or hold is written and every writer behaves exactly as before.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/admin/inventory/per-location` | `{ enabled, locations: [{ id, branchId, name, type }], drift }`. Syncs locations with branches first. |
+| `POST` | `/api/admin/inventory/per-location/activate` | Owner/admin. Locks the tenant and every variant, then seeds each variant's current total into the warehouse and turns the switch on. Idempotent (`alreadyOn`). Audited `inventory.per_location.activate`. The opening stocktake then moves units to where they really are. |
+| `POST` | `/api/admin/inventory/per-location/deactivate` | Owner/admin. Emergency switch back to one shared figure. Balances stop being maintained, and a later activation rebuilds them. |
+| `POST` | `/api/admin/inventory/adjustments` | Owner/admin/manager (managers added 2026-09-26). Now also takes an optional `locationId` (default: warehouse). While the switch is on, the location must cover a negative delta (`409 LOCATION_INSUFFICIENT_STOCK`). |
+| `GET` | `/api/admin/inventory/stock` | The stock table. Query: `search` (name, SKU, colour, exact barcode), `locationId`, `state=low\|out\|in` (applies to that location, else to the sellable total), `lowThreshold`, `limit` (max 200), `offset`. Returns `{ enabled, locations, total, items: [{ variantId, productName, sku, barcode, color, size, total, held, byLocation }] }`. Sizes are sorted numerically. |
+| `POST` | `/api/admin/inventory/receipts` | Add stock to one location: `{ locationId, reason: received\|found\|returned\|correction, note?, lines: [{ variantId, quantity }] }`. Raises the location and the total together, merges duplicate lines, max 200 lines. `409 PER_LOCATION_OFF` while the switch is off. Audited `inventory.received`. |
+| `POST` | `/api/admin/inventory/transfers` | `{ fromLocationId, toLocationId, note?, lines }`. Strict: the source must hold the units (`409 LOCATION_INSUFFICIENT_STOCK`), the total never changes. Header in `stock_transfers`, and two movements per line (`reason = 'transfer'`). |
+| `GET` | `/api/admin/inventory/transfers` | Recent transfers with their lines and who made them. |
+| `GET` | `/api/admin/inventory/movements` | Stock history. Filters: `locationId`, `userId`, `type` (`sale\|return\|added\|removed\|transfer\|stocktake\|catalog`), `search`, `from`/`to` (dates, inclusive), `limit`/`offset`. Each row has the person, location, signed change, reason (`adjustmentReason` for manual changes), note, order number and transfer route. Also returns the staff list for the filter. |
+| `PATCH` | `/api/admin/inventory/locations/:id` | Owner/admin. Renames the **warehouse** only (`{ name }`, 1-60 chars). Stores follow their branch name. |
+
+**Stocktakes while stock per location is on.**
+- `POST /stocktakes` requires `locationIds` (`422 NO_LOCATIONS`) and snapshots each location's expected quantity into `stocktake_location_expected`.
+- `GET /stocktakes/:id` lines carry `expectedByLocation`, hidden while a blind count is open.
+- On post, each location moves by its own `counted - expected`, applied to its current balance, so a sale or transfer made during the count is kept (`soldDuringCount` in the movement metadata). The total moves by the sum.
+- A location with no snapshot is set to exactly what was counted. That happens when the count started before the switch was on (go-live night), and the movement metadata carries `setToCounted`.
+
+**Stock file (Inventory → Add stock → Upload a sheet, `server/lib/stock-file-import.js`, 2026-09-28).** Owner/admin/manager (the inventory router); cashiers get 403.
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/api/admin/inventory/stock-file/template?locationId=` | CSV of every active size: `Location, Product, Color, Size, SKU, Barcode, Current, Stock`, sorted by product, colour and numeric size, Stock empty. Current is the location's balance (switch on; `locationId` required, else `422 LOCATION_REQUIRED`) or the shared total with Location `All locations` (switch off). File name `stock-<location>-<date>.csv` (CORS exposes `Content-Disposition`). Cells are formula-guarded. |
+| `POST` | `/api/admin/inventory/stock-file/preview` | Multipart `csv` + `locationId`. The number is the real count (absolute). An empty Stock cell means "leave it" and is counted as `skipped`. Refuses: `LOCATION_MISMATCH` (the sheet's Location column names another location; the guard against uploading one branch's count into another), a file mixing locations, `NOTHING_FILLED`. Rows below what is held for paid website orders are errors. Each row carries `currentStock`, `change` and `changedSinceDownload` (`{ was, now }` when the live number moved after the sheet was downloaded; a warning, not an error). `summary`: `changed`, `unchanged`, `skipped`, `failed`. Stored as a `catalog_import_jobs` row of kind `stock`. |
+| `POST` | `/api/admin/inventory/stock-file/:id/commit` | Locks variants in id order, sets the location (or the shared total) to each number, one `bulk_import` movement per changed size with the location and the uploader. `409 ALREADY_COMMITTED`, `409 STOCK_HELD`, `409 LOCATION_REQUIRED` / `LOCATION_OFF` when the switch changed after the review. |
+
+`/api/admin/bulk-import/stock/preview` and `/stock/:id/commit` still answer (owner/admin), delegating to the same code, for admin tabs opened before the move. Remove them after a release. `GET /admin/inventory/per-location` now also returns `units` (location id → units on hand) for the location cards.
+
+**Product editor with the switch on.** `GET /admin/products/:id` variants carry `locationStock` (location id → quantity) and `held`. The `PATCH`/`POST` body accepts, per variant, `locationStock` (absolute per location), plus top-level `expectedLocationStock` (`{ variantId: { locationId: qty } }`, what the editor loaded) and `stockReason`.
+- The server derives the total as the current total plus the location changes, and ignores the legacy `stock` field.
+- It writes one `manual_adjustment` movement per changed location with `adjustmentReason`.
+- It refuses with:
+  - `409 STOCK_CHANGED` when a location changed since load.
+  - `409 STOCK_HELD` when the change would remove units held for paid website orders.
+  - `409 SIZE_HAS_STOCK` when removing a size that still has stock.
+
+
+While the switch is on:
+
+- **POS sale:** deducts the register's branch location. An online sale needs `min(branch balance, sellable total) >= qty`, so a unit held for a paid website order cannot be sold at the till. An offline sale floors at zero, like the total, and keeps its sync conflict row.
+- **POS void and refund with restock:** go back to the **selling** branch's location (`pos_transactions.branch_id`). A unit physically returned at another shop is moved with a transfer.
+- **Paid website order:** `ensurePaidOrderStock` reduces the total and records `order_stock_holds` (`held`, no location). Staff approval allocates it to a location (see "Website order approval" below).
+- **Order reversal:** held units are released, allocated units return to their location, and anything with no hold (paid before activation) goes to the warehouse.
+- **Writers that still cannot name a location** refuse with `409 LOCATION_REQUIRED` instead of drifting: `PATCH /admin/products/bulk-stock` and stock values in the full catalog import. Stock file import, the product editor and stocktake posting are location-aware since Phase 3.
+- **`inventory_movements.location_id`** records the location of every location write.
+- **Drift check:** the hourly consistency job also alerts on `findLocationDrift` (alert only, never repairs).
+
+**What the till sees (plan Phase 4).** With the switch on:
+- `GET /pos/products/search` and `/pos/products/barcode/:code` return `stock` as what THIS till can sell (its branch's balance capped by the sellable total), plus `total`, `heldOnline` and `availability` (the other locations holding the size, largest first). Items at 0 here but held elsewhere stay in the results.
+- `GET /pos/registers/current` adds `branchId` and `locationId`.
+- Every `stock.updated` event carries `locations` (location id → quantity) and `held`, so each till derives its own branch's number live.
+- Sale, refund and void results report the till's branch figure in `stock` and the total in `total`.
+
+The POS screen:
+- A product sold out here but held elsewhere shows "Other locations" instead of "Sold out", and still opens.
+- Each size shows "N here" (or "None here") with "Store 2: 1 · Warehouse: 3" underneath, and "N held online" when applicable.
+- Cashiers cannot sell or move stock from another location. Staff move it with a transfer from the Inventory page.
+
+**Hardening that shipped with it:**
+- `applyMissingPaidOrderStock` is finally scheduled (every 10 min, `startPaidOrderStockSweep`).
+- The Sadad webhook repairs stock and notification on an already-paid delivery.
+- Checkout, stock CSV commit, catalog save and order reversal now lock variants in id order, like every other writer.
+
+### Website order approval (`server/lib/order-approval.js`, plan Phase 5)
+
+Only while stock per location is on. A paid website order is **held** (it reduces the sellable total, no location yet) until staff pick ONE pickup location that has every item.
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/api/admin/orders?needsApproval=true` | Only orders with held units. Every list response carries `needsApprovalCount`; each order carries `needsApproval` and `pickupLocation`. |
+| `GET` | `/api/admin/orders/:id/allocation` | `{ enabled, needsApproval, approvedAt, pickupLocation, lines, locations: [{ id, name, type, allAvailable, missing: [{ ...line, available, elsewhere: [{ locationId, name, quantity }] }] }] }`. Locations that can ship everything come first, the warehouse first among equals. |
+| `POST` | `/api/admin/orders/:id/approve` | Body `{ locationId }`. Owner/admin/manager. One transaction: locks the order, its held holds, the variants (id order) and the location rows; `409 LOCATION_SHORT` (with `shortages`) if anything is missing there, `409 ALREADY_APPROVED`, `ORDER_NOT_PAID`, `ORDER_CANCELLED`, `PER_LOCATION_OFF`. On success: deducts the location, posts two movements per line (`web_order_allocated` −qty at the location and +qty with no location, so the ledger total is unchanged and the history hides the balancing row), marks holds `allocated`, sets status `confirmed` / fulfilment `processing`, `fulfillment_location_id`, `approved_at`, `approved_by_user_id`, a timeline entry and audit `order.approved`. After commit it books NBOX and sends the customer "Your order is confirmed" (`server/lib/order-confirmation.js`, once, via `metadata.confirmation.sentAt`, never mentions branches). Returns the order. |
+
+- `PATCH /:id/status` answers `409 NEEDS_APPROVAL` for processing/shipped/delivered while the order still has held units. Cancelling works at any time: held units are released, allocated units return to the pickup location.
+- With the switch on, NBOX is booked at approval, not at payment (Sadad webhook, payment return, admin "mark paid"). With it off, nothing changed.
+- **Reminders:** `startApprovalReminderJob` (every 5 min) finds paid orders still waiting longer than `reminderAfterMinutes`, and sends one email to the order recipients plus one bell notification (`kind = 'order_reminder'`), then sets `orders.reminder_sent_at`. Never twice.
+- Fixed with it: marking an order shipped with a tracking number returned 500 (missing `::order_fulfillment_status` cast in the shipment update).
+- Tests: `server/test/order-approval-e2e.test.js`.
 
 ### Public — Invitations (`/api/invitations`)
 
@@ -240,6 +443,178 @@ See `server/routes/invitations.route.js`. Mounted in the **public** routes secti
 | `GET` | `/api/invitations/validate?token=` | Validate an invite token — returns `{ email, role }`. Returns 404 if expired/invalid. |
 | `POST` | `/api/invitations/accept` | Accept invite — body: `{ token, password, name? }`. Creates `admin_users` row (bcrypt password), deletes invitation row. Returns `{ id, email, role }`. |
 
+### Storefront Content (`/api/storefront-content`, `/api/admin/storefront-content`)
+
+See `server/routes/storefront-content.route.js`. Exports a `publicRouter` and an `adminRouter`; the admin side requires an active admin session. Every write runs through `normalizeContent`, which fills missing keys from `DEFAULT_HOME_CONTENT` so a partial payload can never blank out a section.
+
+**`mediaVariants` is a read-time projection, not stored content.** `loadContent` and `loadDraft` join `media_assets` on every image in the content tree and attach the responsive sizes that were actually generated, keyed by `storage_url`:
+
+```json
+"mediaVariants": {
+  "/uploads/abc123.webp": [
+    { "url": "/uploads/abc123-thumb.webp", "width": 240 },
+    { "url": "/uploads/abc123-card.webp",  "width": 640 }
+  ]
+}
+```
+
+It is deliberately absent from `normalizeContent`, so a client that PATCHes back content it just read cannot persist it. The storefront needs it because `createImageVariants` skips any size wider than roughly the source: an upload at 1200px genuinely has no `-zoom` sibling, and the client previously guessed the full set from the filename and advertised widths for files that were never written. Reporting the truth turns the client's `srcset` into a lookup — see `docs/03-client-web.md`.
+
+**`heroProducts` is the second read-time projection**, for weight rather than
+correctness. Each hero slide can link a product, and the page needs two things
+from it: the slug its call to action points at, and the colourways the `+N` chip
+counts. The home page used to get those by loading the whole catalogue through
+`ProductsService.ensureLoaded()`, which the transfer cache then embedded in the
+rendered HTML — measured at 731 kB of an 853 kB page to read a slug and a colour
+list off one row. `loadHeroProducts` sends `{ id, slug, colors }` per linked
+product instead, about 144 bytes for a slide.
+
+`colors` is sent raw, not pre-counted: the client dedupes with `colorKey`, the
+same normaliser the swatches use, and a count computed server-side could drift
+from it silently. Slide `productId` is stored as free text, so non-uuid values
+are filtered before the query rather than letting Postgres reject the array; a
+product that is missing, unpublished or non-uuid simply has no key, and the hero
+falls back to linking by id.
+
+The URL set comes from `collectContentImageUrls`, the same recursive walk the
+media-linking check uses, rather than a hand-listed set of paths. It used to
+walk `heroSlider.items` alone, which quietly left `hero` and `collections[]`
+out of the map: both rendered their original upload at full size, in one case a
+3000x4000 file inside a 732x976 box. A section added later is covered without
+anyone remembering to widen this.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/storefront-content` | Published home content for the storefront. `Cache-Control: no-store`. |
+| `GET` | `/api/storefront-content/draft?token=` | Draft preview. 401 on an invalid or expired preview token. |
+| `PATCH` | `/api/admin/storefront-content` | Save published content. Normalizes, validates, then persists. |
+| `POST` | `/api/admin/storefront-content/reset` | Restore `DEFAULT_HOME_CONTENT`. |
+| `POST` | `/api/admin/storefront-content/draft` | Save a draft without publishing. |
+| `DELETE` | `/api/admin/storefront-content/draft` | Discard the current draft. |
+
+**`heroSlider.items[]` shape** (normalized by `normalizeHeroSlider`):
+
+| Field | Notes |
+|---|---|
+| `id` | Required. Items without an id are dropped. |
+| `name` | Product name, shown at the top of the hero. |
+| `subtitle` | Bilingual, `"العربية / English"`, split on `/` by the client. |
+| `descriptionEn` / `descriptionAr` | Short selling copy under the mobile slider. Keep to ~18 words. |
+| `imageUrl` | **Derived, not edited.** The default colourway's hero shot. |
+| `alt` | Alt text for the slide image. |
+| `productId` | Product the colour swatches link to. Empty means no swatch row. |
+| `colors[]` | Featured colourways, `{ label, slug, imageUrl }`, capped at 4 by `normalizeHeroColors`. |
+| `defaultColorSlug` | Colourway the slide opens on. Normalised to a real colour, or the first one. |
+| `callouts[]` | Per-slide craft callouts used by the desktop pills. |
+
+When `descriptionEn` / `descriptionAr` are absent, `calloutSentence()` derives a fallback by joining the first three callout titles, so slides saved before these fields existed still render a description.
+
+`normalizeHeroColors()` accepts either `{ label, imageUrl }` objects or bare strings, drops blanks, collapses case-duplicates (keeping the first), and caps the list at `HERO_MAX_COLORS` (4). Each entry gets a `slug` from the server-side mirror of `colorSlug()`; the storefront product page resolves `?color=` with the same rule.
+
+`imageUrl` is the hero shot for that colourway, owned by the slide and distinct from the product's gallery images.
+
+`resolveHeroSlideImage()` then sets the slide's own `imageUrl` from the default colourway, so the hero always opens on a real colour. Resolution order:
+
+1. The colour matching `defaultColorSlug`, else the first colour in the list.
+2. That colour's `imageUrl`; if it has none, the previously stored slide image.
+3. With no colours at all, the stored slide image is kept unchanged and `defaultColorSlug` is `''`.
+
+Step 3 is what keeps slides saved before this change rendering — the admin no longer exposes a slide-image field, but legacy values are never discarded.
+
+**No colour value is stored** — hex and swatch dots resolve from `ref_colors` at render time, so `GET /api/ref/colors` remains the single source of truth for how a swatch looks.
+
+### Product Descriptions
+
+`products.description` and `products.care_instructions` are both JSONB columns holding bilingual copy. There is no separate table or migration for these.
+
+| JSONB key | Column | Admin field | Public API field | Used by |
+|---|---|---|---|---|
+| `en` / `ar` | `description` | `enDesc` / `arDesc` | `descriptionEn` / `descriptionAr` | Legacy long copy. No longer editable; kept as a fallback source for the Material & Care section on products saved before `care_instructions` was activated. |
+| `shortEn` / `shortAr` | `description` | `shortEn` / `shortAr` | `shortDescriptionEn` / `shortDescriptionAr` | **Hook.** Home hero and other compact surfaces. Plain text, ~90 chars. |
+| `teaserEn` / `teaserAr` | `description` | `teaserEn` / `teaserAr` | `teaserEn` / `teaserAr` | Short description shown directly under the product name on the product detail page. Plain text, ~160 chars. |
+| `noteEn` / `noteAr` | `description` | `noteEn` / `noteAr` | `noteEn` / `noteAr` | **Product note.** One short line true of every size, shown on the product page without waiting for a size to be picked. Stacks above the per-variant size note. Plain text, ~80 chars. |
+| `en` / `ar` | `care_instructions` | `careEn` / `careAr` | `careInstructionsEn` / `careInstructionsAr` | Material & Care section on the product detail page. Rich text. Falls back to the legacy `description.en/ar` when empty. |
+
+Adding a new key to either JSONB column needs no schema change: extend `mapAdminProduct()` (read), the relevant object literal in `upsertProduct()` (write), and the PATCH payload so a partial update does not blank it.
+
+> [!WARNING]
+> `PATCH /api/admin/products/:id` does **not** spread `req.body`. It builds an explicit merge object field by field (`req.body.x ?? existing.description?.x`) so a partial update cannot blank a field the caller omitted. A new JSONB key that is not added to that object saves on `POST` and silently drops on every `PATCH` — which, because the admin drawer uses `PATCH` for existing products, looks exactly like the field not saving at all.
+
+### Product note and per-variant size note
+
+Two separate notes that stack on the storefront, general first:
+
+| | Stored | Shows |
+|---|---|---|
+| **Product note** | `products.description->>'noteEn'` / `noteAr` (JSONB, no migration) | Always, from page load |
+| **Size note** | `product_variants.note_en` / `note_ar` (migration 031) | Only once a size carrying one is selected |
+
+Keeping them apart is the point: "runs one size small" is true of the whole product, "back zipper" is true of three sizes out of nine, and collapsing both into one field would force the shop to either repeat the general line on every variant or lose it.
+
+
+`product_variants.note_en` / `note_ar` (migration `031_variant_notes.sql`) hold one short bilingual line describing a construction detail that applies to some sizes and not others — the originating case was a garment with a back zipper on the 2-4 sizes but none on 6-10. Storing it on the variant rather than the product is what makes it a per-size fact; two plain text columns rather than JSONB keeps it queryable and mirrors the `ar`/`en` split already used by `product_translations`.
+
+| Layer | Field | Notes |
+|---|---|---|
+| DB | `note_en`, `note_ar` | Nullable text on `product_variants`. Also created idempotently by `ensure-migrations.js` on boot, so a deploy that has not run the migration file self-heals. |
+| Admin API | `noteEn` / `noteAr` on each variant | Read in all three admin variant selects, written by `replaceVariants()`. Empty string is stored as `NULL`, so clearing the field in the editor actually clears it rather than leaving the old value. |
+| Public API | `noteEn` / `noteAr` on each variant of `GET /api/products` and `/api/products/:id` | Empty string when unset. |
+| Storefront | `productNote()` and `selectedSizeNote()` in `product.component.ts` | `selectedSizeNote()` picks the note off the variant matching both the selected size and the selected colour; both resolve the locale with a fallback to the other language when only one is filled. Rendered stacked in `.gallery-bar` inside the gallery frame, with the size note repeated as a plain line under the size options. |
+
+### Admin — Expenses (`/api/admin/expenses`)
+
+See `server/routes/admin-expenses.route.js`. The operating-expense ledger — rent, salaries, utilities, marketing — which nothing tracked before migration `033_expenses.sql`. Mounted with `requireAuth({ roles: ['owner', 'admin'] })`: this is whole-business financial data, a narrower scope than `/pos-reports` (which managers can also reach).
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/admin/expenses` | Ledger for a window. Query: `from`, `to` (both `YYYY-MM-DD`, defaulting to the current month), `category`, `search` (matches vendor or note). |
+| `GET` | `/api/admin/expenses/summary` | `{ total, byCategory[] }` for a window — the shape the Analytics page folds into net profit. |
+| `GET` | `/api/admin/expenses/export.csv` | The filtered ledger as CSV, UTF-8 with a BOM so Excel reads Arabic vendor/note columns correctly. |
+| `POST` \| `PATCH` \| `DELETE` | `/api/admin/expenses`, `/api/admin/expenses/:id` | Create / update / delete. `amount` is sent in QAR and stored via `toCents()`. |
+| `POST` | `/api/admin/expenses/import-pos-cash-outs` | Mirrors `pos_cash_movements` rows of kind `paid_out` into the ledger as `source = 'pos_cash_out'`. |
+
+**Recurrence is expanded on read, not scheduled.** A monthly or yearly bill is stored as one template row; `generate_series` projects its later occurrences across the requested window (a `none` row falls out of the same series as a single row, via a 1000-year step). There is no cron job to keep alive and no drift between what was scheduled and what the ledger says. Projected occurrences come back with `isProjected: true` and no row of their own; editing one materialises it as a real row carrying `recurrence_parent_id`, and the template's occurrence for that date is then suppressed, so only that period changes.
+
+**The POS import is idempotent.** The partial unique index `expenses_pos_source_idx ON (tenant_id, source_ref_id) WHERE source = 'pos_cash_out'` plus `ON CONFLICT DO NOTHING` means re-running the import can never double-count a cash movement. Verified: first run imports, every subsequent run reports `imported: 0`.
+
+**Dates are returned as plain `YYYY-MM-DD` strings.** A Postgres `date` arrives in Node as a Date at local midnight, which serialises to the *previous* day in UTC JSON (Qatar is UTC+3) — an expense dated the 5th would reach the edit form as the 4th. `toIsoDate()` in the route pulls the calendar date out in local terms instead.
+
+### Admin — Shipping Cost Report (`/api/admin/analytics/shipping-costs`)
+
+In `server/routes/admin-analytics.route.js`. Per-product shipping-cost coverage across the whole catalogue, plus a `coverage` block (`totalVariants`, `withShipping`, `withoutShipping`, `coveragePct`, `avgShipping`, `totalShipping`). Not range-scoped — the catalogue is a current-state question, not a time-series one.
+
+The important difference from `/cost-summary`: that endpoint inner-joins on `total_cost_cents IS NOT NULL`, which hides exactly the products the shop owner needs to find. Here every non-archived product comes back regardless, with nulls where no shipping cost is recorded, and results are ordered **missing first** so the list doubles as a to-do. `variantsWithShipping` vs `variantCount` distinguishes a product with no data at all from one that is only partly filled in.
+
+Note that shipping cost is already inside `product_variants.total_cost_cents` (a stored generated column, `cost_price_cents + shipping_cost_cents`, from migration `012_shipping_cost.sql`), so it is *already* subtracted by the COGS figure in `/profit-summary`. This report is for finding gaps in the data, not for adding shipping into profit a second time.
+
+### Admin — Profit Summary (`/api/admin/analytics/profit-summary`)
+
+Added to `server/routes/admin-analytics.route.js` alongside `/storefront`, `/overview`, and `/cost-summary`; takes the same `?range=7d|30d|90d|1y` key.
+
+Returns `revenue`, `cogs`, `expenses`, `netProfit`, `netMarginPct`, `expensesByCategory[]`, and `cogsCoverage`.
+
+This is a different — and truer — figure than `/cost-summary`. That endpoint averages catalogue margin percentages across variants, which says how profitable the products *could* be; this one computes COGS from what actually sold (`order_items.quantity * product_variants.total_cost_cents` over paid orders in the window) and then subtracts real operating expenses on top. `cogsCoverage.lineItemsWithoutCost` reports how many sold line items have no cost recorded, so the UI can warn rather than quietly overstate profit.
+
+### Public — Policies (`/api/policies`) and Admin — Policies (`/api/admin/policies`)
+
+See `server/routes/policies.route.js` (public) and `server/routes/admin-policies.route.js` (admin, requires session). Legal pages — Privacy Policy, Terms of Service, Shipping Policy, etc. — surfaced in the storefront footer and at `/policy/:handle`.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/policies` | Active policies, list only (`id`, `handle`, `title`, `titleAr`, `policyType`, `updatedAt`) — no `content`, for nav/footer. |
+| `GET` | `/api/policies/:handle` | Full content of one active policy, including `titleAr` and `contentAr`. |
+| `GET` | `/api/admin/policies` | All policies regardless of status. |
+| `POST` \| `PATCH` | `/api/admin/policies`, `/api/admin/policies/:id` | Create / update, accepting `titleAr` and `contentAr` alongside the existing `title`/`content`. |
+
+`policies.title_ar` / `content_ar` (migration `032_policy_arabic.sql`) hold the Arabic title and rich-text body. Both nullable — a policy has always had one English title/content pair, so an Arabic column with no value must render the page rather than leave it blank. Also created idempotently by `ensure-migrations.js` on boot, so a deploy that has not run the migration file self-heals.
+
+| Layer | Field | Notes |
+|---|---|---|
+| Admin API | `titleAr` / `contentAr` | Trimmed to `NULL` when empty on `PATCH`, matching how `noteEn`/`noteAr` are stored on variants. |
+| Public API | `titleAr` / `contentAr` | Empty string (`''`) when unset, not `NULL` — the storefront never has to distinguish "unset" from "explicitly cleared". |
+| Admin UI | `policy-drawer.component.ts` — "Title (Arabic)" input and a second `ap-rich-text` editor with `dir="rtl"`, directly under the English equivalents | Both optional; leaving them blank is the supported way to publish English-only. |
+| Storefront | `policyTitle()` / `policyContent()` in `policy.component.ts`, `policyTitle()` in `footer.component.ts` | Same fallback shape as `Product.descriptionAr` elsewhere: Arabic locale shows `titleAr`/`contentAr` when set, otherwise falls back to the English value rather than rendering blank. |
+
 ### Admin — Bulk Import (`/api/admin/bulk-import`)
 
 See `server/routes/admin-bulk-import.route.js`. CSV upload → NDJSON streaming progress. See [Bulk Import endpoint](#bulk-import-endpoint-post-apiadminbulk-import) below.
@@ -248,29 +623,131 @@ See `server/routes/admin-bulk-import.route.js`. CSV upload → NDJSON streaming 
 
 See `server/routes/admin-ref.route.js`. Colors, materials, size sets. See [Reference data endpoints](#reference-data-endpoints-apiadminref) below.
 
-### POS (`/api/pos/*`)
+### Admin — Diagnostics (`/api/admin/diagnostics/*`)
 
-See `server/routes/admin-pos.route.js`. All endpoints require an active admin/cashier session.
+Owner/admin only. See `server/routes/admin-diagnostics.route.js` and `server/lib/diagnostics-service.js`. Backs the `/diagnostics` admin page.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/pos/products/search?q=` | Search products by name, SKU, or barcode (min 2 chars) |
-| `GET` | `/api/pos/products/scan/:barcode` | Instant barcode lookup — returns variant + product |
-| `POST` | `/api/pos/transactions` | Create & finalize a sale; atomically decrements stock |
-| `GET` | `/api/pos/transactions` | Transaction history (`?from=&to=&cashierId=&page=`) |
-| `GET` | `/api/pos/transactions/:id` | Single transaction with all line items |
-| `GET` | `/api/pos/transactions/:id/receipt` | Receipt data for print / email |
-| `POST` | `/api/pos/transactions/:id/email` | Email receipt — body: `{ email }` |
-| `POST` | `/api/pos/transactions/:id/void` | Void open transaction — body: `{ managerPin }` |
-| `POST` | `/api/pos/refunds` | Full or partial refund — body: `{ originalTxId, items[], managerPin }` |
-| `GET` | `/api/pos/shift/summary` | Live shift totals (X Report data) — `?date=` |
-| `POST` | `/api/pos/shift/z-report` | Close the day — generates immutable Z Report — body: `{ cashierCount, managerPin }` |
-| `GET` | `/api/pos/shift/z-reports` | List past Z Reports — `?from=&to=` |
-| `POST` | `/api/pos/print/receipt` | Build ESC/POS byte stream; send to thermal printer via TCP socket |
-| `POST` | `/api/pos/print/labels` | Generate barcode labels (Code 128/EAN-13) — body: `{ variants: [{id, qty}] }` |
-| `GET` | `/api/pos/parked` | List parked carts for current cashier |
-| `POST` | `/api/pos/parked` | Save a parked cart — body: `{ items[], label? }` |
-| `DELETE` | `/api/pos/parked/:id` | Delete a parked cart (on resume or expiry) |
+| `GET` | `/errors` | Grouped `app_errors` + a summary block. Filters: `status` (`open` default / `resolved` / `all`), `source`, `severity`, `search` (matches message, code, route, **or an exact reference code**), `limit`. |
+| `POST` | `/errors/:id/resolve` | Marks one group resolved. A later recurrence opens a **new** row rather than reviving the closed one, so a regression after a fix stays visible. |
+| `GET` | `/audit-events` | Reads `audit_events`, which had no UI before this. Filters: `action`, `entityType`, `requestId`, `from`, `to`, `limit`. Also returns the distinct action list for the filter dropdown. |
+
+### POS (`/api/pos/*`)
+
+See `server/routes/pos.route.js`. All endpoints require an authenticated owner/admin/manager/cashier session; operational endpoints also require an active enrolled register.
+
+The register binding is resolved from `req.session.posRegisterId` first and then from the long-lived, httpOnly, HMAC-signed `elite.pos_device` cookie (`lib/pos/device-cookie.js`), so a till stays bound to its counter across logouts, session expiry, and a different admin signing in on the same machine. The cookie only names a register; `requireRegister()` still checks it exists, belongs to the tenant, and is active.
+
+**No POS route may answer 401 for anything other than a missing login.** The admin portal turns a 401 into "Session expired" and redirects to `/login`, which redirects back to `/pos` when the session is valid — an infinite loop. A stale register credential is `409 REGISTER_CREDENTIAL_INVALID`; a failed takeover PIN is `403 MANAGER_PIN_REQUIRED` / `403 MANAGER_PIN_INVALID`.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/pos/registers` | List active registers for the "which till is this?" picker, scoped to the caller's `admin_users.pos_branch_id` when set |
+| `POST` | `/api/pos/registers/claim` | Bind this browser to a register, or create one by name (owner/admin); a till with someone else's open shift needs `confirmTakeover` + `managerPin` |
+| `POST` | `/api/pos/registers/enrollment-tokens` | Create one-time terminal enrollment token |
+| `POST` | `/api/pos/registers/enroll` | Enroll and bind a physical register |
+| `POST` | `/api/pos/registers/check-in` | Validate stored register credentials |
+| `POST` | `/api/pos/registers/release` | Forget this machine's register binding (session + `elite.pos_device` cookie) |
+| `POST` | `/api/pos/registers/receipt-number-blocks` | Reserve 100 tenant-wide receipt numbers |
+| `GET` | `/api/pos/products/search?q=` | Search active variants by name, SKU, or barcode |
+| `GET` | `/api/pos/products/barcode/:barcode` | Exact active barcode lookup |
+| `POST` | `/api/pos/transactions` | Create/finalize a sale atomically. `payment.method`: `cash` \| `card` \| `sadad`. An integrated card sale sends `payment.cardAttempt { utn, amountCents, result? }` instead of a reference (approved, same till, amount = total, unused: `422 CARD_AMOUNT_MISMATCH`, `409 CARD_NOT_APPROVED`/`CARD_ATTEMPT_USED`); a typed card reference on an `integrated` till needs `payment.manualOverride: true`. Card and Sadad otherwise require `payment.terminalReference`; Sadad also sends `sadadAmountCents` = total, and its ID is normalized to uppercase and must match `^[A-Z0-9-]{4,40}$` (`422 PAYMENT_REFERENCE_INVALID`) and be unused (`409 PAYMENT_REFERENCE_USED`). The sale result includes `terminalReference`. |
+| `POST` | `/api/pos/transactions/sync` | Synchronize offline sale batches |
+| `GET` | `/api/pos/transactions/lookup/:lookup` | Resolve receipt, sale QR, refund QR, or transaction reference |
+| `POST` | `/api/pos/transactions/:id/void` | Same-shift manager-approved void. A sale paid on the integrated terminal also needs `cardAttempt` (approved terminal void, `originalUtn` = sale UTN) or `manualOverride: true` (`422 CARD_TERMINAL_REQUIRED`). |
+| `POST` | `/api/pos/transactions/:id/void/check` | Same checks as the void without writing; returns `{ ok, amountCents, cardUtn }`. Run before driving the terminal. |
+| `POST` | `/api/pos/refunds` | Full/partial manager-approved refund. `refundMethod` must equal the sale's method; card and Sadad refunds require `terminalReference` (Sadad: same format rule). On an `integrated` till a card refund sends `cardAttempt` (approved card-present terminal refund) instead, or `manualOverride: true`. |
+| `POST` | `/api/pos/refunds/check` | Same checks as the refund without writing; returns `{ ok, amountCents, cardUtn }`. |
+| `POST` | `/api/pos/card-attempts` | Record a terminal operation before it runs: `{ utn, kind: sale\|void\|refund, amountCents, shiftId?, originalUtn? }`. Idempotent per UTN; a mismatch is `409 CARD_ATTEMPT_CONFLICT`; a `manual` till gets `409 CARD_TERMINAL_NOT_ENABLED`. |
+| `PATCH` | `/api/pos/card-attempts/:utn` | Record the terminal result (`status` approved/declined/cancelled/unknown/reversed plus whitelisted fields). Approved needs `authCode`; a full card number anywhere is `422 CARD_DATA_REJECTED`; illegal transitions are `409 CARD_RESULT_CONFLICT`. |
+| `GET` | `/api/pos/card-attempts/unresolved` | This till's pending/unknown attempts and approved-but-unlinked charges older than 150 s |
+| `POST` | `/api/pos/card-attempts/:utn/resolve` | Manager settles an attempt (`outcome`, `note`, `card-resolve` approval) |
+| `PUT` | `/api/pos/shifts/z-reports/:id/card-batch` | Record a retried terminal `CloseBatch` (`status`, `receiptText`) for a Z whose batch was missing/failed |
+| `GET/POST/DELETE` | `/api/pos/parked-carts` | List, create, or consume parked carts |
+| `GET` | `/api/pos/shifts/current` | Current X-style shift summary |
+| `POST` | `/api/pos/shifts/z-report` | Manager-approved shift close and immutable Z report |
+| `GET` | `/api/pos/events` | Authenticated SSE stock/event stream |
+| `GET/POST` | `/api/pos/print/{certificate,sign}` | QZ certificate and restricted request signing |
+
+The complete endpoint and payload reference is in [12 – POS System and Integration](./12-pos-system.md#11-pos-api-reference).
+
+---
+
+## Database Settings
+
+Some settings live on the production database itself, not in `server/.env`, so a
+restored, rebuilt or freshly created database silently loses them. Re-apply and
+verify them after any restore.
+
+### `jit = off` — required
+
+```sql
+ALTER DATABASE elite SET jit = off;
+-- new connections only: restart the API afterwards (pm2 reload elite-api)
+SELECT current_setting('jit');   -- must be 'off'
+```
+
+`GET /api/products` builds a single query carrying five correlated subqueries
+per product (variants, gallery image, image list, per-colour images, related
+products). Postgres priced that plan at ~1.8 million cost units — far above the
+default `jit_above_cost` of 100 000 — and compiled 201 functions before running
+it. Measured on production on 12 September 2026 with 41 active products:
+
+| | Time |
+|---|---|
+| JIT compilation (generation, inlining, optimisation, emission) | 3 747 ms |
+| Actual query execution | 73 ms |
+| `/api/products` end to end, JIT on | ~3 300 ms |
+| `/api/products` end to end, JIT off | ~110 ms |
+| Server-rendered home page, JIT off | ~300 ms (was ~3 500 ms) |
+
+The catalogue is thousands of rows, not millions; JIT can never repay its
+compilation cost at this size, and the estimate is inflated by the subqueries
+rather than by real work. This predates server-side rendering — it made every
+first paint slow — but SSR turned it into slow time-to-first-byte, which is
+what search engines measure.
+
+Revert with `ALTER DATABASE elite RESET jit;` and reload the API. If a future
+query genuinely needs JIT, raise `jit_above_cost` instead of enabling it
+globally.
+
+---
+
+## Images Are Files, Never `data:` URLs
+
+Content columns store the **path** of an uploaded image, never the image
+itself. `POST /api/admin/media` writes the file through `lib/storage.js`,
+generates the sized variants (`card`, `grid`, `pdp`, `zoom`) and returns a
+`/uploads/...` URL; that string is what belongs in `collections.seo.imageUrl`,
+`store_settings.home_content` and friends.
+
+The admin's collection drawer used to keep a picked cover as a base64 `data:`
+URL, so the bytes lived in the row. Those columns are read by
+`GET /api/collections` and `GET /api/storefront-content`, which the storefront
+requests on every page that lists collections — and under server-side rendering
+each page ships them twice, in the markup and again in the hydration payload.
+Six covers and three home tiles came to ~900 kB on every home and collection
+page, uncacheable, with no smaller variant for a phone to pick.
+
+Two defences, because the data outlives any one screen:
+
+- `POST` and `PATCH /api/admin/collections` reject an `imageUrl` starting with
+  `data:` (`validationError`), whatever client sends it.
+- `server/scripts/convert-data-uri-images.js` converts anything already stored:
+  it decodes each `data:` URL, saves it through the same storage helper (so the
+  variants exist), records a `media_assets` row so the image shows up in the
+  media library, and rewrites the value to its `/uploads/...` path. It walks
+  `collections.seo` and both `store_settings.home_content` and
+  `home_content_draft`.
+
+  ```bash
+  cd server
+  node scripts/convert-data-uri-images.js           # dry run: reports, writes nothing
+  node scripts/convert-data-uri-images.js --apply   # converts
+  ```
+
+  Safe to re-run; rows without a `data:` URL are skipped.
 
 ---
 
@@ -290,6 +767,7 @@ cp server/.env.example server/.env
 | `DEFAULT_TENANT_NAME` | `Elite` | No | Human name of the tenant |
 | `DEFAULT_CURRENCY` | `QAR` | No | Currency code shown in formatted prices |
 | `CORS_ORIGINS` | `http://localhost:4200,http://localhost:4300` | No | Comma-separated allowed origins |
+| `SITE_URL` | `https://elitecollections.qa` | No | Public origin of the storefront. Used to build absolute URLs in `/api/sitemap.xml`. Set this on any non-production deployment so the sitemap does not advertise the live domain. |
 | `NODE_ENV` | `development` | No | `development` or `production` |
 | `SESSION_SECRET` | — | **Yes** | Long random string for signing the session cookie. Generate with `openssl rand -hex 32` |
 | `SESSION_COOKIE_NAME` | `elite.sid` | No | Name of the session cookie |
@@ -312,8 +790,9 @@ cp server/.env.example server/.env
 | `DEFAULT_ADMIN_EMAIL` | `admin@elite.local` | No | Email for the auto-seeded admin user (first boot only) |
 | `DEFAULT_ADMIN_PASSWORD` | `elite-admin` | No | Password for the auto-seeded admin — **change immediately in production** |
 | `DEFAULT_ADMIN_NAME` | `Yusuf Hamad` | No | Display name for the auto-seeded admin user |
-| `PRINTER_HOST` | — | No | IP of Bixolon thermal printer for TCP socket printing |
-| `PRINTER_PORT` | `9100` | No | TCP port for ESC/POS printer socket |
+| `QZ_SIGNING_CERT_PATH` | — | Yes for online POS printing | Path to the public QZ signing certificate |
+| `QZ_SIGNING_KEY_PATH` | — | Yes for online POS printing | Path to the restricted PKCS#8 QZ private key. **Must be persistent storage — never under `/run`, which is tmpfs and is wiped on reboot.** Losing this key means re-trusting QZ on every register; see the [hardware runbook](./pos-hardware-runbook.md) |
+| `POS_PRINTER_ALLOWLIST` | — | Yes for POS printing | Comma-separated exact QZ printer queue names |
 
 ---
 
@@ -330,6 +809,12 @@ All API responses follow this standard shape (defined in `shared/interfaces/api-
   "message": "Optional message"
 }
 ```
+
+### Admin — POS Reconciliation & Reports (`/api/admin/pos-reconciliation`, `/api/admin/pos-reports`)
+
+Owner/admin/manager only. `GET /api/admin/pos-reconciliation/card-attempts?registerId=&status=&from=&to=&limit=` lists integrated terminal operations (masked card only) for the Card terminal view. Reconciliation is per settled tender: `GET /api/admin/pos-reconciliation` accepts `?method=card|sadad`, and `POST /refresh` and `POST /settlement` accept `method` in the body (default `card`; `cash` or anything else is `422`). The POS total for Sadad is `sadad_amount_cents` of completed sales minus completed Sadad refunds for that register and Qatar business day. Rows carry `method`. `GET /api/admin/pos-reports/card-settlement-exceptions` accepts `?method=card|sadad` and returns `method` per row. Shift summaries, Z-reports and Z-history return `sadadSalesCents`; `daily-sales.byPaymentMethod` returns `sadad` as its own group. Z-reports and Z-history also return `zNumber` (`Z-DDMM-YYYY-NNN`) and `businessDate`.
+
+`GET /api/admin/pos-reports/z-reports/:id/items` (and the register-scoped `GET /api/pos/shifts/z-reports/:id/items`) returns one closing's item breakdown: `{ header: { zReportId, zNumber, businessDate, branchName, registerName, staffNames[], closedAt, generatedAt }, items: [{ sku, description, color, size, soldQty, returnQty, netQty, unitPriceCents, paymentMethod, totalCents }], totals: { soldQty, returnQty, netQty, totalCents }, byMethod: [{ method, totalCents }] }`. The POS variant answers `403 Z_REPORT_REGISTER_MISMATCH` for another register's closing. Both answer `404 Z_REPORT_NOT_FOUND` for an unknown id and `422` for a malformed one.
 
 ### Error Response
 
@@ -478,7 +963,7 @@ server/
     └── contact.route.js             ← Public contact form
 ```
 
-> **POS backend (`admin-pos.route.js`) is planned but not yet built.** The endpoint table above in the POS section describes the target API. Implementation follows the acceptance criteria in [`docs/pos-system-plan.html`](./pos-system-plan.html).
+> **POS backend is implemented in `pos.route.js` and `server/lib/pos/*`.** See [12 – POS System and Integration](./12-pos-system.md) for the canonical architecture and API guide.
 
 ### Session & Auth
 
@@ -509,6 +994,7 @@ Admin authentication uses **server-side sessions** (no JWT):
 - **`color_ref_id` set on variant upsert:** Both the `INSERT` and the `ON CONFLICT DO UPDATE` branches now set `color_ref_id` via an inline subquery against `ref_colors`, linking the variant to the normalized color reference.
 - **Stock preserved on re-import:** Variants with `stock_quantity = 0` in the CSV no longer zero out existing stock. Only positive CSV stock values overwrite; zero is treated as "no data".
 - **SKU normalization fix:** `v.sku.replace()` changed to `v.sku.replaceAll()` so all hyphens are replaced when constructing variant SKUs, not just the first one.
+- **Inventory ledger + live sync (2026-08-18):** the variant upsert previously wrote `stock_quantity` directly with no `inventory_movements` row and never recomputed the parent product's total — every stock change made through this endpoint was invisible to the hourly drift job and could leave `products.stock_quantity` disagreeing with its variants. Fixed: a `previousStockBySku` snapshot is taken per product group (same pattern as `replaceVariants()`), each variant delta posts a `bulk_import` ledger movement via `recordMovement()`, `publishStockEvent()` pushes a `stock.updated` row onto `pos_events` so connected POS registers see it live, and `products.stock_quantity` is recomputed from the variant sum before commit (rolled back with everything else on a dry run).
 
 ### Bulk Delete endpoint (`POST /api/admin/products/bulk-delete`)
 
@@ -521,6 +1007,8 @@ Admin authentication uses **server-side sessions** (no JWT):
 ### Product save (`PATCH /api/admin/products/:id`)
 
 - Calls `replaceVariants()` internally, which deletes all old variants and re-inserts them
+- **Removed variants (2026-09-15):** a variant missing from the incoming list is deleted, unless `stocktake_lines` or `stocktake_location_counts` reference it (both `ON DELETE RESTRICT`). Those rows are hidden instead: `is_active = false`, `stock_quantity = 0`, with the usual `variant_removed` ledger movement, so the save succeeds and the count history survives. Re-sending the same SKU revives the row through the upsert (`is_active = true`). The admin variant loaders, the PATCH fallback, and the storefront product queries (`variantsSelect()` and the size/colour/material aggregates) filter `is_active`, so a hidden size does not reload into the editor and is not re-activated by the next save. Covered by `server/test/variant-hide-e2e.test.js`.
+- **Products audit (2026-09-15):** `POST /` is a plain insert that ignores any client `id`; a unique violation (SKU, slug, barcode) is returned as 409 via `productConflict()`, and slugs that collide (archived products included) get a `-2`, `-3` suffix. `replaceVariants()` first refuses (409) an incoming variant SKU that belongs to another product instead of moving it through `ON CONFLICT`, locks the product's variants, and when the body carries `expectedStock` (`{ sku: stock }` as the editor loaded it) refuses with 409 `STOCK_CHANGED` if a variant's stock changed since and the save would overwrite or remove it. Removed rows are zeroed before their ledger movement so the baseline is correct. `PATCH /:id` returns 404 for archived products and, when `variants` is absent, does not rewrite variants (a hide toggle no longer resets stock or re-rounds prices). `POST /:id/duplicate` copies variants with zero stock, empty barcode (defaults to the new SKU) and always-new SKUs. `POST /bulk-delete` archives tenant-scoped, valid-uuid ids instead of hard-deleting, and `POST /:id/restore` (`{ hidden }`) undoes an archive. `PATCH /bulk-stock` matches SKUs case-insensitively and skips inactive variants. Product and variant prices must be whole QAR (422 otherwise). Covered by `server/test/admin-products-audit-e2e.test.js`.
 - **FK safety:** Before deleting variants, `cart_items.variant_id` is set to `NULL` for any cart items referencing those variants (`cart_items.variant_id` is `ON DELETE RESTRICT`). Cart items survive with their product reference intact.
 - **SEO fields:** `meta_title` and `meta_desc` are included in the `UPDATE` query (added by migration `004_product_meta_seo.sql`). Returned in the response via `mapAdminProduct()`.
 - **Description fields (June 2026):** `mapAdminProduct()` extracts `enDesc` and `arDesc` from the `description` JSONB column (`{ en, ar }`) so the front end receives them as flat strings. Duplicate response keys (`metaTitle`, `metaDesc`, `slug`, `relatedProductIds`) removed from `mapAdminProduct()`.
@@ -528,6 +1016,7 @@ Admin authentication uses **server-side sessions** (no JWT):
 - **`trustZeroStock` flag (June 2026):** `replaceVariants()` accepts `{ trustZeroStock }`. When `true` (editor save), zero stock always overwrites. When `false` (bulk import), existing non-zero stock is preserved if the incoming value is 0.
 - **Variant ordering fix (June 2026):** All product queries use a correlated subquery with `ORDER BY sort_order, created_at` instead of `jsonb_agg(DISTINCT ...)`. PostgreSQL does not support `ORDER BY` inside `DISTINCT` aggregate — this was causing variants to come back in unpredictable order.
 - **Color image URL fix (June 2026):** `replaceColorImages()` normalizes `/api/`-prefixed image URLs before looking them up in `media_assets`.
+- **Barcode default (2026-07):** `replaceVariants()` resolves `barcode = trim(variant.barcode) || sku` for every row before insert/update, and throws a 400 if two variants in the save (or an existing variant on a different product) would resolve to the same barcode — `product_variants` has a `UNIQUE(tenant_id, barcode)` partial index (`015_pos_foundation.sql`). `admin-bulk-import.route.js` applies the same default (optional CSV `barcode`/`ean`/`upc` column, else falls back to SKU). Pre-existing variants are backfilled once via `ensure-migrations.js` (`UPDATE product_variants SET barcode = sku WHERE barcode IS NULL OR blank`, idempotent).
 
 ### Reference data endpoints (`/api/admin/ref/*`)
 
@@ -562,9 +1051,34 @@ Full CRUD for all three reference tables. All endpoints are tenant-scoped. Requi
 | `PUT` | `/api/admin/ref/size-sets/:id` | Replace a size set |
 | `DELETE` | `/api/admin/ref/size-sets/:id` | Delete a size set |
 
-**DB tables:** `ref_colors`, `ref_materials`, `ref_size_sets` — created by `003_ref_tables.sql`. `ref_colors` extended by `010_color_images.sql` with `swatch_image_url`. Seeded with 13 colors, 8 materials, and 5 size sets.
+**DB tables:** `ref_colors`, `ref_materials`, `ref_size_sets` — created by `003_ref_tables.sql`. `ref_colors` extended by `010_color_images.sql` with `swatch_image_url`. Seeded with 13 colors, 8 materials, and 5 size sets. `040_ref_color_arabic_names.sql` seeds Arabic names (and missing rows) for colours used on variants, so POS receipts print the colour in Arabic.
 
 **Color-image pivot** (`product_color_images`) — created by `010_color_images.sql`. Written by `replaceColorImages()` in `admin-products.route.js` on every product save alongside the legacy `media_assets.metadata.color` path (dual-write for zero-downtime rollout). Public `products.route.js` prefers the pivot JOIN; falls back to metadata JSONB for products not yet re-saved.
+
+**Several images per colour + card cover (`048_color_image_primary.sql`, 2026-10-02):** `product_color_images.is_primary` marks the colour's cover (`replaceColorImages()` writes one per colour: the `colorCovers` the admin sent if that image is still tagged with the colour, else the colour's first gallery image). `GET /api/admin/products` returns `colorCovers` (colour lowercased -> URL) next to `imageColors`; `POST`/`PATCH` accept `colorCovers`. Public `GET /api/products` returns `colorImages` (colour -> cover, `ORDER BY is_primary DESC, sort_order`; used by collection cards and the cart) and `colorGalleries` (colour -> every URL, cover first). Covered by `server/test/product-color-gallery-e2e.test.js`.
+
+### Which image the storefront shows (image ordering)
+
+`GET /api/products` and `GET /api/products/:id` share two SQL constants in `products.route.js`,
+`CARD_IMAGE_SELECT` (the `image` field) and `GALLERY_IMAGES_SELECT` (the `images[]` array), so the
+collections card and the product detail page can never disagree.
+
+Both order strictly by `media_links.sort_order` for `role = 'gallery'` rows. That column is written
+from the admin portal's gallery drag order (`replaceImages()` in `admin-products.route.js` inserts
+`sort_order = index`), so **the first thumbnail in the product drawer is the card image**.
+`products.primary_media_id` and `role = 'primary'` remain as fallbacks for products with no gallery
+rows; in `images[]` they sort after the gallery via a literal source rank.
+
+**Fixed (September 2026):** the ordering used to lead with a `CASE` that ranked locally-uploaded
+media (`/uploads/%` or `metadata.storagePath`) ahead of externally-hosted media, with `sort_order`
+only as a tiebreaker. Any product whose gallery mixed an upload with a Google Drive link therefore
+showed a different first image on the storefront than in the admin, and the same bias was applied to
+`images[]` and to the legacy colour path in `COLOR_IMAGES_SELECT`. All three now order by
+`sort_order` alone. The pivot branch of `COLOR_IMAGES_SELECT` also picks `DISTINCT ON (pci.color)`
+ordered by `pci.sort_order`, so the `sort_order = 0` row wins per colour instead of an arbitrary one
+(the intent documented in `010_color_images.sql`).
+
+Note the 60-second response cache on `/api/products` when verifying a reorder.
 
 ---
 
@@ -592,3 +1106,20 @@ pm2 start server/index.js --name elite-api
 
 - [02 – Architecture](./02-architecture.md) — Full system architecture
 - [07 – Developer Guide](./07-dev-guide.md) — Local setup instructions
+
+### Contact content shape
+
+`contact.branches[]` and `contact.stockists[]` replaced the old `contact.infoBlocks[]`, which held an array of plain strings with **no Arabic counterpart** — so the Arabic contact page rendered English addresses and hours, and no admin edit could fix it.
+
+| Field | Notes |
+|---|---|
+| `branches[].nameEn` / `nameAr` | Shop name per locale |
+| `branches[].addressEn` / `addressAr` | Newlines split into separate rows on the page |
+| `branches[].phone` | The branch's own line, not the main number |
+| `branches[].mapUrl` | Google Maps link; also emitted as `hasMap` / `sameAs` |
+| `branches[].mapEmbedUrl` | Google Maps embed URL. Validated server-side against `google.com/maps/embed`, because it is bound into an `iframe src` |
+| `branches[].lat` / `lng` | Coordinates, emitted as `geo` in the Store structured data |
+| `branches[].weekdayOpen/Close`, `weekendOpen/Close` | Whole hours, 24h. Sunday-Thursday and Friday-Saturday |
+| `stockists[]` | Host-store counters. `mapUrl` is the **host's** listing and is never emitted as an Elite location |
+
+`subheadAr`, `promiseLineAr` and `promiseSignatureAr` were added alongside their English counterparts for the same reason.

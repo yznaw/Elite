@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { IconComponent } from '../../shared/icons/icon.component';
@@ -30,10 +30,9 @@ interface FeedbackSummary {
 }
 
 @Component({
-  selector: 'ap-feedback',
-  standalone: true,
-  imports: [CommonModule, IconComponent, EmptyStateComponent],
-  template: `
+    selector: 'ap-feedback',
+    imports: [CommonModule, IconComponent, EmptyStateComponent],
+    template: `
     <div class="page-fade">
 
       <!-- Header -->
@@ -42,9 +41,9 @@ interface FeedbackSummary {
           <h1 class="fb-title">{{ t('nav.feedback') }}</h1>
           <p class="fb-sub">{{ t('feedback.sub') }}</p>
         </div>
-        <a [href]="kioskBaseUrl" target="_blank" rel="noopener noreferrer" class="fb-kiosk-btn">
+        <a [href]="experienceBaseUrl" target="_blank" rel="noopener noreferrer" class="fb-experience-btn">
           <ap-icon name="phone" [size]="13"/>
-          {{ t('feedback.openKiosk') }}
+          {{ t('feedback.openExperience') }}
         </a>
       </div>
 
@@ -161,12 +160,13 @@ interface FeedbackSummary {
       }
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .fb-header { margin-bottom: 24px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
     .fb-title  { font-size: 22px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
     .fb-sub    { font-size: 12px; color: var(--muted); }
 
-    .fb-kiosk-btn {
+    .fb-experience-btn {
       display: inline-flex; align-items: center; gap: 6px;
       padding: 8px 16px; font-size: 12px; font-weight: 700;
       border-radius: 6px; border: 1px solid rgba(124,92,191,.3);
@@ -174,7 +174,7 @@ interface FeedbackSummary {
       text-decoration: none; white-space: nowrap; flex-shrink: 0;
       transition: all .13s;
     }
-    .fb-kiosk-btn:hover { background: rgba(124,92,191,.12); border-color: #7c5cbf; color: #6a4aae; }
+    .fb-experience-btn:hover { background: rgba(124,92,191,.12); border-color: #7c5cbf; color: #6a4aae; }
 
     .fb-stats {
       display: grid;
@@ -261,7 +261,7 @@ interface FeedbackSummary {
     .fb-skeleton-line.wide   { width: 60%; }
     .fb-skeleton-line.narrow { width: 35%; }
     @keyframes shimmer { to { background-position: -200% 0; } }
-  `],
+  `]
 })
 export class FeedbackComponent implements OnInit {
   private readonly api    = inject(ApiClient);
@@ -276,13 +276,13 @@ export class FeedbackComponent implements OnInit {
   readonly general  = signal<GeneralFeedback | null>(null);
   readonly summary  = signal<FeedbackSummary>({ totalReviews: 0, avgRating: null, productCount: 0, generalCount: 0 });
 
-  readonly kioskBaseUrl = (() => {
-    if (typeof window === 'undefined') return '/kiosk';
+  readonly experienceBaseUrl = (() => {
+    if (typeof window === 'undefined') return '/experience';
     const h = window.location.hostname;
     if (h === 'localhost' || h === '127.0.0.1') {
-      return `${window.location.protocol}//${h}:4200/kiosk`;
+      return `${window.location.protocol}//${h}:4200/experience`;
     }
-    return 'https://elitecollections.qa/kiosk';
+    return 'https://elitecollections.qa/experience';
   })();
 
   async ngOnInit(): Promise<void> {
@@ -295,8 +295,8 @@ export class FeedbackComponent implements OnInit {
         this.general.set(data.general);
         this.products.set(data.products);
       }
-    } catch {
-      this.toast.error(this.t('feedback.toast.loadError.title'), this.t('feedback.toast.loadError.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('feedback.toast.loadError.title'), this.t('feedback.toast.loadError.sub'));
     } finally {
       this.loading.set(false);
     }

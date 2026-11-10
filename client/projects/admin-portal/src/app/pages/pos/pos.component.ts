@@ -1,0 +1,3209 @@
+import { CommonModule } from '@angular/common';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, computed, effect, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
+import { AuthService } from '../../services/auth.service';
+import {
+  PosHardwareSettings,
+  PosLocalStore,
+  PosQueuedSale,
+  PosReceiptBlock,
+} from '../../services/pos-local-store.service';
+import {
+  PosCashMovement,
+  PosCashMovementKind,
+  PosCardAttempt,
+  PosCardAttemptRef,
+  PosCatalogItem,
+  PosCurrentRegister,
+  PosCustomer,
+  PosParkedCart,
+  PosPaymentMethod,
+  PosSaleInput,
+  PosSaleResult,
+  POS_PAYMENT_LABELS,
+  SADAD_REFERENCE_PATTERN,
+  PosSelectableRegister,
+  PosService,
+  PosShiftSummary,
+  PosSyncConflict,
+  PosTransactionItem,
+  PosZReport,
+} from '../../services/pos.service';
+import { PosHardwareService, condenseHardwareError } from '../../services/pos-hardware.service';
+import { PosCardResult, PosCardTerminalService, qatarDdMmYy, toServerCardResult } from '../../services/pos-card-terminal.service';
+import { AdminRefService, RefColor } from '../../services/admin-ref.service';
+import { ToastService } from '../../services/toast.service';
+import { ClientLoggerService } from '../../services/client-logger.service';
+import { PaginationComponent } from '../../shared/pagination/pagination.component';
+import { checkForPosUpdate, posBuildVersions, setPosServiceWorkerUpdateSafe } from '../../services/pos-service-worker.service';
+import { PosReceiptData } from '../../services/pos-receipt-renderer.service';
+import { ZReportExcelService } from '../../services/z-report-excel.service';
+import { I18nService } from '../../services/i18n.service';
+
+type PosPhase = 'loading' | 'enrollment' | 'resume-failed' | 'shift' | 'shift-recovery' | 'selling';
+type PaymentMethod = PosPaymentMethod;
+interface CartLine { item: PosCatalogItem; quantity: number }
+/** A stock change for one variant: from a sale result, or a live event that
+ *  (with stock per location on) carries every location's balance. */
+interface StockUpdate { variantId: string; stock: number; total?: number; locations?: Record<string, number>; held?: number }
+interface ProductGroup {
+  id: string;
+  title: string;
+  stock: number;
+  imageUrl: string;
+  priceMinCents: number;
+  priceMaxCents: number;
+  items: PosCatalogItem[];
+}
+interface VariantColorGroup {
+  key: string;
+  label: string;
+  stock: number;
+  items: PosCatalogItem[];
+}
+type PosDialog = 'none' | 'park' | 'parked' | 'operations' | 'hardware' | 'shift' | 'cash-movement' | 'z-history' | 'card-check';
+/** Card tender on an integrated till (docs/39): ready to charge, the
+ *  terminal is working, the answer was lost and is being checked, the
+ *  terminal said no, or nothing can confirm the outcome. */
+type CardPhase = 'ready' | 'waiting' | 'checking' | 'declined' | 'unknown';
+
+const OFFLINE_CATALOG_WARN_AFTER_MS = 8 * 60 * 60 * 1000;
+const OFFLINE_CATALOG_BLOCK_AFTER_MS = 12 * 60 * 60 * 1000;
+const POS_REGISTER_REJECTED_EVENT = 'elite:pos-register-rejected';
+
+@Component({
+    selector: 'ap-pos',
+    imports: [CommonModule, FormsModule, PaginationComponent],
+    templateUrl: './pos.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styleUrl: './pos.component.scss'
+})
+export class PosComponent implements OnInit, OnDestroy {
+  private readonly pos = inject(PosService);
+  private readonly local = inject(PosLocalStore);
+  private readonly router = inject(Router);
+  readonly hardware = inject(PosHardwareService);
+  private readonly zReportExcel = inject(ZReportExcelService);
+  readonly auth = inject(AuthService);
+  private readonly refApi = inject(AdminRefService);
+  private readonly toast = inject(ToastService);
+  private readonly clientLogger = inject(ClientLoggerService);
+  private readonly cardTerminal = inject(PosCardTerminalService);
+  /** 'integrated': this till charges the QNB terminal through the local
+      card bridge; 'manual': the cashier types the approval code (docs/39). */
+  readonly cardMode = signal<'manual' | 'integrated'>('manual');
+  /** Cashier chose "Enter manually" because the card machine is not working. */
+  readonly cardManualEntry = signal(false);
+  readonly cardPhase = signal<CardPhase>('ready');
+  readonly cardDecline = signal<string | null>(null);
+  readonly cardTerminalText = computed(() => this.cardTerminal.describe(this.cardTerminal.message()));
+  readonly cardBridgeReachable = this.cardTerminal.reachable;
+  readonly cardBridgeHealth = this.cardTerminal.health;
+  readonly unresolvedCards = signal<PosCardAttempt[]>([]);
+  readonly cardAdminBusy = signal(false);
+  readonly cardPorts = signal<string[]>([]);
+  /** UTN of the charge the sheet is waiting on, for "Check again". */
+  private cardPendingUtn: string | null = null;
+  cardBridgeKey = '';
+  cardPort = '';
+  cardResolveNote = '';
+  cardResolvePin = '';
+
+  // ── Customer linking at checkout (docs/25 Phase 5) ────────────────────
+  // Until now every POS sale sent `customerId: null`, so a till sale never
+  // reached the customer's history, LTV, or receipt-by-email — the backend
+  // has accepted a customer id since the first release; only this was missing.
+  readonly selectedCustomer = signal<PosCustomer | null>(null);
+  readonly customerResults = signal<PosCustomer[]>([]);
+  readonly customerSearching = signal(false);
+  readonly customerCreateOpen = signal(false);
+  readonly customerSaving = signal(false);
+  customerQuery = '';
+  newCustomerName = '';
+  newCustomerPhone = '';
+  newCustomerEmail = '';
+  private customerSearchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  readonly phase = signal<PosPhase>('loading');
+  readonly resumeError = signal<string | null>(null);
+  readonly busy = signal(false);
+  readonly online = signal(navigator.onLine);
+  readonly enrollMode = signal<'pick' | 'token' | 'create'>('pick');
+  readonly justEnrolled = signal(false);
+  readonly availableRegisters = signal<PosSelectableRegister[]>([]);
+  readonly registersLoading = signal(false);
+  /** The till the cashier picked that turned out to be in use by someone else,
+      held while they confirm the takeover. Null means no dialog. */
+  readonly takeoverTarget = signal<PosSelectableRegister | null>(null);
+  readonly takeoverWarning = signal('');
+  readonly takeoverError = signal('');
+  readonly resetting = signal(false);
+  readonly register = signal<PosCurrentRegister | null>(null);
+  readonly shiftId = signal<string | null>(null);
+  readonly shiftRecovery = signal<{
+    reason: 'previous-day' | 'different-cashier' | 'closing';
+    cashierName: string | null;
+    openedAt: string;
+  } | null>(null);
+  readonly products = signal<PosCatalogItem[]>([]);
+  readonly cart = signal<CartLine[]>([]);
+  readonly paymentOpen = signal(false);
+  readonly paymentMethod = signal<PaymentMethod>('cash');
+  readonly paymentOptions: ReadonlyArray<PaymentMethod> = ['cash', 'card', 'sadad'];
+  /** The payment tiles follow the admin portal's language (EN / AR). */
+  private readonly i18n = inject(I18nService);
+  readonly t = (key: string): string => this.i18n.t(key);
+  /** Inline error under the card/Sadad reference field. Set by format checks
+      and by the server's PAYMENT_REFERENCE_USED / _INVALID answers, so a
+      reused Sadad ID is shown where the cashier is typing, not in a toast. */
+  readonly paymentReferenceError = signal<string | null>(null);
+  readonly lastSale = signal<PosSaleResult | null>(null);
+  readonly receiptBlock = signal<PosReceiptBlock | null>(null);
+  readonly pendingSales = signal(0);
+  readonly rejectedSales = signal(0);
+  readonly queuedSales = signal<PosQueuedSale[]>([]);
+  readonly syncing = signal(false);
+  readonly lastSyncAt = signal<string | null>(null);
+  readonly serverReachable = signal(true);
+  readonly persistentStorage = signal<boolean | null>(null);
+  readonly catalogCachedAt = signal<string | null>(null);
+  private readonly freshnessClock = signal(Date.now());
+  readonly offlineCatalogAgeMs = computed(() => {
+    const cachedAt = this.catalogCachedAt();
+    if (!cachedAt) return Number.POSITIVE_INFINITY;
+    const cachedAtMs = Date.parse(cachedAt);
+    return Number.isFinite(cachedAtMs)
+      ? Math.max(0, this.freshnessClock() - cachedAtMs)
+      : Number.POSITIVE_INFINITY;
+  });
+  readonly offlineCatalogWarning = computed(() => (
+    !this.online()
+    && this.offlineCatalogAgeMs() >= OFFLINE_CATALOG_WARN_AFTER_MS
+    && this.offlineCatalogAgeMs() < OFFLINE_CATALOG_BLOCK_AFTER_MS
+  ));
+  readonly offlineCatalogBlocked = computed(() => (
+    !this.online() && this.offlineCatalogAgeMs() >= OFFLINE_CATALOG_BLOCK_AFTER_MS
+  ));
+  readonly selectedProductId = signal<string | null>(null);
+  readonly selectedVariantColorKey = signal<string | null>(null);
+  readonly selectedVariantId = signal<string | null>(null);
+  readonly selectedVariantQuantity = signal(1);
+  readonly dialog = signal<PosDialog>('none');
+  readonly parkedCarts = signal<PosParkedCart[]>([]);
+
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────
+  // Every register is a touchscreen (see pos.component.scss), so shortcuts
+  // are a speed layer for staff who also have a keyboard at the counter —
+  // never a replacement for tapping. F-keys are used for the primary actions
+  // because they can never collide with typed text or with the barcode
+  // scanner, which only ever sends digits followed by Enter.
+  readonly shortcutsHelpOpen = signal(false);
+  readonly selectedLineId = signal<string | null>(null);
+  readonly shortcutList: { keys: string; label: string }[] = [
+    { keys: 'F1', label: 'Show this list' },
+    { keys: 'F2', label: 'Jump to search / barcode' },
+    { keys: 'F4', label: 'Take payment' },
+    { keys: 'F5', label: 'Start a new sale' },
+    { keys: 'F6', label: 'Look up a customer' },
+    { keys: 'F9', label: 'Park the current sale' },
+    { keys: 'F10', label: 'View parked sales' },
+    { keys: '↑ / ↓', label: 'Move between cart items' },
+    { keys: 'Delete', label: 'Remove the selected cart item' },
+    { keys: 'Esc', label: 'Close a dialog' },
+  ];
+  @ViewChild('searchInputRef') private searchInputRef?: ElementRef<HTMLInputElement>;
+  @ViewChild('customerInputRef') private customerInputRef?: ElementRef<HTMLInputElement>;
+
+  readonly operationTransaction = signal<PosSaleResult | null>(null);
+  readonly shiftSummary = signal<PosShiftSummary | null>(null);
+  readonly syncConflicts = signal<PosSyncConflict[]>([]);
+  readonly cashMovements = signal<PosCashMovement[]>([]);
+  readonly zReportHistory = signal<PosZReport[]>([]);
+  readonly loadingZHistory = signal(false);
+  readonly printingZReportId = signal<string | null>(null);
+  readonly exportingZReportId = signal<string | null>(null);
+  readonly posBuildRunning = signal<string | null>(null);
+  readonly posBuildDeployed = signal<string | null>(null);
+  readonly checkingPosUpdate = signal(false);
+  readonly posUpdateAvailable = computed(() => {
+    const running = this.posBuildRunning();
+    const deployed = this.posBuildDeployed();
+    return Boolean(running && deployed && running !== deployed);
+  });
+  readonly refColors = signal<RefColor[]>([]);
+  private readonly posUpdateSafetyReady = signal(false);
+  // Stock per location: keep the names of other locations for live events,
+  // which only carry location ids.
+  private readonly locationNamesEffect = effect(() => this.rememberLocationNames(this.products()));
+
+  private readonly posUpdateSafetyEffect = effect(() => {
+    setPosServiceWorkerUpdateSafe(
+      this.posUpdateSafetyReady()
+      && this.cart().length === 0
+      && this.pendingSales() === 0
+      && this.rejectedSales() === 0
+      && !this.paymentOpen()
+      && !this.busy()
+      && !this.syncing(),
+    );
+  });
+  readonly totalCents = computed(() => this.cart().reduce(
+    (total, line) => total + line.item.priceCents * line.quantity,
+    0,
+  ));
+  readonly cartCount = computed(() => this.cart().reduce((total, line) => total + line.quantity, 0));
+  readonly oldestPendingAgeMs = computed(() => {
+    const pending = this.queuedSales().filter((sale) => sale.status === 'pending');
+    if (!pending.length) return 0;
+    const oldest = pending.reduce((min, sale) => Math.min(min, new Date(sale.queuedAt).getTime()), Date.now());
+    return Date.now() - oldest;
+  });
+  readonly changeCents = computed(() => Math.max(0, this.tenderedCents() - this.totalCents()));
+  readonly productGroups = computed<ProductGroup[]>(() => {
+    const groups = new Map<string, ProductGroup>();
+    for (const product of this.products()) {
+      const id = product.productId || product.name;
+      let group = groups.get(id);
+      if (!group) {
+        group = {
+          id,
+          title: product.name,
+          stock: 0,
+          imageUrl: product.imageUrl,
+          priceMinCents: product.priceCents,
+          priceMaxCents: product.priceCents,
+          items: [],
+        };
+        groups.set(id, group);
+      }
+      group.stock += product.stock;
+      if (!group.imageUrl && product.imageUrl) group.imageUrl = product.imageUrl;
+      group.priceMinCents = Math.min(group.priceMinCents, product.priceCents);
+      group.priceMaxCents = Math.max(group.priceMaxCents, product.priceCents);
+      group.items.push(product);
+    }
+    return Array.from(groups.values());
+  });
+  readonly selectedProductGroup = computed(() => {
+    const selectedId = this.selectedProductId();
+    return selectedId ? this.productGroups().find((group) => group.id === selectedId) || null : null;
+  });
+  readonly selectedVariantColorGroups = computed(() => {
+    const group = this.selectedProductGroup();
+    return group ? this.buildVariantColorGroups(group.items) : [];
+  });
+  readonly visibleVariantColorGroups = computed(() => {
+    const query = this.variantColorQuery.trim().toLowerCase();
+    return this.selectedVariantColorGroups().filter((group) => {
+      return !query || group.label.toLowerCase().includes(query);
+    });
+  });
+  readonly selectedVariantColorGroup = computed(() => {
+    const selectedKey = this.selectedVariantColorKey();
+    const colorGroups = this.selectedVariantColorGroups();
+    return colorGroups.find((group) => group.key === selectedKey) || colorGroups[0] || null;
+  });
+  // Some catalog items (bags/accessories) only vary by color, not size — a
+  // handful of legacy rows even have an empty `size` field, which without
+  // this check would render the color name a second time as a fake "size"
+  // option. If the color group is just that one no-size row, skip the size
+  // step entirely (it's already auto-selected) instead of showing it.
+  readonly selectedColorHasNoSizes = computed(() => {
+    const group = this.selectedVariantColorGroup();
+    return !!group && group.items.length === 1 && !group.items[0].size;
+  });
+  readonly selectedVariant = computed(() => {
+    const variantId = this.selectedVariantId();
+    const colorGroup = this.selectedVariantColorGroup();
+    if (!variantId || !colorGroup) return null;
+    return colorGroup.items.find((item) => item.variantId === variantId) || null;
+  });
+  readonly selectedVariantMaxQuantity = computed(() => {
+    const variant = this.selectedVariant();
+    if (!variant) return 0;
+    const inCart = this.cart().find((line) => line.item.variantId === variant.variantId)?.quantity || 0;
+    return Math.max(0, variant.stock - inCart);
+  });
+  readonly selectedVariantTotalCents = computed(() => {
+    const variant = this.selectedVariant();
+    return variant ? variant.priceCents * this.selectedVariantQuantity() : 0;
+  });
+
+  enrollmentToken = '';
+  terminalName = '';
+  openingFloat = '0';
+  searchQuery = '';
+  variantColorQuery = '';
+  barcode = '';
+  tendered = '';
+  terminalReference = '';
+  parkLabel = '';
+  transactionLookup = '';
+  correctionReason = '';
+  /** Only used for a card or Sadad refund — neither has an API link, so this
+      is the sole proof the refund was actually run there (docs/12, "Card"). */
+  refundTerminalReference = '';
+  managerPin = '';
+  takeoverPin = '';
+  physicalCash = '';
+  refundQuantities: Record<string, number> = {};
+  refundRestock: Record<string, boolean> = {};
+  hardwarePrinter = '';
+  hardwareSignerUrl = 'http://127.0.0.1:8182';
+  hardwareDrawerPulse: PosHardwareSettings['drawerPulse'] = 'epson-pin-2';
+  readonly discoveredPrinters = signal<string[]>([]);
+  readonly discoveringPrinters = signal(false);
+  conflictResolution = '';
+  cashMovementKind: PosCashMovementKind = 'paid_out';
+  cashMovementAmount = '';
+  cashMovementReason = '';
+  cashMovementManagerPin = '';
+
+  readonly productPage = signal(0);
+  readonly productTotal = signal(0);
+  readonly productTotalPages = computed(() => Math.max(1, Math.ceil(this.productTotal() / 40)));
+  readonly filterSize = signal<string | null>(null);
+  readonly filterColor = signal<string | null>(null);
+  readonly availableSizes = signal<string[]>([]);
+  readonly availableColors = signal<string[]>([]);
+
+  private pendingIdempotencyKey: string | null = null;
+  private searchSequence = 0;
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
+  private eventSource: EventSource | null = null;
+  private syncTimer: ReturnType<typeof setTimeout> | null = null;
+  private syncAttempt = 0;
+  private healthCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  private storageEstimateTimer: ReturnType<typeof setInterval> | null = null;
+  private freshnessClockTimer: ReturnType<typeof setInterval> | null = null;
+  private posBuildCheckTimer: ReturnType<typeof setInterval> | null = null;
+  private registerRecoveryInProgress = false;
+  private readonly onOnline = () => {
+    this.online.set(true);
+    void this.syncPendingSales();
+  };
+  private readonly onOffline = () => {
+    this.online.set(false);
+    this.startHealthCheckPolling();
+  };
+  private readonly onVisibilityChange = () => {
+    if (document.visibilityState === 'visible') void this.syncPendingSales();
+  };
+  private readonly onFocus = () => void this.syncPendingSales();
+  private readonly onRegisterRejected = () => void this.recoverRejectedRegister();
+
+  async ngOnInit(): Promise<void> {
+    window.addEventListener('online', this.onOnline);
+    window.addEventListener('offline', this.onOffline);
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
+    window.addEventListener('focus', this.onFocus);
+    window.addEventListener(POS_REGISTER_REJECTED_EVENT, this.onRegisterRejected);
+    // Service worker is registered once at app bootstrap (main.ts), not here.
+    await this.initialize();
+    // Do not allow a waiting build to activate from the signals' initial zero
+    // values. Read IndexedDB first; a queue found here must keep the old worker
+    // alive until every sale is accepted or explicitly resolved.
+    await this.refreshQueueState();
+    this.posUpdateSafetyReady.set(true);
+    await this.checkPersistentStorage();
+    this.storageEstimateTimer = setInterval(() => void this.updateStorageEstimate(), 5 * 60 * 1000);
+    this.freshnessClockTimer = setInterval(() => this.freshnessClock.set(Date.now()), 60 * 1000);
+    void this.updateStorageEstimate();
+    // A till stays open for days. Poll for a newer build so the Update button
+    // carries a dot on its own, instead of the cashier having to guess that
+    // one exists. Reading versions never reloads anything by itself.
+    void this.loadPosBuildVersions();
+    this.posBuildCheckTimer = setInterval(() => void this.loadPosBuildVersions(), 15 * 60 * 1000);
+  }
+
+  ngOnDestroy(): void {
+    this.posUpdateSafetyReady.set(false);
+    window.removeEventListener('online', this.onOnline);
+    window.removeEventListener('offline', this.onOffline);
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    window.removeEventListener('focus', this.onFocus);
+    window.removeEventListener(POS_REGISTER_REJECTED_EVENT, this.onRegisterRejected);
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    if (this.syncTimer) clearTimeout(this.syncTimer);
+    if (this.healthCheckTimer) clearTimeout(this.healthCheckTimer);
+    if (this.customerSearchTimer) clearTimeout(this.customerSearchTimer);
+    if (this.storageEstimateTimer) clearInterval(this.storageEstimateTimer);
+    if (this.freshnessClockTimer) clearInterval(this.freshnessClockTimer);
+    if (this.posBuildCheckTimer) clearInterval(this.posBuildCheckTimer);
+    this.eventSource?.close();
+  }
+
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────
+
+  @HostListener('window:keydown', ['$event'])
+  onGlobalKeydown(event: KeyboardEvent): void {
+    // Only live on the actual selling screen — the shift/enrollment/loading
+    // screens have their own single primary action and no cart to act on.
+    if (this.phase() !== 'selling' || event.isComposing) return;
+    // A modifier chord (Ctrl+P, Cmd+R, …) is the browser's or OS's to keep.
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+    switch (event.key) {
+      case 'F1':
+        event.preventDefault();
+        this.shortcutsHelpOpen.update((open) => !open);
+        return;
+      case 'F2':
+        event.preventDefault();
+        this.focusSearch();
+        return;
+      case 'F4':
+        event.preventDefault();
+        this.beginPayment();
+        return;
+      case 'F5':
+        event.preventDefault();
+        this.startNewSale();
+        return;
+      case 'F6':
+        event.preventDefault();
+        this.focusCustomerSearch();
+        return;
+      case 'F9':
+        event.preventDefault();
+        if (this.cart().length) this.dialog.set('park');
+        return;
+      case 'F10':
+        event.preventDefault();
+        this.dialog.set('parked');
+        void this.loadParkedCarts();
+        return;
+    }
+
+    // Enter completes the sale from anywhere in the payment sheet, including
+    // the tendered-amount field — a cash register's Enter has always meant
+    // "tender this," so this one case is allowed even while typing.
+    if (event.key === 'Enter' && this.paymentOpen() && !event.repeat) {
+      event.preventDefault();
+      void this.completeSale();
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      if (this.shortcutsHelpOpen()) this.shortcutsHelpOpen.set(false);
+      else if (this.dialog() !== 'none') this.dialog.set('none');
+      else if (this.paymentOpen()) this.paymentOpen.set(false);
+      return;
+    }
+
+    // Everything past this point edits the cart. Never hijack normal typing —
+    // Delete/Backspace and the arrow keys all have native meaning in a field.
+    if (this.isTypingTarget(event.target)) return;
+
+    switch (event.key) {
+      case 'Delete':
+        event.preventDefault();
+        this.deleteSelectedLine();
+        return;
+      case 'ArrowDown':
+        event.preventDefault();
+        this.moveLineSelection(1);
+        return;
+      case 'ArrowUp':
+        event.preventDefault();
+        this.moveLineSelection(-1);
+        return;
+    }
+  }
+
+  private isTypingTarget(target: EventTarget | null): boolean {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable;
+  }
+
+  focusSearch(): void {
+    const input = this.searchInputRef?.nativeElement;
+    if (!input) return;
+    input.focus();
+    input.select();
+  }
+
+  focusCustomerSearch(): void {
+    if (!this.paymentOpen()) {
+      if (!this.cart().length) return;
+      this.beginPayment();
+    }
+    // The field renders only once `paymentOpen` flips true and change
+    // detection runs the payment sheet into the DOM, so the focus has to
+    // wait a tick behind it.
+    setTimeout(() => this.customerInputRef?.nativeElement.focus(), 0);
+  }
+
+  startNewSale(): void {
+    if (this.lastSale()) {
+      this.closeReceipt();
+      return;
+    }
+    if (!this.cart().length && !this.selectedCustomer()) return;
+    if (this.cart().length && !window.confirm('Clear the current cart and start a new sale?')) return;
+    this.cart.set([]);
+    this.selectedLineId.set(null);
+    this.selectedCustomer.set(null);
+    this.pendingIdempotencyKey = null;
+    this.paymentOpen.set(false);
+  }
+
+  selectCartLine(variantId: string): void {
+    this.selectedLineId.set(variantId);
+  }
+
+  private moveLineSelection(delta: number): void {
+    const lines = this.cart();
+    if (!lines.length) return;
+    const currentIndex = lines.findIndex((line) => line.item.variantId === this.selectedLineId());
+    const nextIndex = currentIndex === -1
+      ? (delta > 0 ? 0 : lines.length - 1)
+      : Math.min(lines.length - 1, Math.max(0, currentIndex + delta));
+    this.selectedLineId.set(lines[nextIndex].item.variantId);
+  }
+
+  private deleteSelectedLine(): void {
+    const id = this.selectedLineId();
+    if (!id) return;
+    this.removeLine(id);
+  }
+
+  /**
+   * Runs whenever the browser's own online() signal is false, or a sale/sync
+   * just failed — independent of the browser's online/offline events, which
+   * only reflect the network interface, not real API reachability. Jittered
+   * 15-30s so many idle registers don't all hit the API in lockstep.
+   */
+  private startHealthCheckPolling(): void {
+    if (this.healthCheckTimer) return;
+    const poll = async () => {
+      this.healthCheckTimer = null;
+      try {
+        await this.pos.healthCheck();
+        this.serverReachable.set(true);
+        this.online.set(true);
+        await this.syncPendingSales();
+        // Only keep polling if something is still pending/rejected after
+        // that sync attempt — otherwise there's nothing left to recover.
+        if (this.pendingSales() > 0 || this.rejectedSales() > 0 || !this.online()) {
+          this.healthCheckTimer = setTimeout(() => void poll(), 15000 + Math.random() * 15000);
+        }
+      } catch {
+        this.serverReachable.set(false);
+        this.healthCheckTimer = setTimeout(() => void poll(), 15000 + Math.random() * 15000);
+      }
+    };
+    void poll();
+  }
+
+  private async checkPersistentStorage(): Promise<void> {
+    if (!('storage' in navigator) || !navigator.storage.persist) {
+      this.persistentStorage.set(null);
+      return;
+    }
+    try {
+      const persisted = await navigator.storage.persisted();
+      const granted = persisted || await navigator.storage.persist();
+      this.persistentStorage.set(granted);
+      await this.local.setPersistentStorageStatus({ persisted: granted, checkedAt: new Date().toISOString() });
+    } catch {
+      this.persistentStorage.set(null);
+    }
+  }
+
+  private async updateStorageEstimate(): Promise<void> {
+    if (!('storage' in navigator) || !navigator.storage.estimate) return;
+    try {
+      const estimate = await navigator.storage.estimate();
+      await this.local.setStorageEstimate({
+        usage: estimate.usage || 0,
+        quota: estimate.quota || 0,
+        checkedAt: new Date().toISOString(),
+      });
+    } catch {
+      // Best-effort — a failed estimate is not worth surfacing to the cashier.
+    }
+  }
+
+  async initialize(): Promise<void> {
+    this.busy.set(true);
+    try {
+      let current: PosCurrentRegister;
+      try {
+        current = await this.pos.currentRegister();
+      } catch (currentError) {
+        const identity = await this.local.getRegister();
+        if (!identity) {
+          this.enterEnrollment();
+          return;
+        }
+        // navigator.onLine only says that Windows has a network interface. A
+        // shop can still have Wi-Fi while DNS, the VPN, or the API is down.
+        // Treat an actual status-0 API failure as offline instead of wrongly
+        // sending a previously enrolled register back to one-time setup.
+        if (!this.online() || this.isNetworkError(currentError)) {
+          await this.resumeOffline(identity);
+          return;
+        }
+        try {
+          const refreshedIdentity = await this.pos.checkIn(identity);
+          await this.local.setRegister(refreshedIdentity);
+        } catch (checkInError) {
+          if (this.isNetworkError(checkInError)) {
+            await this.resumeOffline(identity);
+            return;
+          }
+          throw checkInError;
+        }
+        current = await this.pos.currentRegister();
+      }
+
+      await this.enterRegister(current);
+    } catch (error) {
+      // Enrollment is a one-time, owner-only ceremony: it needs a fresh token
+      // from Settings and a person who can generate one. Sending a register
+      // there is only correct when its identity is genuinely gone or the
+      // server has rejected it. Anything else — a slow catalog load, a
+      // hiccup fetching the receipt block, a stumble in hardware setup —
+      // used to land here too, so a cashier who logged out by accident was
+      // met with "paste a one-time token" on a counter that was fine.
+      const identity = await this.local.getRegister().catch(() => null);
+      if (identity && !this.isRegisterRejected(error)) {
+        this.resumeError.set(this.errorMessage(error));
+        this.phase.set('resume-failed');
+        return;
+      }
+      this.toast.warning('Could not resume this register', this.errorMessage(error));
+      // The server has disowned this register, so the stored identity and the
+      // device cookie now point at nothing. Drop both, or every reload repeats
+      // this same round trip before landing on the picker anyway.
+      await this.local.clearRegister().catch(() => undefined);
+      await this.pos.releaseRegister().catch(() => undefined);
+      this.enterEnrollment();
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  /**
+   * Revalidate a live POS immediately when the API says this browser no longer
+   * owns its register. This closes the short window where a stale tablet could
+   * keep showing an apparently usable selling screen after another device took
+   * over. `initialize()` preserves queued sales and the local shift; it only
+   * clears the rejected device identity when the server has disowned it.
+   */
+  private async recoverRejectedRegister(): Promise<void> {
+    if (this.registerRecoveryInProgress) return;
+    this.registerRecoveryInProgress = true;
+    this.eventSource?.close();
+    this.eventSource = null;
+    if (this.syncTimer) {
+      clearTimeout(this.syncTimer);
+      this.syncTimer = null;
+    }
+    this.phase.set('loading');
+    try {
+      await this.initialize();
+    } finally {
+      this.registerRecoveryInProgress = false;
+    }
+  }
+
+  /**
+   * True only when the server has actively disowned this register, which is
+   * the one case where re-enrolling is the real fix. A revoked or deleted
+   * register, or a credential that no longer matches.
+   */
+  private isRegisterRejected(error: unknown): boolean {
+    const code = (error as { error?: { code?: string } })?.error?.code;
+    return code === 'REGISTER_CREDENTIAL_INVALID'
+      || code === 'REGISTER_NOT_FOUND'
+      || code === 'REGISTER_DISABLED'
+      || code === 'REGISTER_LEASE_INVALID';
+  }
+
+  /**
+   * Bring up hardware and receipt numbers for a bound register, then route by
+   * the till's own shift state: resume selling, offer recovery, or ask for an
+   * opening float.
+   *
+   * Shared by `initialize()` and by every path that binds this browser to a
+   * register. The picker made that sharing necessary: enrollment only ever
+   * produced a brand-new till, so jumping straight to "open a shift" was safe,
+   * but a claimed register can already have one open — and `pos_shifts`'
+   * active-register unique index would then reject the second open, stranding
+   * the cashier on a screen whose only button cannot work.
+   */
+  private async enterRegister(current: PosCurrentRegister): Promise<void> {
+    this.register.set(current);
+    this.cardMode.set(current.cardMode ?? 'manual');
+    await this.local.setCardMode(current.cardMode ?? 'manual').catch(() => undefined);
+    await this.hardware.initialize();
+    await this.ensureReceiptBlock();
+    if (!current.shift) {
+      this.phase.set('shift');
+      return;
+    }
+    this.shiftId.set(current.shift.id);
+    await this.local.setShift({
+      shiftId: current.shift.id,
+      registerId: current.registerId,
+      cashierId: current.shift.cashierId,
+      openingFloatCents: current.shift.openingFloatCents,
+      openedAt: current.shift.openedAt,
+    });
+    const recovery = this.shiftRecoveryFor(current.shift);
+    if (recovery) {
+      this.shiftRecovery.set(recovery);
+      this.phase.set('shift-recovery');
+      return;
+    }
+    await this.enterSelling();
+  }
+
+  /**
+   * Show the one-time setup screen and start fetching the register list, so
+   * the picker is already populated by the time the cashier looks at it.
+   */
+  private enterEnrollment(): void {
+    this.enrollMode.set('pick');
+    this.phase.set('enrollment');
+    void this.loadRegisters();
+  }
+
+  /** Retry after a failed resume, without touching the stored identity. */
+  async retryResume(): Promise<void> {
+    this.resumeError.set(null);
+    this.phase.set('loading');
+    await this.initialize();
+  }
+
+  private async resumeOffline(identity: { registerId: string; displayName: string }): Promise<void> {
+    const storedShift = await this.local.getShift();
+    const cachedCatalog = await this.local.getCatalog();
+    if (!storedShift || !cachedCatalog) {
+      throw new Error('This register has no offline shift or catalog cache. Connect once before working offline.');
+    }
+    this.online.set(false);
+    this.serverReachable.set(false);
+    const shift = {
+      id: storedShift.shiftId,
+      state: 'open' as const,
+      cashierId: storedShift.cashierId || this.auth.user()?.id || '',
+      cashierName: null,
+      openingFloatCents: storedShift.openingFloatCents,
+      openedAt: storedShift.openedAt,
+    };
+    // Unknown offline — default to requiring a PIN (fail safe) rather than
+    // silently skipping approval because the real answer can't be fetched.
+    // Offline-cached identity doesn't carry the branch name — it'll show up
+    // once currentRegister() succeeds again over the network.
+    this.register.set({ registerId: identity.registerId, displayName: identity.displayName, status: 'offline', branchName: null, managerPinConfigured: true, shift });
+    this.shiftId.set(storedShift.shiftId);
+    this.products.set(cachedCatalog.products);
+    this.catalogCachedAt.set(cachedCatalog.cachedAt);
+    this.receiptBlock.set(await this.local.getReceiptBlock());
+    await this.refreshQueueState();
+    await this.hardware.initialize();
+    const recovery = this.shiftRecoveryFor(shift);
+    if (recovery) {
+      this.shiftRecovery.set(recovery);
+      this.phase.set('shift-recovery');
+      return;
+    }
+    this.phase.set('selling');
+  }
+
+  private shiftRecoveryFor(shift: NonNullable<PosCurrentRegister['shift']>): {
+    reason: 'previous-day' | 'different-cashier' | 'closing';
+    cashierName: string | null;
+    openedAt: string;
+  } | null {
+    if (shift.state === 'closing') return { reason: 'closing', cashierName: shift.cashierName, openedAt: shift.openedAt };
+    if (this.qatarDate(shift.openedAt) !== this.qatarDate(new Date().toISOString())) {
+      return { reason: 'previous-day', cashierName: shift.cashierName, openedAt: shift.openedAt };
+    }
+    const userId = this.auth.user()?.id;
+    if (userId && shift.cashierId && shift.cashierId !== userId) {
+      return { reason: 'different-cashier', cashierName: shift.cashierName, openedAt: shift.openedAt };
+    }
+    return null;
+  }
+
+  private qatarDate(value: string): string {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Qatar', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date(value));
+  }
+
+  setEnrollMode(mode: 'pick' | 'token' | 'create'): void {
+    this.enrollMode.set(mode);
+    this.enrollmentToken = '';
+    this.terminalName = '';
+    if (mode === 'pick') void this.loadRegisters();
+  }
+
+  /**
+   * Fill the "which till is this?" picker. A failure here is not fatal: the
+   * token and new-register paths still work, so we leave the list empty and
+   * let the template offer those instead of blocking the counter.
+   */
+  async loadRegisters(): Promise<void> {
+    this.registersLoading.set(true);
+    try {
+      this.availableRegisters.set(await this.pos.listRegisters());
+    } catch {
+      this.availableRegisters.set([]);
+    } finally {
+      this.registersLoading.set(false);
+    }
+  }
+
+  /** Switch to an existing till, or create one by name (owner/admin). */
+  async claimRegister(registerId?: string): Promise<void> {
+    const displayName = this.terminalName.trim();
+    if (!registerId && !displayName) {
+      this.toast.warning('Pick a register, or name a new one.');
+      return;
+    }
+    this.busy.set(true);
+    try {
+      await this.registerSwitchIsSafe(registerId || null);
+      const identity = await this.pos.claimRegister(registerId ? { registerId } : { displayName });
+      await this.finishRegisterSetup(identity);
+    } catch (error) {
+      // Claiming a till that is mid-shift for somebody else signs their
+      // terminal out and hands over their drawer, so the server refuses the
+      // first attempt and names who is on it. Ask here rather than surfacing
+      // a bare conflict toast the cashier cannot act on.
+      if (this.errorCode(error) === 'REGISTER_TAKEOVER_CONFIRM' && registerId) {
+        this.openTakeover(registerId, this.errorMessage(error));
+        return;
+      }
+      this.toast.warning(...this.enrollmentErrorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  /** Warn before switching away from local POS state, but do not block the
+      operator. The shift and queued sales remain associated with their
+      original till and are not carried into the newly selected till. */
+  private async registerSwitchIsSafe(targetRegisterId: string | null): Promise<void> {
+    const current = await this.local.getRegister().catch(() => null);
+    const localShift = await this.local.getShift().catch(() => null);
+    const unresolved = (await this.local.listQueuedSales().catch(() => []))
+      .filter((sale) => !sale.synced);
+    const sourceRegisterIds = new Set([
+      current?.registerId,
+      localShift?.registerId,
+      ...unresolved.map((sale) => sale.registerId || localShift?.registerId || current?.registerId),
+    ].filter((value): value is string => Boolean(value)));
+    const carriesOperationalState = Boolean(localShift || unresolved.length);
+    const returningToSameRegister = Boolean(
+      targetRegisterId
+      && sourceRegisterIds.size === 1
+      && sourceRegisterIds.has(targetRegisterId),
+    );
+    if (carriesOperationalState && !returningToSameRegister) {
+      this.toast.warning(
+        'Switching tills with unresolved local data',
+        `${localShift ? 'A local shift is still open' : ''}${localShift && unresolved.length ? ' and ' : ''}${unresolved.length ? `${unresolved.length} offline sale(s) are not synced or resolved` : ''}. You can continue, but this data remains tied to the previous till.`,
+      );
+    }
+    if (!carriesOperationalState) {
+      await this.local.clearReceiptBlock().catch(() => undefined);
+      await this.local.clearShift().catch(() => undefined);
+    }
+  }
+
+  private openTakeover(registerId: string, warning: string): void {
+    const target = this.availableRegisters().find((item) => item.registerId === registerId) || null;
+    this.takeoverTarget.set(target);
+    this.takeoverWarning.set(warning);
+    this.takeoverError.set('');
+    this.takeoverPin = '';
+  }
+
+  closeTakeover(): void {
+    this.takeoverTarget.set(null);
+    this.takeoverWarning.set('');
+    this.takeoverError.set('');
+    this.takeoverPin = '';
+  }
+
+  /** Second step of a takeover: explicit confirmation plus a manager PIN. */
+  async confirmTakeover(): Promise<void> {
+    const target = this.takeoverTarget();
+    if (!target || this.busy()) return;
+    this.busy.set(true);
+    this.takeoverError.set('');
+    try {
+      const identity = await this.pos.claimRegister({
+        registerId: target.registerId,
+        confirmTakeover: true,
+        managerPin: this.takeoverPin.trim(),
+      });
+      this.closeTakeover();
+      await this.finishRegisterSetup(identity);
+    } catch (error) {
+      const code = this.errorCode(error);
+      if (code === 'MANAGER_PIN_REQUIRED' || code === 'MANAGER_PIN_INVALID') {
+        // Keep the dialog up: the cashier has a manager standing next to them
+        // and one mistyped digit should not send them back to the list.
+        this.takeoverError.set(this.errorMessage(error));
+        this.takeoverPin = '';
+        return;
+      }
+      this.closeTakeover();
+      this.toast.warning(...this.enrollmentErrorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  /**
+   * The manual way out of a wedged terminal, reachable from both the setup and
+   * the "could not open this register" screens.
+   *
+   * Everything that binds this browser to a till is dropped: the stored
+   * identity, the server session's register and the device cookie. Queued
+   * sales and the cached catalog stay, because they belong to the shop, not to
+   * the binding. Nothing here is allowed to throw — this is the button an
+   * operator reaches for precisely when the rest of the till is failing.
+   */
+  async resetTerminal(): Promise<void> {
+    if (this.resetting()) return;
+    this.resetting.set(true);
+    try {
+      const localShift = await this.local.getShift().catch(() => null);
+      const unresolved = (await this.local.listQueuedSales().catch(() => []))
+        .filter((sale) => !sale.synced).length;
+      if (localShift || unresolved > 0) {
+        this.toast.warning(
+          'Switching tills with unresolved local data',
+          `${localShift ? 'A local shift is still open' : ''}${localShift && unresolved > 0 ? ' and ' : ''}${unresolved > 0 ? `${unresolved} offline sale(s) are not synced or resolved` : ''}. You can continue, but this data remains tied to the previous till.`,
+        );
+      }
+      await this.pos.releaseRegister().catch(() => undefined);
+      await this.local.clearRegister().catch(() => undefined);
+      await this.local.clearReceiptBlock().catch(() => undefined);
+      await this.local.clearShift().catch(() => undefined);
+      this.register.set(null);
+      this.shiftId.set(null);
+      this.resumeError.set(null);
+      this.closeTakeover();
+      this.toast.success('Terminal reset', 'Pick which till this computer is.');
+      this.enterEnrollment();
+    } finally {
+      this.resetting.set(false);
+    }
+  }
+
+  /** Shared tail of every path that binds this browser to a till. */
+  private async finishRegisterSetup(identity: { registerId: string; displayName: string; registerCredential: string }): Promise<void> {
+    const previous = await this.local.getRegister().catch(() => null);
+    if (previous && previous.registerId !== identity.registerId) {
+      await this.local.clearReceiptBlock();
+      await this.local.clearShift();
+    }
+    await this.local.setRegister(identity);
+    const current = await this.pos.currentRegister();
+    this.toast.success('Register connected', identity.displayName);
+    this.justEnrolled.set(true);
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    this.justEnrolled.set(false);
+    await this.enterRegister(current);
+  }
+
+  /** "Last used" line under each register in the picker. */
+  registerLastSeen(register: PosSelectableRegister): string {
+    if (!register.lastSeenAt) return 'Never used';
+    const minutes = Math.round((Date.now() - new Date(register.lastSeenAt).getTime()) / 60000);
+    if (minutes < 2) return 'In use now';
+    if (minutes < 60) return `Last used ${minutes} minutes ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `Last used ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+    return `Last used ${this.qatarDate(register.lastSeenAt)}`;
+  }
+
+  async enrollTerminal(): Promise<void> {
+    if (!this.enrollmentToken.trim() && !this.terminalName.trim()) {
+      this.toast.warning('Enter an enrollment token or a name for this terminal.');
+      return;
+    }
+    this.busy.set(true);
+    try {
+      let token = this.enrollmentToken.trim();
+      if (!token) {
+        const enrollment = await this.pos.createEnrollmentToken(this.terminalName.trim());
+        token = enrollment.token;
+      }
+      await this.finishRegisterSetup(await this.pos.enroll(token));
+    } catch (error) {
+      this.toast.warning(...this.enrollmentErrorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  private enrollmentErrorMessage(error: unknown): [string, string] {
+    if (this.isNetworkError(error)) {
+      return ["You're offline", 'Connect to the internet to enroll this register for the first time.'];
+    }
+    const code = this.errorCode(error);
+    const status = typeof error === 'object' && error !== null ? (error as { status?: number }).status : undefined;
+    if (status === 429) {
+      return ['Too many attempts', 'Wait a few minutes before trying again.'];
+    }
+    switch (code) {
+      case 'ENROLLMENT_TOKEN_EXPIRED':
+        return ['Token expired', 'Tokens are valid for 15 minutes. Ask your manager for a new one.'];
+      case 'ENROLLMENT_TOKEN_USED':
+        return ['Token already used', 'This token already connected a register. Ask your manager for a new one.'];
+      case 'ENROLLMENT_TOKEN_INVALID':
+        return ['Invalid token', 'Check for typos, or ask your manager to generate a new one.'];
+      case 'REGISTER_NOT_FOUND':
+        return ['Register is gone', 'That register was removed. Pick another one from the list.'];
+      case 'REGISTER_DISABLED':
+        return ['Register disabled', 'An owner or admin revoked this register. Pick another one.'];
+      case 'REGISTER_NAME_TAKEN':
+        return ['Name already used', 'A register with that name exists. Pick it from the list instead.'];
+      case 'INSUFFICIENT_PERMISSIONS':
+        return ['Ask an owner or admin', 'Only they can add a new register. Pick an existing one from the list.'];
+      default:
+        return ["Couldn't connect this register", this.errorMessage(error)];
+    }
+  }
+
+  async openShift(): Promise<void> {
+    const openingFloatCents = this.moneyInputToCents(this.openingFloat);
+    if (openingFloatCents === null) {
+      this.toast.warning('Opening cash must be a valid non-negative amount.');
+      return;
+    }
+    if (!this.hardware.ready()) {
+      // Two different situations wear the same "not ready" badge, and telling
+      // them apart matters at 9am: a printer that cannot be reached stops
+      // receipts now, while a stopped signer only costs offline printing,
+      // which is invisible until the internet drops.
+      const printerReady = this.hardware.connected() && this.hardware.printerAvailable();
+      this.toast.warning(
+        'Hardware is not fully ready',
+        printerReady
+          ? 'Receipts will print normally. The local signer is not running, so printing will stop working if this register loses internet.'
+          : 'The shift can open, but receipts may not print until the automatic reconnect succeeds.',
+      );
+    }
+    // persist() resolving false often means private/incognito mode, where an
+    // offline sale queued in IndexedDB can be silently wiped when the
+    // session ends. persist()/quota heuristics are known to be unreliable
+    // across browsers though, so this warns rather than hard-blocking — a
+    // false positive here would be worse than the risk it's guarding against
+    // on a live register mid-shift.
+    if (this.persistentStorage() === false) {
+      this.toast.warning(
+        'This browser could not guarantee persistent storage',
+        'Offline sales may be lost if this is a private/incognito window. Avoid using one on this register.',
+      );
+    }
+    this.busy.set(true);
+    try {
+      const shift = await this.pos.openShift(openingFloatCents);
+      this.shiftId.set(shift.shiftId);
+      await this.local.setShift(shift);
+      this.toast.success('Shift opened', `Opening float ${this.formatMoney(openingFloatCents)}`);
+      // Guide Appendix C: log the terminal on to the bank at the start of a
+      // shift. Best effort: a sale also logs on by itself when needed.
+      if (this.cardIntegrated()) void this.cardTerminal.run({ type: 'logon' });
+      await this.enterSelling();
+    } catch (error) {
+      this.toast.error("Couldn't open shift", this.errorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  queueSearch(): void {
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => void this.loadProducts(this.searchQuery, 0), 180);
+  }
+
+  async scanBarcode(): Promise<void> {
+    const value = this.barcode.trim();
+    if (!value) return;
+    try {
+      const product = this.online()
+        ? await this.pos.findBarcode(value)
+        : this.products().find((item) => item.barcode === value);
+      if (!product) throw new Error(`No cached product uses barcode ${value}.`);
+      this.addToCart(product);
+      this.barcode = '';
+    } catch (error) {
+      this.toast.warning('Barcode not found', this.errorMessage(error));
+    }
+  }
+
+  addToCart(item: PosCatalogItem): void {
+    if (item.stock <= 0) return;
+    const existing = this.cart().find((line) => line.item.variantId === item.variantId);
+    if (existing && existing.quantity >= item.stock) {
+      this.toast.warning(`Only ${item.stock} units of ${item.name} are available.`);
+      return;
+    }
+    this.cart.update((lines) => existing
+      ? lines.map((line) => line.item.variantId === item.variantId ? { ...line, quantity: line.quantity + 1 } : line)
+      : [...lines, { item, quantity: 1 }]);
+    // Whatever the cashier just scanned or tapped is what F9/Delete should
+    // act on next — keep the keyboard selection following the action.
+    this.selectedLineId.set(item.variantId);
+    this.pendingIdempotencyKey = null;
+  }
+
+  changeQuantity(variantId: string, delta: number): void {
+    this.cart.update((lines) => lines.flatMap((line) => {
+      if (line.item.variantId !== variantId) return [line];
+      const quantity = line.quantity + delta;
+      if (quantity <= 0) return [];
+      return [{ ...line, quantity: Math.min(quantity, line.item.stock) }];
+    }));
+    this.pendingIdempotencyKey = null;
+  }
+
+  removeLine(variantId: string): void {
+    this.cart.update((lines) => lines.filter((line) => line.item.variantId !== variantId));
+    if (this.selectedLineId() === variantId) {
+      const remaining = this.cart();
+      this.selectedLineId.set(remaining.length ? remaining[0].item.variantId : null);
+    }
+    this.pendingIdempotencyKey = null;
+  }
+
+  beginPayment(): void {
+    if (!this.cart().length) return;
+    if (!this.canSellFromOfflineCatalog()) return;
+    this.paymentMethod.set('cash');
+    this.tendered = (this.totalCents() / 100).toFixed(2);
+    this.terminalReference = '';
+    this.paymentReferenceError.set(null);
+    this.customerQuery = '';
+    this.customerResults.set([]);
+    this.customerCreateOpen.set(false);
+    this.paymentOpen.set(true);
+  }
+
+  // ── Customer at checkout ────────────────────────────────────────────────
+  // Walk-in stays the default and costs zero taps: a queue at the till must
+  // never wait on data entry. Linking is opt-in, one search away.
+
+  queueCustomerSearch(): void {
+    if (this.customerSearchTimer) clearTimeout(this.customerSearchTimer);
+    const query = this.customerQuery.trim();
+    if (query.length < 3) {
+      this.customerResults.set([]);
+      return;
+    }
+    this.customerSearchTimer = setTimeout(() => void this.searchCustomers(query), 250);
+  }
+
+  private async searchCustomers(query: string): Promise<void> {
+    if (!this.online()) return;
+    this.customerSearching.set(true);
+    try {
+      this.customerResults.set(await this.pos.searchCustomers(query));
+    } catch {
+      // The interceptor already reported it; an empty result is the right
+      // fallback at a till — never block a sale on a lookup.
+      this.customerResults.set([]);
+    } finally {
+      this.customerSearching.set(false);
+    }
+  }
+
+  linkCustomer(customer: PosCustomer): void {
+    this.selectedCustomer.set(customer);
+    this.customerResults.set([]);
+    this.customerQuery = '';
+    this.customerCreateOpen.set(false);
+  }
+
+  clearCustomer(): void {
+    this.selectedCustomer.set(null);
+    this.customerResults.set([]);
+    this.customerQuery = '';
+  }
+
+  openCustomerCreate(): void {
+    // Prefill from whatever the cashier already typed: digits look like a
+    // phone, anything else like a name.
+    const typed = this.customerQuery.trim();
+    const isPhone = /^[0-9+\-\s()]+$/.test(typed);
+    this.newCustomerName = isPhone ? '' : typed;
+    this.newCustomerPhone = isPhone ? typed : '';
+    this.newCustomerEmail = '';
+    this.customerCreateOpen.set(true);
+  }
+
+  async createCustomer(): Promise<void> {
+    const fullName = this.newCustomerName.trim();
+    if (!fullName || this.customerSaving()) return;
+    if (!this.newCustomerPhone.trim() && !this.newCustomerEmail.trim()) {
+      this.toast.warning('Enter a phone number or an email address.');
+      return;
+    }
+    this.customerSaving.set(true);
+    try {
+      const customer = await this.pos.createCustomer({
+        fullName,
+        phone: this.newCustomerPhone.trim() || undefined,
+        email: this.newCustomerEmail.trim() || undefined,
+      });
+      this.linkCustomer(customer);
+      // Worth saying out loud: the cashier typed a phone that turned out to
+      // belong to an existing website customer, and this sale now joins that
+      // person's history rather than starting a second one.
+      if (customer.linkedExisting) {
+        this.toast.success('Linked to an existing customer', `${customer.name} is already in the customer list.`);
+      } else {
+        this.toast.success('Customer created', customer.name);
+      }
+    } catch (error) {
+      this.toast.error("Couldn't save customer", this.errorMessage(error));
+    } finally {
+      this.customerSaving.set(false);
+    }
+  }
+
+  selectPayment(method: PaymentMethod): void {
+    if (this.cardBusy()) return;
+    this.paymentMethod.set(method);
+    this.paymentReferenceError.set(null);
+    this.cardManualEntry.set(false);
+    this.cardPhase.set('ready');
+    this.cardDecline.set(null);
+    // A reference typed for one tender is never carried over to another.
+    if (method === 'cash') this.tendered = (this.totalCents() / 100).toFixed(2);
+    else this.terminalReference = '';
+  }
+
+  paymentLabel(method: PaymentMethod | string | null | undefined): string {
+    return POS_PAYMENT_LABELS[method as PaymentMethod] ?? String(method || '');
+  }
+
+  /** Card and Sadad both need cashier-entered proof of payment. */
+  needsReference(method: PaymentMethod | string | null | undefined): boolean {
+    return method === 'card' || method === 'sadad';
+  }
+
+  /** Sadad IDs are normalized as typed (trim, uppercase) so what the cashier
+      sees is exactly what the server stores and checks for reuse. */
+  onPaymentReferenceInput(value: string): void {
+    this.terminalReference = this.paymentMethod() === 'sadad' ? value.toUpperCase().replace(/\s+/g, '') : value;
+    this.paymentReferenceError.set(null);
+  }
+
+  /** Guidance only; the server re-validates (sale-service.js paymentReference). */
+  paymentReferenceProblem(method: PaymentMethod, value: string): string | null {
+    const reference = value.trim();
+    if (!this.needsReference(method) || !reference) return null;
+    if (method === 'sadad' && !SADAD_REFERENCE_PATTERN.test(reference.toUpperCase())) {
+      return 'Use the transaction ID shown in the Sadad app: 4 to 40 letters, digits or dashes.';
+    }
+    return null;
+  }
+
+  paymentReady(): boolean {
+    const method = this.paymentMethod();
+    if (this.cardTerminalActive()) return this.cardPhase() === 'ready' || this.cardPhase() === 'declined';
+    if (!this.needsReference(method)) return true;
+    return Boolean(this.terminalReference.trim()) && !this.paymentReferenceProblem(method, this.terminalReference);
+  }
+
+  async completeSale(): Promise<void> {
+    const shiftId = this.shiftId();
+    if (!shiftId || !this.cart().length || this.busy()) return;
+    if (!this.canSellFromOfflineCatalog()) return;
+
+    const method = this.paymentMethod();
+    const tenderedCents = method === 'cash' ? this.moneyInputToCents(this.tendered) : 0;
+    if (method === 'cash' && (tenderedCents === null || tenderedCents < this.totalCents())) {
+      this.toast.warning('Tendered cash is less than the total.');
+      return;
+    }
+    const terminalReference = method === 'sadad'
+      ? this.terminalReference.trim().toUpperCase()
+      : this.terminalReference.trim();
+    const onTerminal = method === 'card' && this.cardTerminalActive();
+    if (method === 'card' && !onTerminal && !terminalReference) {
+      this.toast.warning('Enter the terminal reference or approval code before completing a card sale.');
+      return;
+    }
+    if (method === 'sadad') {
+      const problem = terminalReference
+        ? this.paymentReferenceProblem(method, terminalReference)
+        : 'Enter the Sadad transaction ID after the customer has paid.';
+      if (problem) {
+        this.paymentReferenceError.set(problem);
+        return;
+      }
+    }
+    const amountTenderedCents = tenderedCents ?? 0;
+
+    let completedSale: { receiptData: unknown; openDrawer: boolean; queuedIdempotencyKey: string | null } | null = null;
+    let cardSlip: string | null = null;
+    let chargedUtn: string | null = null;
+    this.busy.set(true);
+    try {
+      await this.ensureReceiptBlock();
+      const receiptBlock = this.receiptBlock();
+      if (!receiptBlock || receiptBlock.next > receiptBlock.end) {
+        throw new Error('No receipt numbers are available.');
+      }
+      const receiptNumber = receiptBlock.next;
+      this.pendingIdempotencyKey ??= crypto.randomUUID();
+      const totalCents = this.totalCents();
+      const clientCreatedAt = new Date().toISOString();
+      const payload: PosSaleInput = {
+        idempotencyKey: this.pendingIdempotencyKey,
+        receiptNumber,
+        shiftId,
+        customerId: this.selectedCustomer()?.customerId ?? null,
+        items: this.cart().map((line) => ({
+          variantId: line.item.variantId,
+          quantity: line.quantity,
+          unitPriceCents: line.item.priceCents,
+        })),
+        payment: {
+          method,
+          cashAmountCents: method === 'cash' ? totalCents : 0,
+          cardAmountCents: method === 'card' ? totalCents : 0,
+          sadadAmountCents: method === 'sadad' ? totalCents : 0,
+          amountTenderedCents,
+          changeGivenCents: method === 'cash' ? amountTenderedCents - totalCents : 0,
+          terminalReference: this.needsReference(method) && !onTerminal ? terminalReference : undefined,
+          // Typed card reference on a till linked to the terminal: allowed as
+          // the "terminal not working" fallback, flagged for reconciliation.
+          ...(method === 'card' && !onTerminal && this.cardIntegrated() ? { manualOverride: true } : {}),
+        },
+        clientCreatedAt,
+      };
+      if (onTerminal) {
+        // Money moves on the terminal first; the sale is only written once it
+        // approved. A decline keeps the sheet open with the reason.
+        const cardAttempt = await this.chargeCardForSale(payload, receiptNumber);
+        if (!cardAttempt) return;
+        payload.payment.cardAttempt = cardAttempt;
+        chargedUtn = cardAttempt.utn;
+        cardSlip = cardAttempt.result?.receiptText ?? null;
+      }
+      const receiptData = this.localReceiptData(payload, receiptNumber);
+      let result: PosSaleResult;
+      if (this.online()) {
+        try {
+          result = await this.pos.createSale(payload);
+          await this.local.commitReceipt(receiptNumber);
+        } catch (error) {
+          if (!this.isNetworkError(error)) throw error;
+          this.online.set(false);
+          // Start recovering immediately rather than waiting for a browser
+          // `online` event that may never fire (the network interface can
+          // stay "up" while the API itself is unreachable).
+          this.startHealthCheckPolling();
+          if (!this.canSellFromOfflineCatalog()) return;
+          result = await this.queueOfflineSale(payload, receiptData);
+        }
+      } else {
+        result = await this.queueOfflineSale(payload, receiptData);
+      }
+      this.receiptBlock.set(await this.local.getReceiptBlock());
+      if (chargedUtn) await this.local.removeCardAttempt(chargedUtn).catch(() => undefined);
+      this.cardPhase.set('ready');
+      this.applyStockUpdates(result.stockUpdates);
+      this.cart.set([]);
+      this.selectedLineId.set(null);
+      this.selectedCustomer.set(null);
+      this.pendingIdempotencyKey = null;
+      this.paymentOpen.set(false);
+      this.lastSale.set(result);
+      // The sale is fully committed at this point. Printing is best-effort and
+      // must not hold the `busy` flag — otherwise a slow/failed print would
+      // keep "Take payment" disabled for the next customer. Print after the
+      // finally releases busy; QZ calls are themselves timeout-guarded.
+      completedSale = {
+        receiptData: result.receipt.receiptData,
+        openDrawer: method === 'cash',
+        queuedIdempotencyKey: result.status === 'pending-sync' ? result.transactionId : null,
+      };
+    } catch (error) {
+      const code = this.errorCode(error);
+      if (chargedUtn) {
+        // The customer was charged but Elite refused the sale. The approval
+        // stays saved on this till and is listed under "card payments to
+        // check", so the sale can be completed or the charge voided.
+        this.toast.push({
+          kind: 'error',
+          title: 'Card charged, sale not saved',
+          sub: `${this.errorMessage(error)} Do not charge the card again. Open "Card payments to check".`,
+          duration: null,
+        });
+        void this.refreshUnresolvedCards();
+      } else if (code === 'PAYMENT_REFERENCE_USED' || code === 'PAYMENT_REFERENCE_INVALID') {
+        // The sheet stays open with the field flagged; the cashier corrects
+        // the ID and completes again under the same idempotency key.
+        this.paymentReferenceError.set(this.errorMessage(error));
+      } else {
+        this.toast.error("Couldn't complete sale", this.errorMessage(error));
+      }
+    } finally {
+      this.busy.set(false);
+    }
+
+    if (completedSale) {
+      try {
+        await this.hardware.printReceipt(completedSale.receiptData, completedSale.openDrawer);
+        if (completedSale.queuedIdempotencyKey) {
+          await this.local.appendJournal({ idempotencyKey: completedSale.queuedIdempotencyKey, event: 'printed', at: new Date().toISOString() });
+        }
+      } catch (printError) {
+        this.toast.warning('Sale saved, receipt not printed', this.errorMessage(printError));
+        // PRINT_FAILED is the code the server counts per register: five in one
+        // shift raises an email, since a jammed printer at the counter is
+        // invisible to anyone outside the shop (docs/24, Phase E).
+        this.clientLogger.logError('pos-client', printError, {
+          code: 'PRINT_FAILED',
+          severity: 'warn',
+          context: { printerName: this.hardware.printerName(), openDrawer: completedSale.openDrawer },
+        });
+      }
+      // The bank's slip after Elite's receipt, as one hand-over.
+      if (cardSlip) void this.printCardSlip(cardSlip);
+    }
+  }
+
+  private canSellFromOfflineCatalog(): boolean {
+    this.freshnessClock.set(Date.now());
+    if (!this.offlineCatalogBlocked()) return true;
+    this.toast.warning(
+      'Offline sales are blocked',
+      'The cached catalog is 12 hours old or unavailable. Reconnect this register to refresh prices and stock before taking payment.',
+    );
+    return false;
+  }
+
+  closeReceipt(): void {
+    this.lastSale.set(null);
+  }
+
+  async reprintLastSale(): Promise<void> {
+    const sale = this.lastSale();
+    if (!sale) return;
+    try {
+      await this.hardware.printReceipt(sale.receipt.receiptData, false);
+    } catch (error) {
+      this.toast.warning("Couldn't reprint receipt", this.errorMessage(error));
+    }
+  }
+
+  /**
+   * Reprints whatever transaction is currently looked up in the void/refund
+   * panel — the only reprint path before this covered just the sale that was
+   * just rung up (`reprintLastSale`, backed by an in-memory signal that's
+   * gone after the modal closes or the tab reloads). This one works for any
+   * past transaction, since `findTransaction` always returns a full
+   * `receipt.receiptData` reconstructed from the database.
+   */
+  async reprintLookedUpTransaction(): Promise<void> {
+    const transaction = this.operationTransaction();
+    if (!transaction) return;
+    try {
+      await this.hardware.printReceipt(transaction.receipt.receiptData, false);
+      this.toast.success('Receipt reprinted');
+    } catch (error) {
+      this.toast.warning("Couldn't reprint receipt", this.errorMessage(error));
+    }
+  }
+
+  async syncPendingSales(): Promise<void> {
+    if (!this.online() || this.syncing()) return;
+    const shiftId = this.shiftId();
+    if (!shiftId) return;
+    const queued = await this.local.listQueuedSales(shiftId);
+    const pending = queued.filter((sale) => sale.status === 'pending');
+    await this.refreshQueueState();
+    if (!pending.length) {
+      await this.reportSyncState();
+      return;
+    }
+    this.syncing.set(true);
+    try {
+      for (const sale of pending) {
+        await this.local.appendJournal({ idempotencyKey: sale.idempotencyKey, event: 'sync_attempted', at: new Date().toISOString() });
+      }
+      const response = await this.pos.syncSales(pending.map((sale) => ({
+        idempotencyKey: sale.idempotencyKey,
+        receiptNumber: sale.receiptNumber,
+        clientCreatedAt: sale.clientCreatedAt,
+        payload: sale.payload,
+      })));
+      for (const accepted of [...response.accepted, ...response.acceptedWithConflicts]) {
+        // Kept (not deleted) for the local audit window — see
+        // markQueuedSaleSynced's doc comment and AUDIT_WINDOW_MS.
+        await this.local.markQueuedSaleSynced(accepted.idempotencyKey);
+        await this.local.appendJournal({ idempotencyKey: accepted.idempotencyKey, event: 'accepted', at: new Date().toISOString() });
+      }
+      for (const rejected of response.rejected) {
+        await this.local.markQueuedSaleRejected(rejected.idempotencyKey, rejected.message);
+        await this.local.appendJournal({
+          idempotencyKey: rejected.idempotencyKey, event: 'rejected', at: new Date().toISOString(),
+          detail: { reason: rejected.reason, code: rejected.code },
+        });
+      }
+      this.syncAttempt = 0;
+      this.lastSyncAt.set(new Date().toISOString());
+      await this.refreshQueueState();
+      await this.reportSyncState();
+      await this.loadProducts(this.searchQuery);
+      await this.local.cleanupSyncedSales();
+      if (response.acceptedWithConflicts.length) {
+        this.toast.warning(
+          `${response.acceptedWithConflicts.length} offline sale conflict(s) need manager reconciliation.`,
+        );
+      }
+    } catch (error) {
+      this.scheduleSyncRetry();
+      this.startHealthCheckPolling();
+      this.toast.warning('Offline sync paused', this.errorMessage(error));
+    } finally {
+      this.syncing.set(false);
+    }
+  }
+
+  async retryRejectedSale(sale: PosQueuedSale): Promise<void> {
+    await this.local.retryQueuedSale(sale.idempotencyKey);
+    await this.refreshQueueState();
+    await this.syncPendingSales();
+  }
+
+  async parkCurrentCart(): Promise<void> {
+    if (!this.cart().length) return;
+    this.busy.set(true);
+    try {
+      if (this.online()) await this.pos.parkCart(this.parkLabel.trim(), { items: this.cart() });
+      else await this.local.parkCart(this.parkLabel.trim(), { items: this.cart() });
+      this.cart.set([]);
+      this.selectedLineId.set(null);
+      this.parkLabel = '';
+      this.dialog.set('none');
+      this.toast.success('Sale parked');
+      await this.loadParkedCarts();
+    } catch (error) {
+      this.toast.error("Couldn't park sale", this.errorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  async loadParkedCarts(): Promise<void> {
+    try {
+      const localCarts = await this.local.listParkedCarts();
+      if (!this.online()) {
+        this.parkedCarts.set(localCarts);
+        return;
+      }
+      for (const parked of localCarts) {
+        await this.pos.parkCart(parked.label, parked.payload);
+        await this.local.deleteParkedCart(parked.parkedCartId);
+      }
+      this.parkedCarts.set(await this.pos.listParkedCarts());
+    } catch (error) {
+      this.toast.warning("Couldn't refresh parked sales", this.errorMessage(error));
+    }
+  }
+
+  async restoreParkedCart(parked: PosParkedCart): Promise<void> {
+    if (this.cart().length && !window.confirm('Replace the current cart with this parked sale?')) return;
+    this.cart.set(parked.payload.items);
+    this.selectedLineId.set(parked.payload.items[0]?.item.variantId ?? null);
+    if (parked.local) await this.local.deleteParkedCart(parked.parkedCartId);
+    else await this.pos.deleteParkedCart(parked.parkedCartId);
+    await this.loadParkedCarts();
+    this.dialog.set('none');
+  }
+
+  async lookupTransaction(): Promise<void> {
+    if (!this.transactionLookup.trim() || !this.online()) return;
+    this.busy.set(true);
+    try {
+      const transaction = await this.pos.findTransaction(this.transactionLookup.trim());
+      this.operationTransaction.set(transaction);
+      this.refundQuantities = Object.fromEntries((transaction.items || []).map((item) => [item.id, 0]));
+      this.refundRestock = Object.fromEntries((transaction.items || []).map((item) => [item.id, true]));
+    } catch (error) {
+      this.toast.warning('Transaction not found', this.errorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  async voidCurrentTransaction(): Promise<void> {
+    const transaction = this.operationTransaction();
+    if (!transaction || (this.managerPinConfigured() && !this.managerPin) || !this.correctionReason.trim()) return;
+    const originalReceipt = transaction.receipt?.receiptData as PosReceiptData | undefined;
+    if (!originalReceipt?.receiptNumber) {
+      this.toast.error("Couldn't void sale", 'The original receipt data is unavailable. Look up the sale again before retrying.');
+      return;
+    }
+    let completedVoid: { receiptData: PosReceiptData; openDrawer: boolean } | null = null;
+    this.busy.set(true);
+    try {
+      const onTerminal = this.cardCorrectionOnTerminal(transaction);
+      // Elite's checks first, then the PIN: the terminal must never reverse a
+      // card for a void Elite would refuse.
+      if (onTerminal) await this.pos.checkVoid(transaction.transactionId, this.correctionReason.trim());
+      const override = await this.pos.verifyManagerPin(this.managerPin, 'void');
+      let cardAttempt: PosCardAttemptRef | undefined;
+      if (onTerminal) {
+        cardAttempt = (await this.runCardCorrection('void', transaction, transaction.totalCents)) ?? undefined;
+        if (!cardAttempt) return;
+      }
+      const result = await this.pos.voidTransaction(transaction.transactionId, {
+        idempotencyKey: crypto.randomUUID(),
+        voidReason: this.correctionReason.trim(),
+        managerOverrideId: override.overrideId,
+        managerOverrideToken: override.token,
+        ...(cardAttempt ? { cardAttempt } : {}),
+      });
+      if (cardAttempt) await this.local.removeCardAttempt(cardAttempt.utn).catch(() => undefined);
+      this.applyStockUpdates(result.stockRestored);
+      this.operationTransaction.set(await this.pos.findTransaction(transaction.transactionId));
+      this.managerPin = '';
+      this.correctionReason = '';
+      this.toast.success('Sale voided');
+      completedVoid = {
+        receiptData: {
+          ...originalReceipt,
+          kind: 'void',
+          transactionId: transaction.transactionId,
+          createdAt: result.voidedAt,
+          paymentMethod: transaction.paymentMethod,
+          totalCents: result.amountCents,
+          reason: result.reason,
+          lookupCode: `elite-pos:${transaction.transactionId}`,
+        },
+        openDrawer: transaction.paymentMethod === 'cash',
+      };
+    } catch (error) {
+      this.toast.error("Couldn't void sale", this.errorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+
+    if (completedVoid) {
+      await this.printCorrectionReceipt(completedVoid.receiptData, completedVoid.openDrawer, 'Sale voided, receipt not printed');
+    }
+  }
+
+  private async printCorrectionReceipt(receiptData: unknown, openDrawer: boolean, failureTitle: string): Promise<void> {
+    try {
+      await this.hardware.printReceipt(receiptData, openDrawer);
+    } catch (printError) {
+      // Retry the saved receipt only: never repeat the refund/void or pulse
+      // the drawer again when the original print's outcome is uncertain.
+      this.toast.push({
+        kind: 'warning',
+        title: failureTitle,
+        sub: this.errorMessage(printError),
+        duration: null,
+        action: { label: 'Retry print', run: () => { void this.printCorrectionReceipt(receiptData, false, failureTitle); } },
+      });
+      this.clientLogger.logError('pos-client', printError, {
+        code: 'PRINT_FAILED',
+        severity: 'warn',
+        context: { receiptKind: (receiptData as PosReceiptData)?.kind, printerName: this.hardware.printerName(), openDrawer },
+      });
+    }
+  }
+
+  async refundCurrentTransaction(): Promise<void> {
+    const transaction = this.operationTransaction();
+    const shiftId = this.shiftId();
+    const lines = (transaction?.items || [])
+      .map((item) => ({
+        transactionItemId: item.id,
+        quantity: Number(this.refundQuantities[item.id] || 0),
+        restock: this.refundRestock[item.id] !== false,
+      }))
+      .filter((line) => line.quantity > 0);
+    const refundTerminalReference = transaction?.paymentMethod === 'sadad'
+      ? this.refundTerminalReference.trim().toUpperCase()
+      : this.refundTerminalReference.trim();
+    if (
+      !transaction || !shiftId || !lines.length
+      || (this.managerPinConfigured() && !this.managerPin)
+      || !this.correctionReason.trim()
+      || (this.needsCorrectionReference(transaction) && !refundTerminalReference)
+    ) return;
+    const onTerminal = this.cardCorrectionOnTerminal(transaction);
+    let completedRefund: { receiptData: unknown; openDrawer: boolean } | null = null;
+    this.busy.set(true);
+    try {
+      await this.ensureReceiptBlock();
+      const receiptNumber = this.receiptBlock()?.next;
+      if (!receiptNumber) throw new Error('No refund receipt number is available.');
+      let cardAttempt: PosCardAttemptRef | undefined;
+      let refundAmountCents = 0;
+      if (onTerminal) {
+        const check = await this.pos.checkRefund({
+          shiftId, receiptNumber, originalTransactionId: transaction.transactionId, lines,
+          refundMethod: transaction.paymentMethod, reason: this.correctionReason.trim(),
+        });
+        refundAmountCents = check.amountCents;
+      }
+      const override = await this.pos.verifyManagerPin(this.managerPin, 'refund');
+      if (onTerminal) {
+        // Card-present refund on the terminal (QCB NAPS mandate).
+        cardAttempt = (await this.runCardCorrection('refund', transaction, refundAmountCents)) ?? undefined;
+        if (!cardAttempt) return;
+      }
+      const result = await this.pos.refund({
+        idempotencyKey: crypto.randomUUID(),
+        receiptNumber,
+        shiftId,
+        originalTransactionId: transaction.transactionId,
+        lines,
+        refundMethod: transaction.paymentMethod,
+        ...(this.needsCorrectionReference(transaction) ? { terminalReference: refundTerminalReference } : {}),
+        ...(cardAttempt ? { cardAttempt } : {}),
+        ...(!onTerminal && transaction.paymentMethod === 'card' && this.cardIntegrated() ? { manualOverride: true } : {}),
+        reason: this.correctionReason.trim(),
+        managerOverrideId: override.overrideId,
+        managerOverrideToken: override.token,
+      });
+      await this.local.commitReceipt(receiptNumber);
+      if (cardAttempt) await this.local.removeCardAttempt(cardAttempt.utn).catch(() => undefined);
+      this.receiptBlock.set(await this.local.getReceiptBlock());
+      this.applyStockUpdates(result.stockUpdates || []);
+      completedRefund = { receiptData: result.receipt.receiptData, openDrawer: result.method === 'cash' };
+      this.managerPin = '';
+      this.correctionReason = '';
+      this.refundTerminalReference = '';
+      this.toast.success('Refund completed');
+    } catch (error) {
+      this.toast.error("Couldn't complete refund", this.errorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+
+    if (completedRefund) {
+      await this.printCorrectionReceipt(completedRefund.receiptData, completedRefund.openDrawer, 'Refund saved, receipt not printed');
+      // Refreshing the operations panel is optional and must not delay the
+      // receipt or make a committed refund appear to have failed.
+      try {
+        const refreshed = await this.pos.findTransaction(transaction.transactionId);
+        if (this.operationTransaction() === transaction) this.operationTransaction.set(refreshed);
+      } catch (error) {
+        this.toast.warning('Refund saved, transaction details could not be refreshed', this.errorMessage(error));
+      }
+    }
+  }
+
+  async openHardwareDialog(): Promise<void> {
+    const settings = await this.local.getHardwareSettings();
+    this.hardwarePrinter = settings?.printerName || '';
+    this.hardwareSignerUrl = settings?.deviceSignerUrl || 'http://127.0.0.1:8182';
+    this.hardwareDrawerPulse = settings?.drawerPulse || 'epson-pin-2';
+    this.dialog.set('hardware');
+    void this.loadPosBuildVersions();
+    void this.loadCardSettings();
+    // Re-typing the exact QZ printer name from memory is the main friction
+    // point after site data gets cleared (browser "clear cookies" wipes the
+    // IndexedDB-stored setting too, not just cookies). Auto-scan whenever
+    // nothing is configured yet so re-setup is a click, not a memory test.
+    if (!this.hardwarePrinter) await this.discoverPrinters();
+  }
+
+  private async loadPosBuildVersions(): Promise<void> {
+    const { running, deployed } = await posBuildVersions();
+    this.posBuildRunning.set(running);
+    this.posBuildDeployed.set(deployed);
+  }
+
+  /**
+   * A till left open all day only looks for a new build on navigation, so it
+   * can run several deploys behind with nothing on screen saying so. This is
+   * the manual check, and it reloads onto the new build when there is one.
+   */
+  async checkPosUpdate(): Promise<void> {
+    this.checkingPosUpdate.set(true);
+    try {
+      const result = await checkForPosUpdate();
+      await this.loadPosBuildVersions();
+      if (result === 'updating') {
+        this.toast.success('Updating', 'A newer version was found. The register will reload.');
+      } else if (result === 'current') {
+        this.toast.success('Up to date', 'This register is already running the newest version.');
+      } else if (result === 'busy') {
+        this.toast.warning(
+          'Update is ready but held back',
+          'Finish the sale and clear any queued offline sales first, then check again.',
+        );
+      }
+    } catch (error) {
+      this.toast.error("Couldn't check for updates", this.errorMessage(error));
+    } finally {
+      this.checkingPosUpdate.set(false);
+    }
+  }
+
+  async discoverPrinters(): Promise<void> {
+    this.discoveringPrinters.set(true);
+    try {
+      const found = await this.hardware.printers();
+      this.discoveredPrinters.set(found);
+      if (found.length === 1 && !this.hardwarePrinter) this.hardwarePrinter = found[0];
+    } catch (error) {
+      this.toast.warning("Couldn't scan for printers", this.errorMessage(error));
+    } finally {
+      this.discoveringPrinters.set(false);
+    }
+  }
+
+  async saveHardware(): Promise<void> {
+    this.busy.set(true);
+    try {
+      await this.hardware.configure({
+        printerName: this.hardwarePrinter.trim(),
+        deviceSignerUrl: this.hardwareSignerUrl.trim(),
+        drawerPulse: this.hardwareDrawerPulse,
+      });
+      this.dialog.set('none');
+      this.toast.success('Hardware settings saved');
+    } catch (error) {
+      this.toast.error("Couldn't save hardware settings", this.errorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  async openShiftDialog(): Promise<void> {
+    if (!this.online()) return;
+    this.dialog.set('shift');
+    try {
+      const [summary, conflicts] = await Promise.all([this.pos.shiftSummary(), this.pos.listConflicts()]);
+      this.shiftSummary.set(summary);
+      this.syncConflicts.set(conflicts);
+      this.physicalCash = (summary.expectedCashCents / 100).toFixed(2);
+    } catch (error) {
+      this.toast.warning("Couldn't load shift report", this.errorMessage(error));
+    }
+  }
+
+  /**
+   * The shift's own operator closes it without a manager PIN when the shop
+   * allows self-close (docs/12, "Manager PIN"). The server decides; this only
+   * decides whether the PIN field is shown and required.
+   */
+  shiftSelfCloseAllowed(): boolean {
+    return this.shiftSummary()?.selfCloseAllowed === true;
+  }
+
+  /** False once the tenant has never configured a manager PIN — void,
+      refund, drawer-open, z-report and sync-conflict approvals then skip
+      asking for one entirely (server auto-approves; see manager-service.js).
+      Defaults to true (safe) if the register payload hasn't loaded it. */
+  managerPinConfigured(): boolean {
+    return this.register()?.managerPinConfigured !== false;
+  }
+
+  async closeCurrentShift(): Promise<void> {
+    const summary = this.shiftSummary();
+    const physicalCashCents = this.moneyInputToCents(this.physicalCash);
+    if (!summary || physicalCashCents === null) return;
+    const selfClose = this.shiftSelfCloseAllowed();
+    if (!selfClose && this.managerPinConfigured() && !this.managerPin) return;
+    await this.refreshQueueState();
+    if (this.pendingSales() || this.rejectedSales()) {
+      this.toast.warning('Resolve all pending and rejected offline sales before closing the shift.');
+      return;
+    }
+    let completedReport: PosZReport | null = null;
+    let recoveringPreviousShift = false;
+    this.busy.set(true);
+    try {
+      await this.reportSyncState();
+      const override = selfClose ? null : await this.pos.verifyManagerPin(this.managerPin, 'z-report');
+      const cardBatch = await this.closeCardBatch();
+      completedReport = await this.pos.closeShift({
+        shiftId: summary.shiftId,
+        physicalCashCents,
+        idempotencyKey: crypto.randomUUID(),
+        ...(override ? { managerOverrideId: override.overrideId, managerOverrideToken: override.token } : {}),
+        ...(cardBatch ? { cardBatch } : {}),
+      });
+      this.dialog.set('none');
+      await this.local.clearShift();
+      this.shiftId.set(null);
+      recoveringPreviousShift = this.phase() === 'shift-recovery';
+      if (recoveringPreviousShift) {
+        this.shiftRecovery.set(null);
+        this.register.update((register) => register ? { ...register, shift: null } : register);
+        this.phase.set('shift');
+      }
+    } catch (error) {
+      this.toast.error("Couldn't close shift", this.errorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+
+    const report = completedReport;
+    if (!report) return;
+    // Leave the selling screen as soon as the committed shift is cleared. The
+    // print runs from a root-scoped service and can finish on the dashboard;
+    // keeping a closed till visible for up to the print timeout would invite
+    // the cashier to start another sale against a shift that no longer exists.
+    if (!recoveringPreviousShift) await this.router.navigate(['/dashboard']);
+    try {
+      await this.hardware.printZReport(report);
+      this.toast.success('Shift closed', 'Z report generated and printed.');
+    } catch (printError) {
+      // The financial close is already committed. A printer failure must never
+      // reopen it or present the whole close as failed; history remains the
+      // durable source for reprinting.
+      this.toast.warning(
+        'Shift closed, Z report not printed',
+        this.errorMessage(printError),
+        { label: 'Retry print', run: () => { void this.reprintZReport(report); } },
+      );
+      this.clientLogger.logError('pos-client', printError, {
+        code: 'PRINT_FAILED',
+        severity: 'warn',
+        context: {
+          receiptKind: 'z-report',
+          zReportId: report.zReportId,
+          printerName: this.hardware.printerName(),
+        },
+      });
+    }
+  }
+
+  /** paid_out, safe_drop, and no_sale_drawer_open remove cash or open the
+   *  drawer without a sale — same accountability bar as void/refund, so they
+   *  need a manager PIN. paid_in and float_adjust (topping the till up) don't. */
+  cashMovementNeedsOverride(kind: PosCashMovementKind = this.cashMovementKind): boolean {
+    return kind === 'paid_out' || kind === 'safe_drop' || kind === 'no_sale_drawer_open';
+  }
+
+  private static readonly CASH_MOVEMENT_LABELS: Record<PosCashMovementKind, string> = {
+    paid_in: 'Paid In',
+    paid_out: 'Paid Out',
+    safe_drop: 'Safe Drop',
+    float_adjust: 'Float Adjust',
+    no_sale_drawer_open: 'No-Sale Drawer Open',
+  };
+
+  cashMovementKindLabel(kind: PosCashMovementKind): string {
+    return PosComponent.CASH_MOVEMENT_LABELS[kind] || kind;
+  }
+
+  async openCashMovementDialog(): Promise<void> {
+    const summary = this.shiftSummary();
+    if (!summary) return;
+    this.cashMovementKind = 'paid_out';
+    this.cashMovementAmount = '';
+    this.cashMovementReason = '';
+    this.cashMovementManagerPin = '';
+    this.dialog.set('cash-movement');
+    try {
+      this.cashMovements.set(await this.pos.listCashMovements(summary.shiftId));
+    } catch (error) {
+      this.toast.warning("Couldn't load cash movements", this.errorMessage(error));
+    }
+  }
+
+  async recordCashMovement(): Promise<void> {
+    const summary = this.shiftSummary();
+    if (!summary || !this.cashMovementReason.trim()) return;
+    const needsOverride = this.cashMovementNeedsOverride();
+    if (needsOverride && this.managerPinConfigured() && !this.cashMovementManagerPin) return;
+    const amountCents = this.cashMovementKind === 'no_sale_drawer_open'
+      ? 0
+      : this.moneyInputToCents(this.cashMovementAmount);
+    if (amountCents === null || (this.cashMovementKind !== 'no_sale_drawer_open' && amountCents <= 0)) return;
+
+    this.busy.set(true);
+    try {
+      let override: { overrideId: string; token: string } | null = null;
+      if (needsOverride) {
+        override = await this.pos.verifyManagerPin(this.cashMovementManagerPin, 'drawer-open');
+      }
+      await this.pos.recordCashMovement({
+        shiftId: summary.shiftId,
+        kind: this.cashMovementKind,
+        amountCents,
+        reason: this.cashMovementReason.trim(),
+        idempotencyKey: crypto.randomUUID(),
+        ...(override ? { managerOverrideId: override.overrideId, managerOverrideToken: override.token } : {}),
+      });
+      if (this.cashMovementKind === 'no_sale_drawer_open' && this.hardware.configured()) {
+        await this.hardware.openDrawer().catch(() => undefined);
+      }
+      this.cashMovements.set(await this.pos.listCashMovements(summary.shiftId));
+      this.shiftSummary.set(await this.pos.shiftSummary());
+      this.cashMovementAmount = '';
+      this.cashMovementReason = '';
+      this.cashMovementManagerPin = '';
+      this.toast.success('Cash movement recorded');
+    } catch (error) {
+      this.toast.error("Couldn't record cash movement", this.errorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  async openZHistoryDialog(): Promise<void> {
+    this.dialog.set('z-history');
+    this.loadingZHistory.set(true);
+    try {
+      this.zReportHistory.set(await this.pos.listZReports());
+    } catch (error) {
+      this.toast.warning("Couldn't load Z-report history", this.errorMessage(error));
+    } finally {
+      this.loadingZHistory.set(false);
+    }
+  }
+
+  /** The item-level daily sales report the office files for this closing. */
+  async downloadZReportExcel(report: PosZReport): Promise<void> {
+    if (this.exportingZReportId()) return;
+    this.exportingZReportId.set(report.zReportId);
+    try {
+      await this.zReportExcel.download(await this.pos.getZReportItems(report.zReportId));
+    } catch (error) {
+      this.toast.warning("Couldn't prepare the Excel report", this.errorMessage(error));
+    } finally {
+      this.exportingZReportId.set(null);
+    }
+  }
+
+  async reprintZReport(report: PosZReport): Promise<void> {
+    if (this.printingZReportId()) return;
+    this.printingZReportId.set(report.zReportId);
+    try {
+      await this.hardware.printZReport(report);
+      this.toast.success('Z-report reprinted');
+    } catch (error) {
+      this.toast.warning("Couldn't print Z-report", this.errorMessage(error));
+    } finally {
+      this.printingZReportId.set(null);
+    }
+  }
+
+  exportZHistoryCsv(): void {
+    const rows = this.zReportHistory();
+    if (!rows.length) return;
+    const header = [
+      'Z Number', 'Z Report ID', 'Created At', 'Branch', 'Register', 'Opening Float', 'Gross Sales', 'Cash Sales', 'Card Sales', 'Sadad Sales',
+      'Refunds', 'Voids', 'Net Sales', 'Cash In', 'Cash Out', 'Expected Cash', 'Physical Cash',
+      'Variance', 'Transactions', 'Items Sold', 'Items Returned', 'Net Items', 'Refund Count', 'Void Count',
+    ];
+    const csvRows = rows.map((r) => [
+      r.zNumber || '', r.zReportId, this.formatDateTime(r.createdAt), r.branchName || '', r.registerName || '',
+      this.formatMoney(r.openingFloatCents), this.formatMoney(r.grossSalesCents),
+      this.formatMoney(r.cashSalesCents), this.formatMoney(r.cardSalesCents), this.formatMoney(r.sadadSalesCents ?? 0),
+      this.formatMoney(r.refundTotalCents), this.formatMoney(r.voidTotalCents),
+      this.formatMoney(r.netSalesCents), this.formatMoney(r.cashInCents), this.formatMoney(r.cashOutCents),
+      this.formatMoney(r.expectedCashCents), this.formatMoney(r.physicalCashCents), this.formatMoney(r.varianceCents),
+      String(r.transactionCount), String(r.soldItemQuantity), String(r.returnedItemQuantity), String(r.netItemQuantity), String(r.refundCount), String(r.voidCount),
+    ]);
+    const csv = [header, ...csvRows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\r\n');
+    // BOM-prefixed for Excel compatibility with non-ASCII (Arabic) content.
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `z-reports-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async resolveSyncConflict(conflict: PosSyncConflict): Promise<void> {
+    if ((this.managerPinConfigured() && !this.managerPin) || !this.conflictResolution.trim()) return;
+    this.busy.set(true);
+    try {
+      const override = await this.pos.verifyManagerPin(this.managerPin, 'sync-conflict-override');
+      await this.pos.resolveConflict(conflict.conflictId, this.conflictResolution.trim(), override);
+      this.syncConflicts.set(await this.pos.listConflicts());
+      this.managerPin = '';
+      this.conflictResolution = '';
+      this.toast.success('Conflict resolved');
+    } catch (error) {
+      this.toast.error("Couldn't resolve conflict", this.errorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  exitPos(): void {
+    void this.router.navigate(['/dashboard']);
+  }
+
+  formatMoney(cents: number): string {
+    return new Intl.NumberFormat('en-QA', { style: 'currency', currency: 'QAR' }).format(cents / 100);
+  }
+
+  /** CSV cells write the raw ISO timestamp otherwise (e.g.
+   *  "2026-07-19T21:51:35.973Z") — normalizes to a readable local format. */
+  formatDateTime(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return iso;
+    const datePart = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const timePart = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    return `${datePart} ${timePart}`;
+  }
+
+  formatAge(ms: number): string {
+    if (ms <= 0) return '';
+    const minutes = Math.floor(ms / 60000);
+    if (minutes < 1) return '<1m';
+    if (minutes < 60) return `${minutes}m`;
+    return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  }
+
+  formatSyncTime(iso: string | null): string {
+    if (!iso) return 'never';
+    const diffMs = Date.now() - new Date(iso).getTime();
+    if (diffMs < 60000) return 'just now';
+    return `${this.formatAge(diffMs)} ago`;
+  }
+
+  productImage(item: PosCatalogItem): string {
+    return this.pos.mediaUrl(item.imageUrl);
+  }
+
+  productGroupImage(group: ProductGroup): string {
+    return group.imageUrl ? this.pos.mediaUrl(group.imageUrl) : '';
+  }
+
+  groupPriceLabel(group: ProductGroup): string {
+    if (group.priceMinCents === group.priceMaxCents) return this.formatMoney(group.priceMinCents);
+    return `${this.formatMoney(group.priceMinCents)} - ${this.formatMoney(group.priceMaxCents)}`;
+  }
+
+  sizeLabel(item: PosCatalogItem): string {
+    if (item.size) return item.size;
+    // Never fall back to `variant` here. The server builds it as
+    // "color / size / material" joined, so a variant with no size collapses to
+    // just its colour — which printed a tile reading "Black" in the size grid,
+    // in a row with 5, 5.5 and 6. A sizeless variant is one size, so say that.
+    return 'One size';
+  }
+
+  colorCssFor(name: string): string {
+    const normalized = this.normalizeColorName(name);
+    const refColor = this.refColors().find((color) => this.normalizeColorName(color.name_en) === normalized);
+    if (refColor?.hex) return refColor.hex;
+    const fallback = this.fallbackVariantColors[normalized]
+      || Object.entries(this.fallbackVariantColors).find(([key]) => normalized.includes(key))?.[1];
+    if (fallback) return fallback;
+    return this.colorFromName(normalized || 'default');
+  }
+
+  colorSwatchImageFor(name: string): string | null {
+    const normalized = this.normalizeColorName(name);
+    return this.refColors().find((color) => this.normalizeColorName(color.name_en) === normalized)?.swatch_image_url ?? null;
+  }
+
+  chooseVariantColor(colorKey: string): void {
+    this.selectedVariantColorKey.set(colorKey);
+    const colorGroup = this.selectedVariantColorGroups().find((group) => group.key === colorKey);
+    this.selectedVariantId.set(this.firstAvailableVariant(colorGroup)?.variantId || null);
+    this.resetSelectedVariantQuantity();
+  }
+
+  chooseVariantSize(item: PosCatalogItem): void {
+    if (item.stock <= 0) return;
+    this.selectedVariantId.set(item.variantId);
+    this.resetSelectedVariantQuantity();
+  }
+
+  addSelectedVariant(): void {
+    const variant = this.selectedVariant();
+    const quantity = Math.min(this.selectedVariantQuantity(), this.selectedVariantMaxQuantity());
+    if (!variant || quantity <= 0) return;
+    const existing = this.cart().find((line) => line.item.variantId === variant.variantId);
+    this.cart.update((lines) => existing
+      ? lines.map((line) => line.item.variantId === variant.variantId ? { ...line, quantity: line.quantity + quantity } : line)
+      : [...lines, { item: variant, quantity }]);
+    this.pendingIdempotencyKey = null;
+    this.closeVariantPicker();
+  }
+
+  changeSelectedVariantQuantity(delta: number): void {
+    const max = this.selectedVariantMaxQuantity();
+    this.selectedVariantQuantity.update((quantity) => Math.min(max, Math.max(1, quantity + delta)));
+  }
+
+  stockGaugePercent(item: PosCatalogItem, items: PosCatalogItem[]): number {
+    if (item.stock <= 0) return 0;
+    const max = Math.max(1, ...items.map((variant) => variant.stock));
+    return Math.max(8, Math.round((item.stock / max) * 100));
+  }
+
+  stockGaugeLabel(item: PosCatalogItem): string {
+    // Stock per location: the number is this branch's, so say so.
+    if (item.availability !== undefined || item.total !== undefined) {
+      if (item.stock <= 0) return (item.availability?.length ?? 0) > 0 ? 'None here' : 'Sold out';
+      return `${item.stock} here`;
+    }
+    if (item.stock <= 0) return 'Sold out';
+    if (item.stock <= 3) return 'Low';
+    return 'In stock';
+  }
+
+  openVariantPicker(group: ProductGroup): void {
+    if (!group.items.length) return;
+    this.selectedProductId.set(group.id);
+    const colorGroups = this.buildVariantColorGroups(group.items);
+    const initialColor = colorGroups.find((color) => color.stock > 0) || colorGroups[0] || null;
+    this.selectedVariantColorKey.set(initialColor?.key || null);
+    this.selectedVariantId.set(this.firstAvailableVariant(initialColor)?.variantId || null);
+    this.resetSelectedVariantQuantity();
+  }
+
+  closeVariantPicker(): void {
+    this.selectedProductId.set(null);
+    this.selectedVariantColorKey.set(null);
+    this.selectedVariantId.set(null);
+    this.selectedVariantQuantity.set(1);
+    this.variantColorQuery = '';
+  }
+
+  chooseVariant(item: PosCatalogItem): void {
+    const existing = this.cart().find((line) => line.item.variantId === item.variantId);
+    this.addToCart(item);
+    if (!existing || existing.quantity < item.stock) this.closeVariantPicker();
+  }
+
+  trackVariant(_index: number, value: PosCatalogItem | CartLine): string {
+    return 'item' in value ? value.item.variantId : value.variantId;
+  }
+
+  private buildVariantColorGroups(items: PosCatalogItem[]): VariantColorGroup[] {
+    const groups = new Map<string, VariantColorGroup>();
+    for (const item of items) {
+      const label = item.color || 'Default';
+      const key = label.trim().toLowerCase() || 'default';
+      let group = groups.get(key);
+      if (!group) {
+        group = { key, label, stock: 0, items: [] };
+        groups.set(key, group);
+      }
+      group.stock += item.stock;
+      group.items.push(item);
+    }
+    return Array.from(groups.values());
+  }
+
+  private firstAvailableVariant(group: VariantColorGroup | null | undefined): PosCatalogItem | null {
+    if (!group) return null;
+    return group.items.find((item) => item.stock > 0) || group.items[0] || null;
+  }
+
+  private resetSelectedVariantQuantity(): void {
+    this.selectedVariantQuantity.set(this.selectedVariantMaxQuantity() > 0 ? 1 : 0);
+  }
+
+  private async enterSelling(): Promise<void> {
+    this.phase.set('selling');
+    await this.loadProducts();
+    if (this.online()) this.connectEvents();
+    await Promise.all([this.refreshQueueState(), this.loadParkedCarts(), this.loadReferenceColors(), this.loadProductFilters()]);
+    await this.syncPendingSales();
+    void this.prepareCardTerminal();
+  }
+
+  private async loadProductFilters(): Promise<void> {
+    if (!this.online()) return;
+    try {
+      const filters = await this.pos.listProductFilters();
+      this.availableSizes.set(filters.sizes);
+      this.availableColors.set(filters.colors);
+    } catch {
+      this.availableSizes.set([]);
+      this.availableColors.set([]);
+    }
+  }
+
+  private async loadReferenceColors(): Promise<void> {
+    if (!this.online()) return;
+    try {
+      this.refColors.set(await this.refApi.getColors());
+    } catch {
+      this.refColors.set([]);
+    }
+  }
+
+  private normalizeColorName(name: string): string {
+    return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  private colorFromName(name: string): string {
+    let hash = 0;
+    for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) % 360;
+    return `hsl(${hash} 42% 58%)`;
+  }
+
+  private readonly fallbackVariantColors: Record<string, string> = {
+    beige: '#d8c1a0',
+    black: '#171717',
+    blue: '#2f67b2',
+    brown: '#7b4a2d',
+    burgundy: '#7f1d3a',
+    camel: '#bf8f5c',
+    cream: '#f3ead7',
+    default: '#c9a84c',
+    gold: '#c9a84c',
+    gray: '#9ca3af',
+    green: '#2f7d57',
+    grey: '#9ca3af',
+    ivory: '#f7f0dc',
+    lavender: '#b6a1dc',
+    maroon: '#7f1d1d',
+    mint: '#9bd8c1',
+    navy: '#1f3763',
+    nude: '#e2bda6',
+    olive: '#73733f',
+    orange: '#d97706',
+    pink: '#e89ab5',
+    purple: '#7c4ab0',
+    red: '#c83f3f',
+    rose: '#d96d88',
+    silver: '#c7cbd1',
+    tan: '#c9a77d',
+    teal: '#25817e',
+    turquoise: '#29a9a6',
+    white: '#ffffff',
+    yellow: '#e4bd35',
+  };
+
+  private async loadProducts(query = '', page = this.productPage()): Promise<void> {
+    const sequence = ++this.searchSequence;
+    if (!this.online()) {
+      const cached = await this.local.getCatalog();
+      if (!cached) return;
+      const normalized = query.trim().toLowerCase();
+      this.products.set(normalized
+        ? cached.products.filter((item) => [item.name, item.sku, item.barcode, item.variant].some((value) => value.toLowerCase().includes(normalized)))
+        : cached.products);
+      this.catalogCachedAt.set(cached.cachedAt);
+      return;
+    }
+    try {
+      const result = await this.pos.searchProducts(query, {
+        page,
+        size: this.filterSize(),
+        color: this.filterColor(),
+      });
+      if (sequence === this.searchSequence) {
+        this.products.set(result.products);
+        this.productPage.set(result.page);
+        this.productTotal.set(result.total);
+        if (!query && page === 0 && !this.filterSize() && !this.filterColor()) {
+          const cachedAt = new Date().toISOString();
+          this.catalogCachedAt.set(cachedAt);
+          await this.local.setCatalog({ products: result.products, cachedAt });
+        }
+      }
+    } catch (error) {
+      const cached = await this.local.getCatalog();
+      if (sequence === this.searchSequence && cached) {
+        this.products.set(cached.products);
+        this.catalogCachedAt.set(cached.cachedAt);
+      } else if (sequence === this.searchSequence) {
+        this.toast.warning("Couldn't load products", this.errorMessage(error));
+      }
+    }
+  }
+
+  onProductPageChange(page: number): void {
+    void this.loadProducts(this.searchQuery, page);
+  }
+
+  setSizeFilter(size: string): void {
+    this.filterSize.set(size || null);
+    void this.loadProducts(this.searchQuery, 0);
+  }
+
+  setColorFilter(color: string): void {
+    this.filterColor.set(color || null);
+    void this.loadProducts(this.searchQuery, 0);
+  }
+
+  private async ensureReceiptBlock(): Promise<void> {
+    const cached = await this.local.getReceiptBlock();
+    const registerId = this.register()?.registerId;
+    if (cached && registerId && cached.registerId === registerId && cached.next <= cached.end) {
+      this.receiptBlock.set(cached);
+      return;
+    }
+    if (cached) await this.local.clearReceiptBlock();
+    if (!this.online()) throw new Error('Offline checkout is blocked because this register has no reserved receipt numbers.');
+    const allocated = await this.pos.allocateReceiptBlock();
+    await this.local.setReceiptBlock(allocated);
+    this.receiptBlock.set(allocated);
+  }
+
+  private connectEvents(): void {
+    this.eventSource?.close();
+    this.eventSource = new EventSource(this.pos.eventUrl, { withCredentials: true });
+    this.eventSource.addEventListener('stock.updated', (event) => {
+      try {
+        const payload = JSON.parse((event as MessageEvent<string>).data) as {
+          variantId?: string; stock?: number; locations?: Record<string, number>; held?: number;
+        };
+        if (payload.variantId && Number.isSafeInteger(payload.stock)) {
+          this.applyStockUpdates([{
+            variantId: payload.variantId,
+            stock: Number(payload.stock),
+            locations: payload.locations,
+            held: payload.held,
+          }]);
+        }
+      } catch {
+        // A malformed event is ignored; the next catalog refresh remains authoritative.
+      }
+    });
+    this.eventSource.addEventListener('catalog.changed', () => {
+      // Names, prices, images, variants and POS visibility can all affect many
+      // cached rows. Reload the active query and refresh the offline catalogue
+      // instead of trying to patch an incomplete event payload.
+      void this.loadProducts(this.searchQuery, this.productPage());
+      if (this.searchQuery || this.productPage() !== 0 || this.filterSize() || this.filterColor()) {
+        void this.refreshOfflineCatalog();
+      }
+    });
+    // The server emits this when our reconnect position predates the retained
+    // replay buffer; the only safe recovery is a full REST catalog refresh.
+    this.eventSource.addEventListener('catalog.refresh-required', () => {
+      void this.loadProducts();
+    });
+  }
+
+  private async refreshOfflineCatalog(): Promise<void> {
+    if (!this.online()) return;
+    try {
+      const result = await this.pos.searchProducts('', { page: 0 });
+      const cachedAt = new Date().toISOString();
+      await this.local.setCatalog({ products: result.products, cachedAt });
+      this.catalogCachedAt.set(cachedAt);
+    } catch {
+      // The visible load reports actionable errors; cache refresh is best effort.
+    }
+  }
+
+  /** Location id -> name, learned from every availability list the server sends. */
+  private readonly locationNames = new Map<string, string>();
+
+  private rememberLocationNames(products: PosCatalogItem[]): void {
+    for (const product of products) {
+      for (const entry of product.availability ?? []) this.locationNames.set(entry.locationId, entry.name);
+    }
+  }
+
+  /**
+   * Stock per location: turn an event's per-location balances into this
+   * till's number plus "where else", keeping the names the server sent.
+   */
+  private branchView(update: StockUpdate): Partial<PosCatalogItem> {
+    const myLocation = this.register()?.locationId;
+    if (!update.locations || !myLocation) return { stock: update.stock };
+    const here = update.locations[myLocation] ?? 0;
+    return {
+      stock: Math.min(here, update.stock),
+      total: update.stock,
+      heldOnline: update.held ?? 0,
+      availability: Object.entries(update.locations)
+        .filter(([id, qty]) => id !== myLocation && qty > 0)
+        .map(([id, qty]) => ({ locationId: id, name: this.locationNames.get(id) ?? 'Other location', quantity: qty }))
+        .sort((a, b) => b.quantity - a.quantity),
+    };
+  }
+
+  /** "Store 2: 1 · Warehouse: 3" for a size this branch does not have. */
+  elsewhereLabel(item: PosCatalogItem): string {
+    return (item.availability ?? []).map((entry) => `${entry.name}: ${entry.quantity}`).join(' · ');
+  }
+
+  groupAvailableElsewhere(group: { items: PosCatalogItem[] }): boolean {
+    return group.items.some((item) => (item.availability?.length ?? 0) > 0);
+  }
+
+  private applyStockUpdates(updates: StockUpdate[]): void {
+    // Sale/refund results already carry this till's number (`stock`); events
+    // carry per-location balances instead and go through branchView.
+    const views = new Map(updates.map((update) => [update.variantId, update.locations ? this.branchView(update) : { stock: update.stock }]));
+    const byVariant = new Map([...views].map(([id, view]) => [id, view.stock ?? 0]));
+    this.products.update((products) => products.map((product) => views.has(product.variantId)
+      ? { ...product, ...views.get(product.variantId) }
+      : product));
+    this.cart.update((lines) => lines.flatMap((line) => {
+      const stock = byVariant.get(line.item.variantId);
+      if (stock === undefined) return [line];
+      if (stock <= 0) return [];
+      return [{ ...line, item: { ...line.item, stock }, quantity: Math.min(line.quantity, stock) }];
+    }));
+    void this.persistCachedStock(byVariant);
+  }
+
+  private async persistCachedStock(updates: Map<string, number>): Promise<void> {
+    const cached = await this.local.getCatalog();
+    if (!cached) return;
+    await this.local.setCatalog({
+      ...cached,
+      products: cached.products.map((product) => updates.has(product.variantId)
+        ? { ...product, stock: updates.get(product.variantId) ?? product.stock }
+        : product),
+    });
+  }
+
+  private localReceiptData(payload: {
+    idempotencyKey: string;
+    receiptNumber: number;
+    clientCreatedAt: string;
+    payment: { method: PaymentMethod; amountTenderedCents: number; changeGivenCents: number; terminalReference?: string };
+  }, receiptNumber: number): unknown {
+    const register = this.register();
+    return {
+      kind: 'sale',
+      receiptNumber: String(receiptNumber).padStart(8, '0'),
+      transactionId: payload.idempotencyKey,
+      createdAt: payload.clientCreatedAt,
+      cashierName: this.auth.user()?.name || '',
+      registerId: register?.registerId || '',
+      registerName: register?.displayName || '',
+      paymentMethod: payload.payment.method,
+      terminalReference: payload.payment.terminalReference,
+      items: this.cart().map((line) => ({
+        name: line.item.name,
+        nameAr: line.item.nameAr || null,
+        variant: line.item.variant,
+        color: line.item.color || null,
+        colorAr: line.item.colorAr || null,
+        size: line.item.size || null,
+        sku: line.item.sku,
+        quantity: line.quantity,
+        unitPriceCents: line.item.priceCents,
+        lineTotalCents: line.item.priceCents * line.quantity,
+      })),
+      subtotalCents: this.totalCents(),
+      taxCents: 0,
+      totalCents: this.totalCents(),
+      amountTenderedCents: payload.payment.amountTenderedCents,
+      changeGivenCents: payload.payment.changeGivenCents,
+      lookupCode: `elite-pos:${payload.idempotencyKey}`,
+    };
+  }
+
+  private async queueOfflineSale(
+    payload: Parameters<PosService['createSale']>[0],
+    receiptData: unknown,
+  ): Promise<PosSaleResult> {
+    const queued: PosQueuedSale = {
+      registerId: this.register()?.registerId || '',
+      idempotencyKey: payload.idempotencyKey,
+      receiptNumber: payload.receiptNumber,
+      clientCreatedAt: payload.clientCreatedAt,
+      shiftId: payload.shiftId,
+      payload,
+      receiptData,
+      status: 'pending',
+      attempts: 0,
+      lastError: '',
+      queuedAt: new Date().toISOString(),
+    };
+    await this.local.queueOfflineSale(queued);
+    await this.local.appendJournal({ idempotencyKey: queued.idempotencyKey, event: 'created', at: new Date().toISOString() });
+    const stockUpdates = this.cart().map((line) => ({
+      variantId: line.item.variantId,
+      stock: Math.max(0, line.item.stock - line.quantity),
+    }));
+    await this.refreshQueueState();
+    return {
+      transactionId: payload.idempotencyKey,
+      orderId: '',
+      orderNumber: 'PENDING SYNC',
+      receiptNumber: String(payload.receiptNumber).padStart(8, '0'),
+      status: 'pending-sync',
+      paymentMethod: payload.payment.method,
+      terminalReference: payload.payment.terminalReference ?? null,
+      subtotalCents: this.totalCents(),
+      taxCents: 0,
+      totalCents: this.totalCents(),
+      amountTenderedCents: payload.payment.amountTenderedCents,
+      changeGivenCents: payload.payment.changeGivenCents,
+      stockUpdates,
+      receipt: { qrCodeValue: `elite-pos:${payload.idempotencyKey}`, receiptData },
+    };
+  }
+
+  private async refreshQueueState(): Promise<void> {
+    const queued = await this.local.listQueuedSales(this.shiftId() || undefined);
+    this.queuedSales.set(queued);
+    this.pendingSales.set(queued.filter((sale) => sale.status === 'pending').length);
+    this.rejectedSales.set(queued.filter((sale) => sale.status === 'rejected').length);
+    // Every shipped log entry carries which register, which shift, and how many
+    // sales were still unsynced at the moment it happened — the three facts
+    // that turn a stack trace into an explanation.
+    this.clientLogger.setContext({
+      registerId: this.register()?.registerId ?? null,
+      shiftId: this.shiftId(),
+      pendingSales: this.pendingSales(),
+    });
+  }
+
+  private async reportSyncState(): Promise<void> {
+    const shiftId = this.shiftId();
+    if (!shiftId || !this.online()) return;
+    await this.pos.reportSyncState(shiftId, this.pendingSales(), this.rejectedSales());
+  }
+
+  private scheduleSyncRetry(): void {
+    if (this.syncTimer) clearTimeout(this.syncTimer);
+    const delay = Math.min(60000, 1000 * 2 ** this.syncAttempt);
+    this.syncAttempt += 1;
+    this.syncTimer = setTimeout(() => void this.syncPendingSales(), delay);
+  }
+
+  private isNetworkError(error: unknown): boolean {
+    if (!navigator.onLine) return true;
+    if (typeof error !== 'object' || error === null) return false;
+    return Number((error as { status?: number }).status) === 0;
+  }
+
+  private tenderedCents(): number {
+    return this.moneyInputToCents(this.tendered) ?? 0;
+  }
+
+  private moneyInputToCents(value: string): number | null {
+    if (!/^\d+(?:\.\d{1,2})?$/.test(value.trim())) return null;
+    const amount = Number(value);
+    return Number.isFinite(amount) ? Math.round(amount * 100) : null;
+  }
+
+  /**
+   * Message shown to the cashier, with the server's correlation id appended as
+   * a short reference code.
+   *
+   * The reference is the point: a cashier reads six characters over the phone
+   * and support resolves it straight to the request, the register, the shift
+   * and the stack trace (`grep '"requestId":"…"'`, or the Diagnostics page).
+   * Before this, "it says something went wrong" was the entire bug report.
+   */
+  // ── Integrated QNB card terminal (docs/39) ─────────────────────────────
+
+  cardIntegrated(): boolean {
+    return this.cardMode() === 'integrated';
+  }
+
+  /** Card tender charges the terminal (not the typed-reference fallback). */
+  cardTerminalActive(): boolean {
+    return this.cardIntegrated() && this.paymentMethod() === 'card' && !this.cardManualEntry();
+  }
+
+  /** The terminal may be holding the customer's card: the sheet stays open. */
+  cardBusy(): boolean {
+    return this.cardPhase() === 'waiting' || this.cardPhase() === 'checking';
+  }
+
+  closePaymentSheet(): void {
+    if (this.cardBusy() || this.cardPhase() === 'unknown') return;
+    this.paymentOpen.set(false);
+  }
+
+  useManualCard(): void {
+    this.cardManualEntry.set(true);
+    this.cardPhase.set('ready');
+    this.cardDecline.set(null);
+  }
+
+  useCardTerminal(): void {
+    this.cardManualEntry.set(false);
+    this.terminalReference = '';
+  }
+
+  /** "VISA •••• 0293" for screens; the slip prints the terminal's own text. */
+  cardLabel(card: { issuer?: string | null; maskedPan?: string | null } | null | undefined): string {
+    if (!card) return '';
+    const last4 = card.maskedPan ? card.maskedPan.slice(-4) : '';
+    return [card.issuer || 'Card', last4 ? `•••• ${last4}` : ''].filter(Boolean).join(' ');
+  }
+
+  private async prepareCardTerminal(): Promise<void> {
+    if (!this.register()) {
+      const cached = await this.local.getCardMode().catch(() => null);
+      if (cached) this.cardMode.set(cached);
+    }
+    if (!this.cardIntegrated()) return;
+    await this.cardTerminal.loadKey();
+    await this.cardTerminal.checkHealth();
+    await this.recoverCardAttempts();
+    await this.refreshUnresolvedCards();
+  }
+
+  /**
+   * Charges the sale total on the terminal. The attempt is saved on this
+   * till (with the full sale) and in Elite before the terminal moves, so an
+   * approval survives a reload, a crash or the API being down.
+   */
+  private async chargeCardForSale(payload: PosSaleInput, receiptNumber: number): Promise<PosCardAttemptRef | null> {
+    const registerId = this.register()?.registerId ?? (await this.local.getRegister())?.registerId;
+    if (!registerId) throw new Error('This till is not registered.');
+    const amountCents = payload.payment.cardAmountCents;
+    const utn = this.cardTerminal.newUtn(registerId);
+    await this.local.saveCardAttempt({
+      utn, kind: 'sale', amountCents, shiftId: payload.shiftId, createdAt: new Date().toISOString(), state: 'sent',
+      sale: { payload, receiptNumber },
+    });
+    if (this.online()) {
+      try {
+        await this.pos.recordCardAttempt({ utn, kind: 'sale', amountCents, shiftId: payload.shiftId });
+      } catch (error) {
+        if (!this.isNetworkError(error)) {
+          await this.local.removeCardAttempt(utn);
+          throw error;
+        }
+      }
+    }
+    this.cardDecline.set(null);
+    this.cardPendingUtn = utn;
+    this.cardPhase.set('waiting');
+    let result = await this.cardTerminal.run({ type: 'sale', utn, amountCents });
+    if (result.outcome === 'unknown') {
+      this.cardPhase.set('checking');
+      result = await this.settleUnknownCard(utn, amountCents, result);
+    }
+    const status = await this.finishCardAttempt(utn, result);
+    if (status === 'approved') {
+      this.cardPendingUtn = null;
+      return { utn, amountCents, shiftId: payload.shiftId, result: toServerCardResult(result, 'approved') };
+    }
+    if (status === 'unknown') {
+      this.cardPhase.set('unknown');
+      this.cardDecline.set('The card machine did not confirm this payment. Look at its screen, then press "Check again". Do not charge the card again.');
+      return null;
+    }
+    this.cardPendingUtn = null;
+    this.cardPhase.set('declined');
+    this.cardDecline.set(result.message || 'The payment did not go through.');
+    return null;
+  }
+
+  /**
+   * The bridge lost the answer. Ask the terminal by UTN. An approval whose
+   * details were lost (no auth code) is voided on the terminal and the
+   * cashier charges again, rather than recording a sale nobody can refund.
+   */
+  private async settleUnknownCard(utn: string, amountCents: number, original: PosCardResult): Promise<PosCardResult> {
+    const status = await this.cardTerminal.resolve(utn);
+    if (status.status === 'approved') {
+      if (status.result?.authCode) return status.result;
+      const registerId = this.register()?.registerId ?? '';
+      const voided = await this.cardTerminal.run({ type: 'void', utn: this.cardTerminal.newUtn(registerId), originalUtn: utn, amountCents });
+      return voided.outcome === 'approved'
+        ? { outcome: 'declined', code: 'AUTO_VOIDED', message: 'The card machine lost the payment details, so the charge was reversed. Charge the card again.' }
+        : original;
+    }
+    if (status.status === 'declined' || status.status === 'reversed' || status.status === 'not_found') {
+      return { outcome: 'declined', code: status.status.toUpperCase(), message: 'The payment did not go through. Nothing was charged.' };
+    }
+    return original;
+  }
+
+  /** Records the outcome locally and in Elite. Returns the settled status. */
+  private async finishCardAttempt(utn: string, result: PosCardResult): Promise<'approved' | 'declined' | 'cancelled' | 'unknown' | 'reversed'> {
+    const status = result.outcome === 'approved' ? 'approved'
+      : result.outcome === 'unknown' ? 'unknown'
+        : result.outcome === 'cancelled' ? 'cancelled'
+          : result.code === 'AUTO_VOIDED' ? 'reversed'
+            : 'declined';
+    const attempts = await this.local.listCardAttempts();
+    const local = attempts.find((item) => item.utn === utn);
+    if (status === 'approved' || status === 'unknown') {
+      if (local) await this.local.saveCardAttempt({ ...local, state: 'done', result });
+    } else {
+      await this.local.removeCardAttempt(utn);
+    }
+    if (this.online()) {
+      try {
+        await this.pos.recordCardResult(utn, toServerCardResult(result, status));
+      } catch (error) {
+        // A sale carries the result itself; an unreachable API is fine here.
+        if (!this.isNetworkError(error)) this.clientLogger.logError('pos-client', error, { code: 'CARD_RESULT_NOT_RECORDED', severity: 'warn', context: { utn, status } });
+      }
+    }
+    return status;
+  }
+
+  /** "Check again" on a payment the terminal did not confirm. */
+  async recheckCardPayment(): Promise<void> {
+    const utn = this.cardPendingUtn;
+    if (!utn) return;
+    this.cardPhase.set('checking');
+    const local = (await this.local.listCardAttempts()).find((item) => item.utn === utn);
+    const result = await this.settleUnknownCard(utn, local?.amountCents ?? this.totalCents(), {
+      outcome: 'unknown', code: 'STILL_UNKNOWN', message: 'Still not confirmed.',
+    });
+    const status = await this.finishCardAttempt(utn, result);
+    if (status === 'approved' && local?.sale) {
+      // Approved after all: finish this very sale with the approval.
+      this.cardPhase.set('ready');
+      this.cardPendingUtn = null;
+      await this.completeRecoveredCardSale(local.sale.payload, local.sale.receiptNumber, {
+        utn, amountCents: local.amountCents, shiftId: local.shiftId, result: toServerCardResult(result, 'approved'),
+      }, result.receiptText ?? null, true);
+      return;
+    }
+    if (status === 'unknown') {
+      this.cardPhase.set('unknown');
+      return;
+    }
+    this.cardPendingUtn = null;
+    this.cardPhase.set('declined');
+    this.cardDecline.set(result.message || 'The payment did not go through.');
+  }
+
+  /**
+   * Finishes a sale whose card was approved but whose sale was never written
+   * (reload, crash, API down). Same idempotency key, so a sale that was in
+   * fact written is returned instead of duplicated.
+   */
+  private async completeRecoveredCardSale(
+    payload: PosSaleInput,
+    receiptNumber: number,
+    cardAttempt: PosCardAttemptRef,
+    slip: string | null,
+    currentCart: boolean,
+  ): Promise<boolean> {
+    const withCard: PosSaleInput = { ...payload, payment: { ...payload.payment, cardAttempt, terminalReference: undefined } };
+    try {
+      const result = await this.pos.createSale(withCard);
+      await this.local.commitReceipt(receiptNumber).catch(() => undefined);
+      this.receiptBlock.set(await this.local.getReceiptBlock());
+      await this.local.removeCardAttempt(cardAttempt.utn);
+      this.applyStockUpdates(result.stockUpdates);
+      if (currentCart) {
+        this.cart.set([]);
+        this.selectedLineId.set(null);
+        this.selectedCustomer.set(null);
+        this.pendingIdempotencyKey = null;
+        this.paymentOpen.set(false);
+        this.lastSale.set(result);
+      } else {
+        this.toast.success('Card sale completed', `An approved card payment from earlier was saved as receipt #${result.receiptNumber}.`);
+      }
+      try {
+        await this.hardware.printReceipt(result.receipt.receiptData, false);
+      } catch (printError) {
+        this.toast.warning('Sale saved, receipt not printed', this.errorMessage(printError));
+      }
+      if (slip) void this.printCardSlip(slip);
+      return true;
+    } catch (error) {
+      if (!this.isNetworkError(error)) {
+        this.toast.push({ kind: 'error', title: 'Approved card payment not saved', sub: this.errorMessage(error), duration: null });
+      }
+      return false;
+    }
+  }
+
+  /** On start: settle anything this till charged but never saw recorded. */
+  private async recoverCardAttempts(): Promise<void> {
+    const attempts = await this.local.listCardAttempts().catch(() => []);
+    for (const attempt of attempts) {
+      if (attempt.kind !== 'sale' || !attempt.sale) continue;
+      let result = attempt.result;
+      if (attempt.state === 'sent' || result?.outcome === 'unknown') {
+        const status = await this.cardTerminal.resolve(attempt.utn, 2);
+        if (status.status === 'approved' && status.result?.authCode) result = status.result;
+        else if (status.status === 'declined' || status.status === 'reversed' || status.status === 'not_found') {
+          await this.finishCardAttempt(attempt.utn, { outcome: 'declined', code: status.status.toUpperCase(), message: 'Not charged.' });
+          continue;
+        } else continue;
+      }
+      if (result?.outcome !== 'approved' || !this.online()) continue;
+      await this.completeRecoveredCardSale(attempt.sale.payload, attempt.sale.receiptNumber, {
+        utn: attempt.utn, amountCents: attempt.amountCents, shiftId: attempt.shiftId, result: toServerCardResult(result, 'approved'),
+      }, result.receiptText ?? null, false);
+    }
+  }
+
+  async refreshUnresolvedCards(): Promise<void> {
+    if (!this.cardIntegrated() || !this.online()) return;
+    try {
+      this.unresolvedCards.set(await this.pos.unresolvedCardAttempts());
+    } catch {
+      // Shown again on the next refresh.
+    }
+  }
+
+  async openCardCheck(): Promise<void> {
+    this.cardResolveNote = '';
+    this.cardResolvePin = '';
+    this.dialog.set('card-check');
+    await this.refreshUnresolvedCards();
+  }
+
+  /** Asks the terminal about one listed payment and records the answer. */
+  async checkCardAttempt(attempt: PosCardAttempt): Promise<void> {
+    this.cardAdminBusy.set(true);
+    try {
+      const local = (await this.local.listCardAttempts()).find((item) => item.utn === attempt.utn);
+      if (attempt.status === 'approved' && attempt.kind === 'sale' && local?.sale && local.result?.outcome === 'approved') {
+        await this.completeRecoveredCardSale(local.sale.payload, local.sale.receiptNumber, {
+          utn: attempt.utn, amountCents: attempt.amountCents, shiftId: local.shiftId, result: toServerCardResult(local.result, 'approved'),
+        }, local.result.receiptText ?? null, false);
+      } else if (attempt.status === 'approved' && attempt.kind === 'sale') {
+        // Charged, but this browser no longer has the cart: reverse it on the
+        // terminal so the customer is not charged for a sale with no receipt.
+        const registerId = this.register()?.registerId ?? '';
+        const voided = await this.cardTerminal.run({ type: 'void', utn: this.cardTerminal.newUtn(registerId), originalUtn: attempt.utn, amountCents: attempt.amountCents });
+        if (voided.outcome === 'approved') {
+          await this.pos.recordCardResult(attempt.utn, toServerCardResult({ ...voided, code: 'AUTO_VOIDED' }, 'reversed')).catch(() => undefined);
+          await this.local.removeCardAttempt(attempt.utn);
+          this.toast.success('Charge reversed', 'The card payment had no sale, so it was voided on the card machine.');
+          if (voided.receiptText) void this.printCardSlip(voided.receiptText);
+        } else {
+          this.toast.warning("Couldn't reverse the charge", voided.message);
+        }
+      } else {
+        const status = await this.cardTerminal.resolve(attempt.utn, 1);
+        const result: PosCardResult = status.status === 'approved' && status.result
+          ? status.result
+          : status.status === 'unknown' || status.status === 'in_progress'
+            ? { outcome: 'unknown', code: 'STILL_UNKNOWN', message: 'The card machine could not say.' }
+            : { outcome: 'declined', code: status.status.toUpperCase(), message: 'Not charged.' };
+        const settled = await this.finishCardAttempt(attempt.utn, result);
+        if (settled === 'unknown') this.toast.warning('Still not confirmed', 'Check the card machine\'s last receipt, then settle it with a manager PIN.');
+      }
+    } catch (error) {
+      this.toast.error("Couldn't check the payment", this.errorMessage(error));
+    } finally {
+      this.cardAdminBusy.set(false);
+      await this.refreshUnresolvedCards();
+    }
+  }
+
+  /** Manager records what the terminal's own receipt or report shows. */
+  async resolveCardByManager(attempt: PosCardAttempt, outcome: 'declined' | 'reversed'): Promise<void> {
+    if (!this.cardResolveNote.trim() || (this.managerPinConfigured() && !this.cardResolvePin)) return;
+    this.cardAdminBusy.set(true);
+    try {
+      const override = await this.pos.verifyManagerPin(this.cardResolvePin, 'card-resolve');
+      await this.pos.resolveCardAttempt(attempt.utn, {
+        outcome, note: this.cardResolveNote.trim(), managerOverrideId: override.overrideId, managerOverrideToken: override.token,
+      });
+      await this.local.removeCardAttempt(attempt.utn);
+      this.cardResolveNote = '';
+      this.cardResolvePin = '';
+      this.toast.success('Payment settled');
+    } catch (error) {
+      this.toast.error("Couldn't settle the payment", this.errorMessage(error));
+    } finally {
+      this.cardAdminBusy.set(false);
+      await this.refreshUnresolvedCards();
+    }
+  }
+
+  private async printCardSlip(text: string, copy: 'customer' | 'all' = 'customer'): Promise<void> {
+    try {
+      await this.hardware.printTerminalSlip(text, copy);
+    } catch (printError) {
+      this.toast.push({
+        kind: 'warning',
+        title: 'Card slip not printed',
+        sub: this.errorMessage(printError),
+        duration: null,
+        action: { label: 'Retry print', run: () => { void this.printCardSlip(text, copy); } },
+      });
+    }
+  }
+
+  /** Sale paid on the terminal of an integrated till: void/refund run there too. */
+  cardCorrectionOnTerminal(transaction: PosSaleResult | null): boolean {
+    return Boolean(transaction?.card?.utn) && this.cardIntegrated();
+  }
+
+  /** Card refund/void that still needs a typed reference (manual tills, or a
+      manually confirmed sale on an integrated till). */
+  needsCorrectionReference(transaction: PosSaleResult | null): boolean {
+    return Boolean(transaction) && this.needsReference(transaction!.paymentMethod) && !this.cardCorrectionOnTerminal(transaction);
+  }
+
+  /**
+   * Runs a void or refund on the terminal after Elite's own checks passed.
+   * Returns the approval to send with the void/refund, or null (reason toasted).
+   */
+  private async runCardCorrection(
+    kind: 'void' | 'refund',
+    transaction: PosSaleResult,
+    amountCents: number,
+  ): Promise<PosCardAttemptRef | null> {
+    const card = transaction.card!;
+    // Approved on the terminal earlier but Elite did not save the void/refund
+    // (network, PIN expiry…): reuse that approval, never run the card twice.
+    const earlier = (await this.local.listCardAttempts()).find((item) =>
+      item.kind === kind && item.originalUtn === card.utn && item.amountCents === amountCents && item.result?.outcome === 'approved');
+    if (earlier?.result) {
+      return { utn: earlier.utn, amountCents, shiftId: earlier.shiftId, originalUtn: card.utn, result: toServerCardResult(earlier.result, 'approved') };
+    }
+    const registerId = this.register()?.registerId ?? '';
+    const utn = this.cardTerminal.newUtn(registerId);
+    await this.local.saveCardAttempt({ utn, kind, amountCents, shiftId: this.shiftId(), createdAt: new Date().toISOString(), state: 'sent', originalUtn: card.utn });
+    await this.pos.recordCardAttempt({ utn, kind, amountCents, shiftId: this.shiftId(), originalUtn: card.utn });
+    const job = kind === 'void'
+      ? { type: 'void' as const, utn, originalUtn: card.utn, amountCents }
+      : {
+        type: 'refund' as const,
+        utn,
+        amountCents,
+        original: {
+          seqNo: card.seqNo || '',
+          date: card.txnAt ? qatarDdMmYy(card.txnAt) : '',
+          authCode: card.authCode || '',
+          amountCents: transaction.totalCents,
+        },
+      };
+    this.toast.info(kind === 'void' ? 'Voiding on the card machine' : 'Refund on the card machine', kind === 'refund' ? 'Ask the customer to insert or tap their card.' : 'Follow the card machine screen.');
+    const result = await this.cardTerminal.run(job);
+    const status = await this.finishCardAttempt(utn, result);
+    if (result.receiptText) void this.printCardSlip(result.receiptText);
+    if (status !== 'approved') {
+      this.toast.error(kind === 'void' ? 'Void not done on the card machine' : 'Refund not done on the card machine', result.message);
+      return null;
+    }
+    return { utn, amountCents, shiftId: this.shiftId(), originalUtn: card.utn, result: toServerCardResult(result, 'approved') };
+  }
+
+  /** Runs CloseBatch before the Z on an integrated till. Never blocks the Z. */
+  private async closeCardBatch(): Promise<{ status: 'closed' | 'empty' | 'failed' | 'skipped'; receiptText?: string } | undefined> {
+    if (!this.cardIntegrated()) return undefined;
+    const result = await this.cardTerminal.run({ type: 'closeBatch' });
+    if (result.outcome !== 'ok') {
+      this.toast.warning('Card batch not closed', `${result.message} The Z report continues; retry from Settings > Card terminal.`);
+      return { status: 'failed' };
+    }
+    if (result.receiptText) void this.printCardSlip(result.receiptText, 'all');
+    return { status: result.code === 'NO_BATCH' ? 'empty' : 'closed', receiptText: result.receiptText };
+  }
+
+  // Settings > Card terminal
+
+  async loadCardSettings(): Promise<void> {
+    this.cardBridgeKey = (await this.cardTerminal.loadKey()) ?? '';
+    const health = await this.cardTerminal.checkHealth();
+    this.cardPort = health?.comPort ?? '';
+    if (health && this.cardBridgeKey) {
+      try {
+        const ports = await this.cardTerminal.ports();
+        this.cardPorts.set(ports.ports);
+      } catch {
+        this.cardPorts.set([]);
+      }
+    }
+  }
+
+  async saveCardBridgeKey(): Promise<void> {
+    await this.cardTerminal.setKey(this.cardBridgeKey);
+    await this.loadCardSettings();
+    this.toast.success(this.cardTerminal.hasKey() ? 'Card bridge key saved' : 'Card bridge key removed');
+  }
+
+  async saveCardPort(): Promise<void> {
+    if (!this.cardPort) return;
+    this.cardAdminBusy.set(true);
+    try {
+      await this.cardTerminal.setPort(this.cardPort);
+      await this.cardTerminal.checkHealth();
+      this.toast.success('Card machine port saved', this.cardPort);
+    } catch (error) {
+      this.toast.error("Couldn't change the port", this.errorMessage(error));
+    } finally {
+      this.cardAdminBusy.set(false);
+    }
+  }
+
+  /** Owner/admin: link this till to the terminal, or back to manual. */
+  async setTillCardMode(mode: 'manual' | 'integrated'): Promise<void> {
+    const registerId = this.register()?.registerId;
+    if (!registerId) return;
+    this.cardAdminBusy.set(true);
+    try {
+      const saved = await this.pos.setRegisterCardMode(registerId, mode);
+      this.cardMode.set(saved.cardMode);
+      await this.local.setCardMode(saved.cardMode);
+      this.register.update((register) => register ? { ...register, cardMode: saved.cardMode } : register);
+      this.toast.success(mode === 'integrated' ? 'Card machine linked to this till' : 'Card payments are manual on this till');
+      if (mode === 'integrated') await this.prepareCardTerminal();
+    } catch (error) {
+      this.toast.error("Couldn't change card mode", this.errorMessage(error));
+    } finally {
+      this.cardAdminBusy.set(false);
+    }
+  }
+
+  canManageCardTerminal(): boolean {
+    return ['owner', 'admin'].includes(this.auth.user()?.role ?? '');
+  }
+
+  /** Terminal admin operations from Settings (logon, reports, reprint…). */
+  async cardAdmin(type: 'logon' | 'logoff' | 'summary' | 'audit' | 'reprintLast' | 'settings' | 'initialize' | 'restart' | 'closeBatch'): Promise<void> {
+    this.cardAdminBusy.set(true);
+    try {
+      const result = await this.cardTerminal.run({ type });
+      if (result.outcome !== 'ok') {
+        this.toast.warning('Card machine', result.message);
+        return;
+      }
+      if (result.receiptText) await this.printCardSlip(result.receiptText, 'all');
+      if (type === 'settings' && result.info) {
+        this.toast.success('Card machine', Object.entries(result.info).map(([key, value]) => `${key}: ${value}`).join(' · '));
+      } else {
+        this.toast.success('Card machine', result.message);
+      }
+      await this.cardTerminal.checkHealth();
+    } finally {
+      this.cardAdminBusy.set(false);
+    }
+  }
+
+  private errorMessage(error: unknown): string {
+    let message = 'The POS request could not be completed.';
+    let reference: string | null = null;
+
+    if (typeof error === 'object' && error !== null) {
+      const candidate = error as { message?: string; error?: { message?: string; requestId?: string } };
+      message = candidate.error?.message || candidate.message || message;
+      reference = candidate.error?.requestId ?? null;
+    }
+    // A QZ print failure buries its cause behind the whole base64 payload, so
+    // an untouched message fills the toast with image data and shows the
+    // cashier nothing.
+    message = condenseHardwareError(message);
+
+    if (!reference) return message;
+    // Plain string, not an i18n key: this component is deliberately
+    // English-only (it has no I18nService injected anywhere), and "Ref" reads
+    // the same to an Arabic-speaking cashier reading a code aloud.
+    return `${message} (Ref ${reference.slice(-6)})`;
+  }
+
+  private errorCode(error: unknown): string | null {
+    if (typeof error !== 'object' || error === null) return null;
+    const candidate = error as { error?: { code?: string } };
+    return candidate.error?.code || null;
+  }
+}

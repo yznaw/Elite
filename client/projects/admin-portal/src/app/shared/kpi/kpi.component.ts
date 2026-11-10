@@ -1,13 +1,13 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent, IconName } from '../icons/icon.component';
 import { SparklineComponent } from '../sparkline/sparkline.component';
 
 @Component({
-  selector: 'ap-kpi',
-  standalone: true,
-  imports: [CommonModule, IconComponent, SparklineComponent],
-  template: `
+    selector: 'ap-kpi',
+    imports: [CommonModule, IconComponent, SparklineComponent],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     <div class="kpi">
       <div class="kpi-label">
         <span class="kpi-icon"><ap-icon [name]="icon" [size]="14"/></span>
@@ -24,7 +24,7 @@ import { SparklineComponent } from '../sparkline/sparkline.component';
         }
       </div>
     </div>
-  `,
+  `
 })
 export class KpiComponent {
   @Input({ required: true }) label!: string;

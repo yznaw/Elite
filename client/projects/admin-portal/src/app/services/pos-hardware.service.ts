@@ -1,0 +1,614 @@
+import { Injectable, computed, inject, signal } from '@angular/core';
+import qz from 'qz-tray';
+import { PosHardwareSettings, PosLocalStore } from './pos-local-store.service';
+import { PosBusinessProfile, PosService } from './pos.service';
+import { PosReceiptData, PosReceiptRenderer } from './pos-receipt-renderer.service';
+import { ClientLoggerService, ClientLogSeverity } from './client-logger.service';
+
+/**
+ * Every stage of talking to real hardware (QZ websocket, cert/signature
+ * fetch, printer discovery, the print call itself) used to fail silently
+ * behind a single generic timeout message. A cashier standing at a register
+ * with a jammed printer or a stopped QZ Tray service had nothing to go on.
+ * This groups each attempt in the console with a stage name, timing, and the
+ * real underlying error, so opening DevTools on the actual terminal is
+ * enough to diagnose it without reproducing the issue remotely.
+ */
+const LOG_PREFIX = '[pos-hardware]';
+
+interface PosPrintJobOptions {
+  /** Ephemeral QZ job options; never written to the device's saved settings. */
+  qzConfig?: Record<string, unknown>;
+}
+
+function logStage(stage: string, detail?: Record<string, unknown>): void {
+  console.log(`${LOG_PREFIX} ${stage}`, detail ?? '');
+}
+
+/**
+ * QZ builds its raw-print failures as
+ *   "Cannot parse (BASE64)<the entire image payload> into a raw IMAGE command: <cause>"
+ * so the only part that says what actually went wrong sits behind ~100KB of
+ * base64 and every console, toast and log record truncates before reaching it.
+ * Collapsing long base64 runs keeps both ends of the message readable.
+ */
+export function condenseHardwareError(message: string): string {
+  return message.replace(/[A-Za-z0-9+/=]{120,}/g, (blob) => `<base64 ${blob.length} chars>`);
+}
+
+function logError(stage: string, error: unknown, detail?: Record<string, unknown>): void {
+  const message = (error as { message?: string } | null)?.message;
+  console.error(`${LOG_PREFIX} ${stage} FAILED`, {
+    error,
+    ...(message ? { reason: condenseHardwareError(message) } : {}),
+    ...detail,
+  });
+}
+
+@Injectable({ providedIn: 'root' })
+export class PosHardwareService {
+  private readonly pos = inject(PosService);
+  private readonly local = inject(PosLocalStore);
+  private readonly renderer = inject(PosReceiptRenderer);
+  private readonly clientLogger = inject(ClientLoggerService);
+  readonly connected = signal(false);
+  readonly configured = signal(false);
+  readonly printerAvailable = signal(false);
+  readonly signerReachable = signal<boolean | null>(null);
+  /**
+   * Everything needed to put a receipt on paper right now. Deliberately does
+   * not include the signer: that is only the offline signing fallback, so a
+   * till with a stopped signer prints perfectly well while it has internet.
+   * This is what the tools-bar indicator reflects, otherwise the light stays
+   * red on a register that is printing fine and cashiers learn to ignore it.
+   */
+  readonly printerReady = computed(() => (
+    this.configured() && this.connected() && this.printerAvailable()
+  ));
+  /** Everything above plus offline printing. Drives the start-of-day strip. */
+  readonly ready = computed(() => this.printerReady() && this.signerReachable() === true);
+  private settings: PosHardwareSettings | null = null;
+  private securityConfigured = false;
+  private connectionCallbacksConfigured = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempt = 0;
+  private signerWatchTimer: ReturnType<typeof setInterval> | null = null;
+  /** One physical printer cannot finish two receipts concurrently. Chaining
+   * jobs prevents a fast refund/void followed by a sale from interleaving at
+   * the spooler boundary. A failed job never blocks the next one. */
+  private printQueue: Promise<void> = Promise.resolve();
+  private readonly SIGNER_POLL_MS = 60000;
+  // How many consecutive reconnect failures get shipped to the server before
+  // the durable log goes quiet. Console logging is unaffected. A register
+  // whose printer stays off overnight was otherwise posting two warn records
+  // every 30 seconds until someone noticed.
+  private readonly MAX_DURABLE_RECONNECT_LOGS = 3;
+  private businessProfile: PosBusinessProfile | null = null;
+  private businessProfileFetchedAt = 0;
+  private readonly BUSINESS_PROFILE_TTL_MS = 5 * 60 * 1000;
+
+  private async getBusinessProfile(): Promise<PosBusinessProfile | null> {
+    const stale = Date.now() - this.businessProfileFetchedAt > this.BUSINESS_PROFILE_TTL_MS;
+    if (!stale) return this.businessProfile;
+    try {
+      this.businessProfile = await this.withTimeout(this.pos.businessProfile(), 3000, 'Receipt business profile');
+    } catch {
+      // Printing must not fail because the profile fetch failed (e.g. offline)
+      // — fall back to whatever was last cached, or the renderer's defaults.
+    }
+    this.businessProfileFetchedAt = Date.now();
+    return this.businessProfile;
+  }
+
+  // QZ Tray calls (websocket connect, print) can hang indefinitely when the
+  // signing chain fails — e.g. a certificate/signature promise that never
+  // settles. Because these are awaited inside the POS component's `busy`
+  // guard, a hang leaves `busy=true` forever, which silently disables
+  // "Take payment" for every subsequent sale. Every QZ call below is wrapped
+  // in withTimeout so it always settles (resolve or reject) and the UI never
+  // gets stuck. Printing is best-effort; selling must never depend on it.
+  private readonly CONNECT_TIMEOUT_MS = 8000;
+  private readonly PRINT_TIMEOUT_MS = 15000;
+
+  private async withTimeout<T>(operation: Promise<T>, ms: number, label: string): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const startedAt = performance.now();
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s.`)), ms);
+    });
+    try {
+      const result = await Promise.race([operation, timeout]);
+      logStage(`${label} ok`, { ms: Math.round(performance.now() - startedAt) });
+      return result;
+    } catch (error) {
+      logError(label, error, { elapsedMs: Math.round(performance.now() - startedAt), timeoutMs: ms });
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  private async connectWebsocket(retries: number, delay: number): Promise<void> {
+    if (qz.websocket.isActive()) {
+      logStage('QZ Tray connection — already active');
+      return;
+    }
+    logStage('QZ Tray connection — connecting', { retries, delay });
+    await this.withTimeout(qz.websocket.connect({ retries, delay }), this.CONNECT_TIMEOUT_MS, 'QZ Tray connection');
+    // The qz-tray npm package reshapes the print payload depending on which
+    // desktop version answered (see its `compatible.data`), so a print that
+    // fails on the register but is valid per the current docs is impossible
+    // to reason about without this number in the same log.
+    try {
+      logStage('QZ Tray version', { version: await qz.api.getVersion() });
+    } catch {
+      // Diagnostics only. Never let this stop a register from printing.
+    }
+  }
+
+  async initialize(): Promise<void> {
+    this.settings = await this.local.getHardwareSettings();
+    this.configured.set(Boolean(this.settings?.printerName));
+    logStage('initialize', { printerName: this.settings?.printerName || null, deviceSignerUrl: this.settings?.deviceSignerUrl || null });
+    if (!this.settings?.printerName) {
+      logStage('initialize — no printer configured, skipping connect');
+      this.connected.set(false);
+      this.printerAvailable.set(false);
+      return;
+    }
+    this.configureSecurity();
+    this.configureConnectionCallbacks();
+    try {
+      await this.connectAndVerifyPrinter(1, 0);
+    } catch (error) {
+      logError('initialize', error);
+      this.connected.set(false);
+      this.printerAvailable.set(false);
+      this.logDurable('HARDWARE_INITIALIZE_FAILED', 'POS hardware initialization failed.', 'warn', {
+        error: this.errorText(error),
+      });
+      this.scheduleReconnect();
+    }
+  }
+
+  /**
+   * A browser cannot keep QZ's websocket alive through a Windows/browser
+   * restart. Instead, the register remembers the queue name and this
+   * supervisor reconnects to QZ automatically for as long as the POS is
+   * open. Closed/error callbacks also recover from QZ upgrades and crashes.
+   */
+  private configureConnectionCallbacks(): void {
+    if (this.connectionCallbacksConfigured) return;
+    const websocket = qz.websocket as typeof qz.websocket & {
+      setClosedCallbacks?: (callback: () => void) => void;
+      setErrorCallbacks?: (callback: (error: unknown) => void) => void;
+    };
+    websocket.setClosedCallbacks?.(() => this.handleDisconnect('QZ Tray connection closed'));
+    websocket.setErrorCallbacks?.((error) => this.handleDisconnect('QZ Tray websocket error', error));
+    this.connectionCallbacksConfigured = true;
+  }
+
+  private handleDisconnect(stage: string, error?: unknown): void {
+    this.connected.set(false);
+    this.printerAvailable.set(false);
+    if (error) logError(stage, error);
+    else logStage(stage);
+    this.logDurable('QZ_DISCONNECTED', stage, 'warn', {
+      error: error ? this.errorText(error) : null,
+    });
+    this.scheduleReconnect();
+  }
+
+  private scheduleReconnect(): void {
+    if (!this.settings?.printerName || this.reconnectTimer) return;
+    const delays = [2000, 5000, 10000, 30000];
+    const delayMs = delays[Math.min(this.reconnectAttempt, delays.length - 1)];
+    this.reconnectAttempt += 1;
+    // Past the first few attempts the condition is steady (printer off, QZ not
+    // installed) and each further record says nothing new, so only the console
+    // keeps narrating. The recovery entry still reports the total attempt count.
+    const durable = this.reconnectAttempt <= this.MAX_DURABLE_RECONNECT_LOGS;
+    logStage('QZ Tray reconnect scheduled', { delayMs, attempt: this.reconnectAttempt });
+    if (durable) {
+      this.logDurable('QZ_RECONNECT_SCHEDULED', 'QZ Tray automatic reconnect scheduled.', 'warn', {
+        delayMs,
+        attempt: this.reconnectAttempt,
+      });
+    }
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+      try {
+        await this.connectAndVerifyPrinter(1, 0);
+      } catch (error) {
+        logError('QZ Tray automatic reconnect', error);
+        this.connected.set(false);
+        this.printerAvailable.set(false);
+        if (durable) {
+          this.logDurable('QZ_RECONNECT_FAILED', 'QZ Tray automatic reconnect failed.', 'warn', {
+            attempt: this.reconnectAttempt,
+            error: this.errorText(error),
+          });
+        }
+        this.scheduleReconnect();
+      }
+    }, delayMs);
+  }
+
+  private async connectAndVerifyPrinter(retries: number, delay: number): Promise<void> {
+    if (!this.settings?.printerName) throw new Error('No receipt printer is configured.');
+    const recovering = this.reconnectAttempt > 0;
+    await this.connectWebsocket(retries, delay);
+    this.connected.set(true);
+    const result = await this.withTimeout(
+      qz.printers.find(this.settings.printerName),
+      this.PRINT_TIMEOUT_MS,
+      'Configured printer check',
+    );
+    const matches = (Array.isArray(result) ? result : [result])
+      .some((name) => String(name).trim() === this.settings?.printerName.trim());
+    this.printerAvailable.set(matches);
+    if (!matches) throw new Error(`Configured printer "${this.settings.printerName}" is not available in Windows.`);
+    // The local signer is only a fallback for signing print requests when the
+    // API is unreachable (see fetchCertificate/fetchSignature), so a register
+    // whose printer answers can print perfectly well without it. Failing the
+    // connection here used to throw away a verified QZ websocket and re-run
+    // the whole connect cycle every 30s forever — a register was seen at
+    // attempt 45 with "printer check ok" logged on every pass. Record the
+    // signer state for `ready()` and the readiness strip, and stop there.
+    await this.checkSignerHealth();
+    if (recovering) {
+      this.logDurable('HARDWARE_RESTORED', 'POS hardware connection restored automatically.', 'warn', {
+        attempts: this.reconnectAttempt,
+      });
+    }
+    this.reconnectAttempt = 0;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  private async checkSignerHealth(): Promise<void> {
+    const signer = this.settings?.deviceSignerUrl || 'http://127.0.0.1:8182';
+    try {
+      const response = await fetch(`${signer}/health`, { cache: 'no-store', signal: AbortSignal.timeout(3000) });
+      this.signerReachable.set(response.ok);
+    } catch {
+      this.signerReachable.set(false);
+    }
+    if (this.signerReachable() === true) this.stopSignerWatch();
+    else this.startSignerWatch();
+  }
+
+  /**
+   * The signer no longer drives the QZ reconnect loop, so something has to
+   * notice when someone starts it mid-shift. This polls only while it is down
+   * and stops the moment it answers, so a healthy register runs no timer. It
+   * is one request to localhost, and it never touches the durable log.
+   */
+  private startSignerWatch(): void {
+    if (this.signerWatchTimer) return;
+    this.signerWatchTimer = setInterval(() => { void this.checkSignerHealth(); }, this.SIGNER_POLL_MS);
+  }
+
+  private stopSignerWatch(): void {
+    if (!this.signerWatchTimer) return;
+    clearInterval(this.signerWatchTimer);
+    this.signerWatchTimer = null;
+  }
+
+  private logDurable(
+    code: string,
+    message: string,
+    severity: ClientLogSeverity,
+    context: Record<string, unknown> = {},
+  ): void {
+    this.clientLogger.log({
+      source: 'pos-client',
+      severity,
+      code,
+      message,
+      context: {
+        printerName: this.settings?.printerName || null,
+        signerUrl: this.settings?.deviceSignerUrl || 'http://127.0.0.1:8182',
+        qzConnected: this.connected(),
+        printerAvailable: this.printerAvailable(),
+        signerReachable: this.signerReachable(),
+        ...context,
+      },
+    });
+  }
+
+  private errorText(error: unknown): string {
+    const raw = String((error as { message?: string } | null)?.message || error || 'Unknown hardware error');
+    // Condense before slicing: a raw QZ print failure is all base64 for its
+    // first ~100KB, so a plain slice(0, 500) stored nothing but the payload.
+    return condenseHardwareError(raw).slice(0, 500);
+  }
+
+  /**
+   * Exposed so a print failure can be reported with the printer it was aimed
+   * at — "printing failed" without the target queue name is not diagnosable
+   * when a register has several installed printers.
+   */
+  printerName(): string | null {
+    return this.settings?.printerName || null;
+  }
+
+  async configure(settings: PosHardwareSettings): Promise<void> {
+    logStage('configure', { printerName: settings.printerName, drawerPulse: settings.drawerPulse });
+    this.settings = settings;
+    await this.local.setHardwareSettings(settings);
+    this.configured.set(Boolean(settings.printerName));
+    this.reconnectAttempt = 0;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    await this.initialize();
+  }
+
+  async printers(): Promise<string[]> {
+    this.configureSecurity();
+    try {
+      await this.connectWebsocket(2, 1);
+      const result = await this.withTimeout(qz.printers.find(), this.PRINT_TIMEOUT_MS, 'Printer discovery');
+      const list = Array.isArray(result) ? result : [result];
+      logStage('Printer discovery — found', { printers: list });
+      return list;
+    } catch (error) {
+      this.logDurable('PRINTER_DISCOVERY_FAILED', 'QZ printer discovery failed.', 'warn', {
+        error: this.errorText(error),
+      });
+      throw error;
+    }
+  }
+
+  async printReceipt(receiptData: unknown, openDrawer = false): Promise<void> {
+    return this.enqueuePrint(async () => {
+      logStage('printReceipt — start', {
+        printerName: this.settings?.printerName || null,
+        openDrawer,
+        receiptNumber: (receiptData as PosReceiptData)?.receiptNumber,
+      });
+      const profile = await this.getBusinessProfile();
+      logStage('printReceipt — business profile', { loaded: Boolean(profile) });
+      const rendered = await this.renderer.render(receiptData as PosReceiptData, profile);
+      await this.printRendered('printReceipt', rendered, openDrawer);
+    });
+  }
+
+  /** Z-report reprint/first-print — a cash/sales summary, never opens the drawer. */
+  async printZReport(report: unknown): Promise<void> {
+    return this.enqueuePrint(async () => {
+      logStage('printZReport — start', {
+        printerName: this.settings?.printerName || null,
+        zReportId: (report as { zReportId?: string })?.zReportId,
+      });
+      const profile = await this.getBusinessProfile();
+      const rendered = await this.renderer.renderZReport(report as Parameters<PosReceiptRenderer['renderZReport']>[0], profile);
+      await this.printRendered('printZReport', rendered, false, {
+        qzConfig: {
+          jobName: 'Elite POS Z Report',
+        },
+      });
+    });
+  }
+
+  /** The QNB terminal's pre-formatted card slip (customer copy by default).
+      Never opens the drawer. */
+  async printTerminalSlip(text: string, copy: 'customer' | 'all' = 'customer'): Promise<void> {
+    return this.enqueuePrint(async () => {
+      logStage('printTerminalSlip — start', { printerName: this.settings?.printerName || null, copy });
+      const rendered = await this.renderer.renderTerminalSlip(text, copy);
+      await this.printRendered('printTerminalSlip', rendered, false, { qzConfig: { jobName: 'Elite POS Card Slip' } });
+    });
+  }
+
+  private enqueuePrint(task: () => Promise<void>): Promise<void> {
+    const run = this.printQueue.then(task, task);
+    this.printQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  private async printRendered(
+    stage: string,
+    rendered: { imageDataUrl: string; footerCommands: string; paperHeightMm: number },
+    openDrawer: boolean,
+    jobOptions: PosPrintJobOptions = {},
+  ): Promise<void> {
+    if (!this.settings?.printerName) {
+      const error = new Error('No receipt printer is configured.');
+      logError(stage, error);
+      throw error;
+    }
+    this.configureSecurity();
+    await this.connectWebsocket(2, 1);
+    // The receipt body is a rasterized image (Arabic needs real text shaping,
+    // which raw ESC/POS text mode cannot do — see pos-receipt-renderer.service.ts)
+    // printed through QZ's escpos image path; the QR/cut footer is still sent
+    // as raw ESC/POS commands since it's not text.
+    const imageOptions: Record<string, unknown> = {
+      language: 'escpos',
+      dotDensity: 'double',
+      quantization: 'luma',
+      // Use the same native-size raster path for every receipt/report. GS v 0
+      // feeds each bitmap slice by its actual height without relying on the
+      // ESC * line/motion settings inherited from an earlier print job.
+      imageEncoding: 'gs_v_0',
+    };
+    const data: Array<{ type: string; format: string; flavor?: string; data: string; options?: Record<string, unknown> } | string> = [];
+    data.push('\x1b' + '@');
+    data.push(
+      {
+        type: 'raw',
+        format: 'image',
+        // `flavor` is not optional here. Without it QZ treats `data` as a file
+        // path or URL, and a canvas data URL fails to parse — the register
+        // reported `Cannot parse (BASE64)iVBORw0KGgo...` and printed nothing.
+        // QZ wants the bare base64 payload, so the `data:image/png;base64,`
+        // prefix that toDataURL() adds has to come off.
+        flavor: 'base64',
+        data: rendered.imageDataUrl.replace(/^data:image\/[a-z+]+;base64,/i, ''),
+        // Quantization decides which pixels become black dots.
+        //
+        // Not "alpha" (QZ's default): it reads the alpha channel, and the
+        // receipt canvas is filled opaque white, so every pixel counts as ink
+        // and the whole receipt prints solid black.
+        //
+        // Not "dither" either, however good it looks on paper: QZ 2.2.6
+        // rejects the entire job with "Image quantization DITHER is not yet
+        // supported". The option is listed in the qz-tray JSDoc but the
+        // desktop app has not implemented it.
+        //
+        // "luma" thresholds on luminance, which is what black-on-white text
+        // actually needs, and is supported.
+        options: imageOptions,
+      },
+      rendered.footerCommands,
+    );
+    if (openDrawer && this.settings.drawerPulse !== 'disabled') {
+      data.push(this.renderer.drawerCommand(this.settings.drawerPulse));
+    }
+    const config = qz.configs.create(this.settings.printerName, {
+      jobName: 'Elite POS Receipt',
+      encoding: 'ISO-8859-1',
+      margins: 0,
+      scaleContent: false,
+      // Continuous roll printers still inherit a finite page length from the
+      // OS driver. Tell it the measured job length so the final refund/void
+      // rows cannot be deferred to the next physical receipt.
+      units: 'mm',
+      size: { width: 80, height: rendered.paperHeightMm, custom: true },
+      ...jobOptions.qzConfig,
+    });
+    try {
+      await this.withTimeout(qz.print(config, data), this.PRINT_TIMEOUT_MS, 'Receipt printing');
+      this.connected.set(true);
+      this.printerAvailable.set(true);
+      logStage(`${stage} — done`, { printerName: this.settings.printerName });
+    } catch (error) {
+      // A rejected print is not proof the link is down. A malformed payload,
+      // a paper-out, or a job the driver refuses all land here with the
+      // websocket still open, and tearing the connection down over one of
+      // those just adds a reconnect cycle on top of an unrelated fault.
+      // Trust QZ's own view of the socket instead of the failure itself.
+      if (!qz.websocket.isActive()) {
+        this.connected.set(false);
+        this.printerAvailable.set(false);
+        this.scheduleReconnect();
+      }
+      logError(stage, error, { printerName: this.settings.printerName, socketActive: qz.websocket.isActive() });
+      throw error;
+    }
+  }
+
+  async openDrawer(): Promise<void> {
+    logStage('openDrawer — start', { drawerPulse: this.settings?.drawerPulse || null });
+    if (!this.settings?.printerName || !this.settings || this.settings.drawerPulse === 'disabled') {
+      const error = new Error('Cash drawer is not configured.');
+      logError('openDrawer', error);
+      throw error;
+    }
+    this.configureSecurity();
+    await this.connectWebsocket(2, 1);
+    const config = qz.configs.create(this.settings.printerName, { encoding: 'ISO-8859-1' });
+    try {
+      await this.withTimeout(qz.print(config, [this.renderer.drawerCommand(this.settings.drawerPulse)]), this.PRINT_TIMEOUT_MS, 'Cash drawer');
+      logStage('openDrawer — done');
+    } catch (error) {
+      logError('openDrawer', error);
+      this.logDurable('DRAWER_OPEN_FAILED', 'Cash drawer command failed.', 'warn', {
+        error: this.errorText(error),
+        drawerPulse: this.settings.drawerPulse,
+      });
+      throw error;
+    }
+  }
+
+  private configureSecurity(): void {
+    if (this.securityConfigured) return;
+    logStage('configureSecurity — installing QZ signature handlers');
+    qz.security.setSignatureAlgorithm('SHA512');
+    // QZ Tray's internal callCert/callSign helpers detect a genuine native
+    // `async function` via `handler.constructor.name === "AsyncFunction"`
+    // and call it directly; otherwise they fall back to a build-independent
+    // shape. Angular's production build (esbuild) transpiles our `async`
+    // class methods into a plain function wrapping a generator-runtime
+    // helper — `fetchSignature(t){return C(this,null,function*(){...})}` —
+    // so at runtime its constructor is just `Function`, never
+    // `AsyncFunction`, no matter how it's declared in source or bound.
+    // Relying on that constructor check is fragile against the build tool,
+    // so both handlers use the documented fallback shapes instead, which
+    // don't depend on how our async methods get compiled:
+    //  - certHandler (qz-tray.js callCert): must itself BE the executor
+    //    `(resolve, reject) => {...}` — QZ passes it straight into
+    //    `new Promise(certHandler)`, it does not call it first.
+    //  - signatureFactory (qz-tray.js callSign): must be a sync function
+    //    that, given the string to sign, RETURNS an executor — QZ calls
+    //    `signatureFactory(toSign)` and passes the result into `new Promise(...)`.
+    qz.security.setCertificatePromise((resolve: (v: string) => void, reject: (e: unknown) => void) => {
+      this.fetchCertificate().then(resolve, reject);
+    }, { rejectOnFailure: true });
+    qz.security.setSignaturePromise((request: string) => (resolve: (v: string) => void, reject: (e: unknown) => void) => {
+      this.fetchSignature(request).then(resolve, reject);
+    });
+    this.securityConfigured = true;
+  }
+
+  private async fetchCertificate(): Promise<string> {
+    try {
+      const cert = await this.fetchText(this.pos.certificateUrl, { credentials: 'include' });
+      logStage('fetchCertificate — via API', { url: this.pos.certificateUrl });
+      return cert;
+    } catch (onlineError) {
+      logError('fetchCertificate — via API, falling back to local signer', onlineError, { url: this.pos.certificateUrl });
+      const signer = this.settings?.deviceSignerUrl || 'http://127.0.0.1:8182';
+      try {
+        const cert = await this.fetchText(`${signer}/qz/certificate`);
+        logStage('fetchCertificate — via local signer', { signer });
+        return cert;
+      } catch (signerError) {
+        logError('fetchCertificate — local signer also failed', signerError, { signer });
+        throw onlineError;
+      }
+    }
+  }
+
+  private async fetchSignature(request: string): Promise<string> {
+    try {
+      const signature = await this.fetchText(this.pos.signingUrl, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ request }),
+      });
+      logStage('fetchSignature — via API', { url: this.pos.signingUrl });
+      return signature;
+    } catch (onlineError) {
+      logError('fetchSignature — via API, falling back to local signer', onlineError, { url: this.pos.signingUrl });
+      const signer = this.settings?.deviceSignerUrl || 'http://127.0.0.1:8182';
+      try {
+        const signature = await this.fetchText(`${signer}/qz/sign`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ request }),
+        });
+        logStage('fetchSignature — via local signer', { signer });
+        return signature;
+      } catch (signerError) {
+        logError('fetchSignature — local signer also failed', signerError, { signer });
+        throw onlineError;
+      }
+    }
+  }
+
+  private async fetchText(url: string, init?: RequestInit): Promise<string> {
+    const response = await fetch(url, { cache: 'no-store', ...init });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`Hardware signer returned ${response.status} for ${url}${body ? `: ${body.slice(0, 200)}` : ''}.`);
+    }
+    return response.text();
+  }
+}

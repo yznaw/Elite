@@ -1,0 +1,1145 @@
+<main class="pos-shell" [class.is-selling]="phase() === 'selling'">
+  <header class="pos-header">
+    <div class="brand-lockup">
+      <span class="brand-mark">
+        <img src="/assets/brand/elite-logo-cream.png" alt="Elite" />
+      </span>
+      <div>
+        <strong>Elite POS</strong>
+        <span>
+          {{ register()?.displayName || 'Terminal setup' }}
+          @if (register()?.branchName) { · {{ register()?.branchName }} }
+        </span>
+      </div>
+    </div>
+    <div class="header-status">
+      <span class="network" [class.offline]="!online()">
+        <i></i>{{ online() ? 'Online' : 'Offline' }}
+      </span>
+      @if (shiftId()) {
+        <span class="shift-chip">Shift open</span>
+      }
+      <span class="cashier">{{ auth.user()?.name }}</span>
+      @if (phase() === 'selling') {
+        <button class="header-tool" type="button" (click)="syncPendingSales()" [disabled]="!online() || syncing()">
+          {{ syncing() ? 'Syncing' : 'Queue ' + pendingSales() }}
+        </button>
+        <button class="header-tool" type="button" (click)="shortcutsHelpOpen.set(true)">
+          Shortcuts <kbd class="key-badge">F1</kbd>
+        </button>
+      }
+      <button class="exit-button" type="button" (click)="exitPos()">Admin</button>
+    </div>
+  </header>
+
+  @if (phase() === 'loading') {
+    <section class="center-stage">
+      <div class="loader"></div>
+      <h1>Preparing your register</h1>
+      <p>Checking terminal identity, shift, and receipt numbers.</p>
+    </section>
+  }
+
+  @if (phase() === 'resume-failed') {
+    <section class="center-stage">
+      <h1>Could not open this register</h1>
+      <p>This counter is still connected to Elite. Nothing was lost, and no setup is needed.</p>
+      @if (resumeError()) { <p class="resume-error">{{ resumeError() }}</p> }
+      <div class="resume-actions">
+        <button class="primary-action" type="button" [disabled]="busy()" (click)="retryResume()">
+          {{ busy() ? 'Trying again...' : 'Try again' }}
+        </button>
+        <button class="link-action" type="button" [disabled]="resetting()" (click)="resetTerminal()">
+          {{ resetting() ? 'Resetting...' : 'Reset this terminal and pick a till' }}
+        </button>
+      </div>
+    </section>
+  }
+
+  @if (phase() === 'enrollment') {
+    <section class="setup-stage">
+      <div class="setup-intro">
+        <h1>Which till is this?</h1>
+        <p>Pick the counter you are standing at. Elite remembers it on this computer, so you only do this once.</p>
+      </div>
+      <div class="setup-card">
+        @if (justEnrolled()) {
+          <div class="enroll-success">
+            <div class="success-mark">OK</div>
+            <h2>Register connected</h2>
+            <p>{{ register()?.displayName }}</p>
+          </div>
+        } @else if (enrollMode() === 'pick') {
+          @if (registersLoading()) {
+            <ul class="register-picker" aria-busy="true">
+              @for (row of [1, 2, 3]; track row) {
+                <li><span class="register-skeleton"></span></li>
+              }
+            </ul>
+          } @else if (availableRegisters().length) {
+            <ul class="register-picker">
+              @for (item of availableRegisters(); track item.registerId) {
+                <li>
+                  <button type="button" [disabled]="busy()" (click)="claimRegister(item.registerId)">
+                    <span class="register-name">{{ item.displayName }}</span>
+                    <span class="register-meta">
+                      @if (item.branchName) { <i class="register-branch">{{ item.branchName }}</i> }
+                      {{ registerLastSeen(item) }}
+                      @if (item.openShiftId) {
+                        <b>Shift open{{ item.openShiftCashier ? ' - ' + item.openShiftCashier : '' }}</b>
+                      }
+                    </span>
+                  </button>
+                </li>
+              }
+            </ul>
+          } @else {
+            <div class="register-empty">
+              <h2>No registers yet</h2>
+              <p>
+                @if (auth.user()?.role === 'owner' || auth.user()?.role === 'admin') {
+                  Add the first one to start selling on this counter.
+                } @else {
+                  Ask an owner or admin to add this counter as a register.
+                }
+              </p>
+            </div>
+          }
+
+          <div class="setup-alt">
+            @if (auth.user()?.role === 'owner' || auth.user()?.role === 'admin') {
+              <button type="button" class="link-action" (click)="setEnrollMode('create')">Add a new register</button>
+            }
+            <button type="button" class="link-action" (click)="setEnrollMode('token')">Use a setup token instead</button>
+            <button type="button" class="link-action" [disabled]="resetting()" (click)="resetTerminal()">
+              {{ resetting() ? 'Resetting...' : 'Start over' }}
+            </button>
+          </div>
+        } @else if (enrollMode() === 'create') {
+          <h2>Add a new register</h2>
+          <p>Name it after the counter it sits on, so end-of-day cash counts are easy to match up.</p>
+          <label>
+            Register name
+            <input [(ngModel)]="terminalName" placeholder="Main counter" maxlength="80" />
+          </label>
+          <button class="primary-action" type="button" [disabled]="busy()" (click)="claimRegister()">
+            {{ busy() ? 'Connecting...' : 'Add and connect' }}
+          </button>
+          <div class="setup-alt">
+            <button type="button" class="link-action" (click)="setEnrollMode('pick')">Back to the register list</button>
+          </div>
+        } @else {
+          <h2>Use a setup token</h2>
+          <p>For connecting a counter you are not standing at. An owner or admin generates the token.</p>
+          <label>
+            Setup token
+            <input [(ngModel)]="enrollmentToken" placeholder="Paste one-time token" autocomplete="off" />
+          </label>
+          <button class="primary-action" type="button" [disabled]="busy()" (click)="enrollTerminal()">
+            {{ busy() ? 'Connecting...' : 'Connect register' }}
+          </button>
+          <div class="setup-alt">
+            <button type="button" class="link-action" (click)="setEnrollMode('pick')">Back to the register list</button>
+          </div>
+        }
+      </div>
+
+      @if (takeoverTarget(); as target) {
+        <div class="takeover-backdrop" role="dialog" aria-modal="true" aria-labelledby="takeover-title">
+          <div class="takeover-dialog">
+            <h2 id="takeover-title">{{ target.displayName }} is in use</h2>
+            <p>{{ takeoverWarning() }}</p>
+            <label>
+              Manager PIN
+              <input
+                [(ngModel)]="takeoverPin"
+                type="password"
+                inputmode="numeric"
+                autocomplete="off"
+                maxlength="12"
+                placeholder="Ask a manager to enter it"
+              />
+            </label>
+            @if (takeoverError()) { <p class="takeover-error" role="alert">{{ takeoverError() }}</p> }
+            <div class="takeover-actions">
+              <button class="link-action" type="button" [disabled]="busy()" (click)="closeTakeover()">Cancel</button>
+              <button class="primary-action" type="button" [disabled]="busy()" (click)="confirmTakeover()">
+                {{ busy() ? 'Taking over...' : 'Take over this till' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+    </section>
+  }
+
+  @if (phase() === 'shift') {
+    <section class="shift-stage">
+      <div class="shift-card">
+        <span class="eyebrow">START OF DAY</span>
+        <h1>Open a cashier shift</h1>
+        <p>Count the cash already in the drawer before taking the first payment.</p>
+        <label class="money-field">
+          <span>Opening cash</span>
+          <div><b>QAR</b><input [(ngModel)]="openingFloat" inputmode="decimal" /></div>
+        </label>
+        <div class="morning-readiness" [class.ready]="hardware.ready()">
+          <span><i></i>Printer: {{ hardware.connected() && hardware.printerAvailable() ? 'ready' : 'not ready' }}</span>
+          <span>Offline signer: {{ hardware.signerReachable() === true ? 'ready' : 'not ready' }}</span>
+          <button type="button" (click)="hardware.initialize()">Retry</button>
+          <button type="button" (click)="openHardwareDialog()">Configure</button>
+        </div>
+        <button class="primary-action" type="button" [disabled]="busy()" (click)="openShift()">
+          {{ busy() ? 'Opening...' : 'Open shift' }}
+        </button>
+      </div>
+      <aside class="shift-note">
+        <span>REGISTER</span>
+        <strong>{{ register()?.displayName }}</strong>
+        <p>Sales cannot be posted without an open shift. Closing and Z reporting remain manager-controlled.</p>
+      </aside>
+    </section>
+  }
+
+  @if (phase() === 'shift-recovery') {
+    <section class="shift-stage">
+      <div class="shift-card recovery-card">
+        <span class="eyebrow">MANAGER CHECK REQUIRED</span>
+        <h1>Resolve the previous shift</h1>
+        @if (shiftRecovery(); as recovery) {
+          @if (recovery.reason === 'previous-day') {
+            <p>A shift from a previous business day is still open. Close and reconcile it before today's cashier starts selling.</p>
+          } @else if (recovery.reason === 'different-cashier') {
+            <p>This register still has a shift belonging to {{ recovery.cashierName || 'another cashier' }}. It cannot be used by the current cashier.</p>
+          } @else {
+            <p>The previous shift is still being closed. A manager must finish its Z report before selling resumes.</p>
+          }
+          <small>Opened {{ recovery.openedAt | date:'medium' }}</small>
+        }
+        <button class="primary-action" type="button" [disabled]="!online()" (click)="openShiftDialog()">
+          Review and close previous shift
+        </button>
+        @if (!online()) {
+          <small>Reconnect to the server to reconcile this shift. Offline selling stays blocked.</small>
+        }
+      </div>
+      <aside class="shift-note">
+        <span>REGISTER PROTECTION</span>
+        <strong>{{ register()?.displayName }}</strong>
+        <p>This prevents sales from being posted under yesterday's totals or another employee's cash drawer.</p>
+      </aside>
+    </section>
+  }
+
+  @if (phase() === 'selling') {
+    <section class="selling-split">
+      <div class="selling-main">
+        <nav class="pos-tools" aria-label="POS operations">
+          <div>
+            <button type="button" [disabled]="!cart().length" (click)="dialog.set('park')">Park sale <kbd class="key-badge">F9</kbd></button>
+            <button type="button" (click)="dialog.set('parked'); loadParkedCarts()">Parked <span>{{ parkedCarts().length }}</span> <kbd class="key-badge">F10</kbd></button>
+            <button type="button" [disabled]="!online()" (click)="dialog.set('operations')">Returns / voids</button>
+          </div>
+          <div>
+            <button type="button" [disabled]="checkingPosUpdate()" (click)="checkPosUpdate()"
+              [title]="posUpdateAvailable() ? 'A newer version is available' : 'Check for a newer version'">
+              {{ checkingPosUpdate() ? 'Checking...' : 'Update' }}
+              @if (posUpdateAvailable()) { <i class="update-dot"></i> }
+            </button>
+            <button type="button" (click)="openHardwareDialog()">Hardware <i [class.ready]="hardware.printerReady()"></i></button>
+            <button type="button" [disabled]="!online()" (click)="openShiftDialog()">Shift report</button>
+          </div>
+        </nav>
+        @if (!online()) {
+          <div class="offline-notice" [class.warn]="offlineCatalogWarning()" [class.rejected]="offlineCatalogBlocked()">
+            Offline mode: sales are receipted locally and queued for synchronization.
+            @if (!serverReachable()) { <span class="unreachable">Server unreachable — retrying automatically.</span> }
+            @if (catalogCachedAt()) { <span>Catalog cached {{ catalogCachedAt() | date:'short' }}</span> }
+            @if (offlineCatalogWarning()) {
+              <span>Reconnect soon: offline selling will stop when this catalog reaches 12 hours old.</span>
+            }
+            @if (offlineCatalogBlocked()) {
+              <span>Offline selling is blocked until prices and stock are refreshed online.</span>
+            }
+          </div>
+        }
+        @if (rejectedSales() > 0) {
+          <div class="offline-notice rejected">{{ rejectedSales() }} rejected offline sale(s) require manager review before shift close.</div>
+        }
+        @if (unresolvedCards().length > 0) {
+          <div class="offline-notice rejected card-check-notice">
+            {{ unresolvedCards().length }} card payment(s) need checking.
+            <button type="button" class="link-button" (click)="openCardCheck()">Card payments to check</button>
+          </div>
+        }
+        @if (pendingSales() > 0) {
+          <div class="offline-notice" [class.rejected]="oldestPendingAgeMs() > 600000" [class.warn]="oldestPendingAgeMs() > 120000 && oldestPendingAgeMs() <= 600000">
+            {{ pendingSales() }} sale(s) waiting to sync — oldest queued {{ formatAge(oldestPendingAgeMs()) }} ago. Last synced {{ formatSyncTime(lastSyncAt()) }}.
+          </div>
+        }
+        @if (persistentStorage() === false) {
+          <div class="offline-notice rejected">
+            This browser could not guarantee persistent local storage — queued offline sales may be at risk if the browser clears site data. Avoid private/incognito mode on this register.
+          </div>
+        }
+        <section class="workspace">
+          <div class="catalog-panel">
+            <div class="catalog-tools">
+              <label class="search-box">
+                <span>SEARCH <kbd class="key-badge">F2</kbd></span>
+                <input
+                  #searchInputRef
+                  [(ngModel)]="searchQuery"
+                  (ngModelChange)="queueSearch()"
+                  placeholder="Product name, SKU, or barcode"
+                  autocomplete="off"
+                />
+              </label>
+              <form class="scanner-box" (submit)="$event.preventDefault(); scanBarcode()">
+                <span>BARCODE</span>
+                <input [(ngModel)]="barcode" name="barcode" placeholder="Scan and press Enter" autocomplete="off" />
+              </form>
+            </div>
+
+            <div class="catalog-heading">
+              <div>
+                <span class="eyebrow">CATALOG</span>
+                <h1>{{ searchQuery ? 'Search results' : 'Available products' }}</h1>
+              </div>
+              <span>{{ productGroups().length }} items &middot; {{ products().length }} variants</span>
+            </div>
+
+            @if (availableSizes().length || availableColors().length) {
+              <div class="catalog-filters">
+                @if (availableSizes().length) {
+                  <label class="filter-select">
+                    <span>SIZE</span>
+                    <select [ngModel]="filterSize() || ''" (ngModelChange)="setSizeFilter($event)">
+                      <option value="">All sizes</option>
+                      @for (size of availableSizes(); track size) {
+                        <option [value]="size">{{ size }}</option>
+                      }
+                    </select>
+                  </label>
+                }
+                @if (availableColors().length) {
+                  <label class="filter-select">
+                    <span>COLOR</span>
+                    <select [ngModel]="filterColor() || ''" (ngModelChange)="setColorFilter($event)">
+                      <option value="">All colors</option>
+                      @for (color of availableColors(); track color) {
+                        <option [value]="color">{{ color }}</option>
+                      }
+                    </select>
+                  </label>
+                }
+              </div>
+            }
+
+            <div class="product-grid product-grid--items">
+              @for (group of productGroups(); track group.id) {
+                <button
+                  class="product-card product-card--item"
+                  type="button"
+                  [disabled]="group.stock <= 0 && !groupAvailableElsewhere(group)"
+                  (click)="openVariantPicker(group)"
+                >
+                  <div class="product-visual">
+                    @if (productGroupImage(group)) {
+                      <img [src]="productGroupImage(group)" [alt]="group.title" />
+                    } @else {
+                      <span>{{ group.title.slice(0, 1) }}</span>
+                    }
+                    <i [class.low]="group.stock > 0 && group.stock <= 3" [class.elsewhere]="group.stock <= 0 && groupAvailableElsewhere(group)">
+                      {{ group.stock > 0 ? group.stock + ' in stock' : (groupAvailableElsewhere(group) ? 'Other locations' : 'Sold out') }}
+                    </i>
+                  </div>
+                  <div class="product-copy">
+                    <strong>{{ group.title }}</strong>
+                    <small>
+                      {{ group.items.length }} variant{{ group.items.length === 1 ? '' : 's' }}
+                      &middot;
+                      choose size/color
+                    </small>
+                    <b>{{ groupPriceLabel(group) }}</b>
+                  </div>
+                </button>
+              } @empty {
+                <div class="empty-catalog">
+                  <b>No matching products</b>
+                  <span>Try another name, SKU, or barcode.</span>
+                </div>
+              }
+            </div>
+
+            <ap-pagination
+              [page]="productPage()"
+              [pageSize]="40"
+              [total]="productTotal()"
+              [totalPages]="productTotalPages()"
+              [showSizeSelector]="false"
+              (pageChange)="onProductPageChange($event)"
+            />
+          </div>
+        </section>
+      </div>
+
+      <aside class="cart-panel">
+        <div class="cart-title">
+          <div>
+            <span class="eyebrow">CURRENT SALE</span>
+            <h2>Cart</h2>
+          </div>
+          <div class="cart-title-actions">
+            <span>{{ cartCount() }} item{{ cartCount() === 1 ? '' : 's' }}</span>
+            <button type="button" class="link-button" (click)="startNewSale()">New sale <kbd class="key-badge">F5</kbd></button>
+          </div>
+        </div>
+
+        @if (cart().length) {
+          <p class="cart-keys-hint"><kbd class="key-badge">&uarr;&darr;</kbd> select · <kbd class="key-badge">Delete</kbd> remove</p>
+        }
+        <div class="cart-lines">
+          @for (line of cart(); track line.item.variantId) {
+            <article class="cart-line" [class.selected]="selectedLineId() === line.item.variantId" (click)="selectCartLine(line.item.variantId)">
+              <div class="line-top">
+                <div>
+                  <strong>{{ line.item.name }}</strong>
+                  <small>{{ line.item.variant || line.item.sku }}</small>
+                </div>
+                <button type="button" (click)="$event.stopPropagation(); removeLine(line.item.variantId)" aria-label="Remove item">Remove</button>
+              </div>
+              <div class="line-bottom">
+                <div class="stepper">
+                  <button type="button" (click)="changeQuantity(line.item.variantId, -1)">-</button>
+                  <span>{{ line.quantity }}</span>
+                  <button type="button" (click)="changeQuantity(line.item.variantId, 1)" [disabled]="line.quantity >= line.item.stock">+</button>
+                </div>
+                <b>{{ formatMoney(line.item.priceCents * line.quantity) }}</b>
+              </div>
+            </article>
+          } @empty {
+            <div class="empty-cart">
+              <span class="empty-symbol">+</span>
+              <b>Your cart is ready</b>
+              <p>Tap a product or scan a barcode to begin.</p>
+            </div>
+          }
+        </div>
+
+        <div class="cart-totals">
+          <!--
+            No tax line, and no subtotal line while it equals the total.
+            Qatar has no sales tax (owner decision, 2026-08-01), so a permanent
+            "Tax QAR 0.00" row was telling the cashier nothing, and a subtotal
+            identical to the total is noise. Both come back on their own terms
+            if discounts land (docs/25 Phase 6), where subtotal and total
+            genuinely differ.
+          -->
+          <div class="grand-total"><span>Total</span><b>{{ formatMoney(totalCents()) }}</b></div>
+          <button class="checkout-button" type="button" [disabled]="!cart().length || busy() || offlineCatalogBlocked()" (click)="beginPayment()">
+            Take payment
+            <span>{{ formatMoney(totalCents()) }} <kbd class="key-badge key-badge--dark">F4</kbd></span>
+          </button>
+          <small>Receipt {{ receiptBlock() ? '#' + receiptBlock()!.next : 'number unavailable' }}</small>
+        </div>
+      </aside>
+    </section>
+  }
+
+  @if (selectedProductGroup(); as group) {
+    <div class="modal-backdrop" (click)="closeVariantPicker()">
+      <section class="variant-picker" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" aria-label="Close" (click)="closeVariantPicker()">&times;</button>
+        <span class="eyebrow">SELECT VARIANT</span>
+        <h2>{{ group.title }}</h2>
+
+        <div class="variant-color-list">
+          @for (color of selectedVariantColorGroups(); track color.key) {
+            <button
+              class="variant-color-button"
+              type="button"
+              [class.active]="selectedVariantColorGroup().key === color.key"
+              [style.--variant-color]="colorCssFor(color.label)"
+              [title]="color.label + ' · ' + color.stock + ' in stock'"
+              (click)="chooseVariantColor(color.key)"
+            >
+              @if (colorSwatchImageFor(color.label); as swatchImage) {
+                <img
+                  [src]="swatchImage"
+                  [alt]="color.label"
+                  style="width:24px;height:24px;flex:0 0 24px;border:1px solid rgba(23,34,31,.14);border-radius:50%;object-fit:cover;box-shadow:inset 0 0 0 3px rgba(255,255,255,.5)"
+                />
+              } @else {
+                <span
+                  [style.background]="colorCssFor(color.label)"
+                  style="width:24px;height:24px;flex:0 0 24px;border:1px solid rgba(23,34,31,.14);border-radius:50%;box-shadow:inset 0 0 0 3px rgba(255,255,255,.5)"
+                ></span>
+              }
+              <span>{{ color.label }}</span>
+            </button>
+          }
+        </div>
+
+        <div class="variant-size-pane">
+          @if (selectedColorHasNoSizes()) {
+            <!-- This color has a single no-size variant (bags/accessories that don't vary by size) — already auto-selected, nothing to pick here. -->
+          } @else if (selectedVariantColorGroup(); as selectedColor) {
+            <div class="variant-size-heading">
+              <span class="variant-pane-label">Sizes</span>
+            </div>
+
+            <div class="variant-size-grid">
+              @for (product of selectedColor.items; track product.variantId) {
+                <button
+                  class="variant-size-button"
+                  type="button"
+                  [class.active]="selectedVariant()?.variantId === product.variantId"
+                  [disabled]="product.stock <= 0"
+                  (click)="chooseVariantSize(product)"
+                >
+                  <strong>{{ sizeLabel(product) }}</strong>
+                  @if (product.material) { <em>{{ product.material }}</em> }
+                  <div
+                    [title]="stockGaugeLabel(product)"
+                    style="height:4px;overflow:hidden;background:#ede8dc"
+                  >
+                    <i
+                      [style.background]="product.stock > 0 && product.stock <= 3 ? 'var(--pos-orange)' : 'var(--pos-green)'"
+                      [style.width.%]="stockGaugePercent(product, selectedColor.items)"
+                      style="display:block;height:100%"
+                    ></i>
+                  </div>
+                  <span [class.low]="product.stock > 0 && product.stock <= 3">{{ stockGaugeLabel(product) }}</span>
+                  @if (product.availability?.length) {
+                    <small class="variant-elsewhere" [title]="elsewhereLabel(product)">{{ elsewhereLabel(product) }}</small>
+                  }
+                  @if (product.heldOnline) {
+                    <small class="variant-held">{{ product.heldOnline }} held online</small>
+                  }
+                  <b>{{ formatMoney(product.priceCents) }}</b>
+                </button>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="variant-add-bar">
+          @if (selectedVariant(); as selected) {
+            <div style="display:grid;gap:4px">
+              <strong style="font-family:Georgia,serif;font-size:24px;font-weight:500">{{ selectedColorHasNoSizes() ? group.title : sizeLabel(selected) }}</strong>
+              <span style="color:#737c78;font-size:10px">{{ formatMoney(selected.priceCents) }} each · {{ formatMoney(selectedVariantTotalCents()) }} total</span>
+            </div>
+            <div class="variant-summary-actions">
+              <div class="qty-stepper">
+                <button type="button" aria-label="Decrease quantity" [disabled]="selectedVariantQuantity() <= 1" (click)="changeSelectedVariantQuantity(-1)">-</button>
+                <span>{{ selectedVariantQuantity() }}</span>
+                <button type="button" aria-label="Increase quantity" [disabled]="selectedVariantQuantity() >= selectedVariantMaxQuantity()" (click)="changeSelectedVariantQuantity(1)">+</button>
+              </div>
+              <button class="add-to-cart" type="button" [disabled]="selectedVariantMaxQuantity() <= 0" (click)="addSelectedVariant()">Add to cart · {{ formatMoney(selectedVariantTotalCents()) }}</button>
+            </div>
+          } @else {
+            <span>Select a size to continue</span>
+            <button class="add-to-cart" type="button" disabled>Add to cart</button>
+          }
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (paymentOpen()) {
+    <div class="modal-backdrop" (click)="closePaymentSheet()">
+      <section class="payment-sheet" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" aria-label="Close" [disabled]="cardBusy() || cardPhase() === 'unknown'" (click)="closePaymentSheet()">&times;</button>
+        <span class="eyebrow">PAYMENT</span>
+        <h2>{{ formatMoney(totalCents()) }}</h2>
+
+        <!--
+          Customer is optional and walk-in is the default: a queue at the till
+          must never wait on data entry. Linking is one search away, and the
+          customer found here is the same record the website uses.
+        -->
+        <div class="customer-block">
+          @if (selectedCustomer(); as customer) {
+            <div class="customer-linked">
+              <div>
+                <b>{{ customer.name }}</b>
+                <span>{{ customer.phone || customer.email }}</span>
+                @if (customer.ordersCount > 0) {
+                  <span class="customer-history">{{ customer.ordersCount }} previous order(s) · {{ formatMoney(customer.ltvCents) }} lifetime</span>
+                }
+              </div>
+              <button type="button" class="link-button" (click)="clearCustomer()">Remove</button>
+            </div>
+          } @else if (!online()) {
+            <div class="customer-offline">Sale will be recorded as walk-in. Customers can only be looked up online.</div>
+          } @else if (customerCreateOpen()) {
+            <div class="customer-create">
+              <label><span>Name</span><input [(ngModel)]="newCustomerName" placeholder="Customer name" /></label>
+              <label><span>Phone</span><input [(ngModel)]="newCustomerPhone" inputmode="tel" placeholder="+974 …" /></label>
+              <label><span>Email (optional)</span><input [(ngModel)]="newCustomerEmail" inputmode="email" placeholder="For emailed receipts" /></label>
+              <div class="customer-create-actions">
+                <button type="button" class="link-button" (click)="customerCreateOpen.set(false)">Cancel</button>
+                <button type="button" class="secondary-action" [disabled]="customerSaving() || !newCustomerName.trim()" (click)="createCustomer()">
+                  {{ customerSaving() ? 'Saving…' : 'Save customer' }}
+                </button>
+              </div>
+            </div>
+          } @else {
+            <label class="customer-search">
+              <span>Customer (optional) <kbd class="key-badge">F6</kbd></span>
+              <input #customerInputRef [(ngModel)]="customerQuery" (ngModelChange)="queueCustomerSearch()" placeholder="Phone, name, or email" />
+            </label>
+            @if (customerSearching()) {
+              <div class="customer-hint">Searching…</div>
+            } @else if (customerResults().length) {
+              <ul class="customer-results">
+                @for (customer of customerResults(); track customer.customerId) {
+                  <li>
+                    <button type="button" (click)="linkCustomer(customer)">
+                      <b>{{ customer.name }}</b>
+                      <span>{{ customer.phone || customer.email }}</span>
+                      @if (customer.ordersCount > 0) { <span class="customer-history">{{ customer.ordersCount }} order(s)</span> }
+                    </button>
+                  </li>
+                }
+              </ul>
+            } @else if (customerQuery.trim().length >= 3) {
+              <div class="customer-hint">
+                No match.
+                <button type="button" class="link-button" (click)="openCustomerCreate()">Add as a new customer</button>
+              </div>
+            }
+          }
+        </div>
+
+        <div class="payment-methods" role="radiogroup" aria-label="Payment method">
+          @for (method of paymentOptions; track method) {
+            <button
+              type="button"
+              role="radio"
+              [attr.aria-checked]="paymentMethod() === method"
+              [class.active]="paymentMethod() === method"
+              (click)="selectPayment(method)"
+            >
+              <b>{{ t('payment.method.' + method) }}</b>
+              <span>{{ t('pos.payment.hint.' + method) }}</span>
+            </button>
+          }
+        </div>
+        @if (paymentMethod() === 'cash') {
+          <label class="money-field tendered-field">
+            <span>Cash received</span>
+            <div><b>QAR</b><input [(ngModel)]="tendered" inputmode="decimal" /></div>
+          </label>
+          <div class="change-row"><span>Change due</span><strong>{{ formatMoney(changeCents()) }}</strong></div>
+        } @else if (paymentMethod() === 'card' && cardTerminalActive()) {
+          <!-- Integrated till (docs/39): the amount goes to the QNB terminal,
+               the customer pays there, and the sale completes on approval. -->
+          <div class="card-terminal" [attr.data-phase]="cardPhase()" aria-live="polite">
+            <div class="card-terminal-status">
+              <span class="card-terminal-chip" [class.offline]="cardBridgeReachable() === false">
+                {{ cardBridgeReachable() === false ? 'Card machine not connected' : 'Card machine ready' }}
+              </span>
+              @if (cardBridgeHealth()?.mode === 'simulator') { <span class="card-terminal-chip sim">Simulator</span> }
+            </div>
+            @switch (cardPhase()) {
+              @case ('ready') {
+                <p class="card-terminal-lead">Press <b>Charge</b>, then hand the card machine to the customer.</p>
+              }
+              @case ('waiting') {
+                <p class="card-terminal-message">{{ cardTerminalText() }}</p>
+                <small>To cancel, press the red key on the card machine.</small>
+              }
+              @case ('checking') {
+                <p class="card-terminal-message">Connection lost. Checking with the card machine…</p>
+                <small>Do not charge the card again.</small>
+              }
+              @case ('declined') {
+                <p class="card-terminal-message declined" role="alert">{{ cardDecline() }}</p>
+              }
+              @case ('unknown') {
+                <p class="card-terminal-message declined" role="alert">{{ cardDecline() }}</p>
+                <button type="button" class="secondary-action" (click)="recheckCardPayment()">Check again</button>
+              }
+            }
+            @if (cardPhase() === 'ready' || cardPhase() === 'declined') {
+              <button type="button" class="link-button" (click)="useManualCard()">Card machine not working? Enter manually</button>
+            }
+          </div>
+        } @else if (paymentMethod() === 'card') {
+          @if (cardIntegrated()) {
+            <div class="card-confirmation">
+              Manual entry: this sale is flagged for the card reconciliation.
+              <button type="button" class="link-button" (click)="useCardTerminal()">Use the card machine</button>
+            </div>
+          }
+          <div class="card-confirmation">
+            Confirm the payment on the external card terminal before completing this sale.
+            @if (!online()) { <b> Offline card confirmation cannot be verified by Elite until synchronization.</b> }
+          </div>
+          <label class="money-field terminal-reference-field">
+            <span>Terminal reference / approval code</span>
+            <input [ngModel]="terminalReference" (ngModelChange)="onPaymentReferenceInput($event)" placeholder="From the terminal receipt slip" autocomplete="off" />
+          </label>
+          @if (paymentReferenceError(); as problem) { <small class="payment-reference-error" role="alert">{{ problem }}</small> }
+        } @else {
+          <!-- Sadad has no link to the till: the cashier charges this exact
+               amount in the Sadad merchant app and types back its transaction
+               ID. The server requires the ID and rejects one already used. -->
+          <div class="sadad-charge">
+            <span>Charge in Sadad</span>
+            <strong>{{ formatMoney(totalCents()) }}</strong>
+          </div>
+          <div class="card-confirmation">
+            Ask the customer to pay by Sadad, then check it shows Paid in the Sadad merchant app.
+            @if (!online()) { <b> Offline Sadad confirmation cannot be verified by Elite until synchronization.</b> }
+          </div>
+          <label class="money-field terminal-reference-field">
+            <span>Sadad transaction ID</span>
+            <input
+              [ngModel]="terminalReference"
+              (ngModelChange)="onPaymentReferenceInput($event)"
+              placeholder="From the Sadad merchant app"
+              maxlength="40"
+              autocomplete="off"
+              autocapitalize="characters"
+              spellcheck="false"
+              [attr.aria-invalid]="!!(paymentReferenceError() || paymentReferenceProblem('sadad', terminalReference))"
+              aria-describedby="sadad-reference-error"
+            />
+          </label>
+          @if (paymentReferenceError() || paymentReferenceProblem('sadad', terminalReference); as problem) {
+            <small id="sadad-reference-error" class="payment-reference-error" role="alert">{{ problem }}</small>
+          }
+        }
+        <button
+          class="primary-action"
+          type="button"
+          [disabled]="busy() || offlineCatalogBlocked() || !paymentReady()"
+          (click)="completeSale()"
+        >
+          @if (cardTerminalActive()) {
+            {{ cardBusy() ? 'Waiting for the card machine…' : busy() ? 'Saving sale…' : cardPhase() === 'declined' ? 'Try again' : 'Charge ' + formatMoney(totalCents()) }}
+          } @else {
+            {{ busy() ? 'Posting sale...' : 'Complete sale' }}
+          }
+        </button>
+      </section>
+    </div>
+  }
+
+  @if (lastSale(); as sale) {
+    <div class="modal-backdrop receipt-backdrop">
+      <section class="receipt-card">
+        <div class="success-mark">OK</div>
+        <span class="eyebrow">SALE COMPLETE</span>
+        <h2>{{ formatMoney(sale.totalCents) }}</h2>
+        <dl>
+          <div><dt>Receipt</dt><dd>#{{ sale.receiptNumber }}</dd></div>
+          <div><dt>Order</dt><dd>{{ sale.orderNumber }}</dd></div>
+          <div><dt>Payment</dt><dd>{{ paymentLabel(sale.paymentMethod) }}</dd></div>
+          @if (sale.paymentMethod === 'sadad' && sale.terminalReference) {
+            <div><dt>Sadad ID</dt><dd>{{ sale.terminalReference }}</dd></div>
+          }
+          @if (sale.card) {
+            <div><dt>Card</dt><dd>{{ cardLabel(sale.card) }}</dd></div>
+            <div><dt>Approval</dt><dd>{{ sale.card.authCode }}</dd></div>
+          }
+          @if (sale.changeGivenCents > 0) {
+            <div><dt>Change</dt><dd>{{ formatMoney(sale.changeGivenCents) }}</dd></div>
+          }
+        </dl>
+        <button class="primary-action" type="button" (click)="closeReceipt()">New sale <kbd class="key-badge key-badge--dark">F5</kbd></button>
+        <button class="secondary-action" type="button" (click)="reprintLastSale()">Print again</button>
+        <small>{{ sale.status === 'pending-sync' ? 'Saved offline and waiting to synchronize.' : 'Saved in Elite.' }}</small>
+      </section>
+    </div>
+  }
+
+  @if (shortcutsHelpOpen()) {
+    <div class="modal-backdrop" (click)="shortcutsHelpOpen.set(false)">
+      <section class="utility-sheet compact" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" aria-label="Close" (click)="shortcutsHelpOpen.set(false)">&times;</button>
+        <span class="eyebrow">KEYBOARD</span>
+        <h2>Shortcuts</h2>
+        <ul class="shortcuts-list">
+          @for (shortcut of shortcutList; track shortcut.keys) {
+            <li>
+              <kbd class="key-badge">{{ shortcut.keys }}</kbd>
+              <span>{{ shortcut.label }}</span>
+            </li>
+          }
+        </ul>
+        <small class="shortcuts-note">These sit on top of the touchscreen — every action here also works by tapping.</small>
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'park') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet compact" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
+        <span class="eyebrow">PARK SALE</span>
+        <h2>Hold this cart</h2>
+        <label>Reference<input [(ngModel)]="parkLabel" placeholder="Customer or note" maxlength="80" /></label>
+        <button class="primary-action" type="button" [disabled]="busy()" (click)="parkCurrentCart()">Park {{ cartCount() }} item(s)</button>
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'parked') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
+        <span class="eyebrow">PARKED SALES</span>
+        <h2>Resume a cart</h2>
+        <div class="parked-list">
+          @for (parked of parkedCarts(); track parked.parkedCartId) {
+            <button type="button" (click)="restoreParkedCart(parked)">
+              <span><b>{{ parked.label || 'Unlabelled sale' }}</b><small>{{ parked.payload.items.length }} lines · {{ parked.updatedAt | date:'short' }}</small></span>
+              <strong>Resume</strong>
+            </button>
+          } @empty { <p class="utility-empty">No parked sales for this cashier.</p> }
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'operations') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet operations-sheet" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
+        <span class="eyebrow">POST-SALE CORRECTION</span>
+        <h2>Refund or void</h2>
+        <div class="lookup-row">
+          <input [(ngModel)]="transactionLookup" placeholder="Receipt number or transaction ID" />
+          <button type="button" [disabled]="busy()" (click)="lookupTransaction()">Find</button>
+        </div>
+        @if (operationTransaction(); as transaction) {
+          <div class="transaction-summary">
+            <span>#{{ transaction.receiptNumber }}</span><b>{{ formatMoney(transaction.totalCents) }}</b><em>{{ transaction.status }}</em>
+            <button type="button" class="reprint-action" [disabled]="busy()" (click)="reprintLookedUpTransaction()">Reprint receipt</button>
+          </div>
+          <div class="refund-lines">
+            @for (item of transaction.items || []; track item.id) {
+              <div>
+                <span><b>{{ item.name }}</b><small>{{ item.refundableQty }} refundable</small></span>
+                <label>Qty<input type="number" min="0" [max]="item.refundableQty" [ngModel]="refundQuantities[item.id] || 0" (ngModelChange)="refundQuantities[item.id] = +$event" /></label>
+                <label class="restock-check"><input type="checkbox" [ngModel]="refundRestock[item.id] !== false" (ngModelChange)="refundRestock[item.id] = $event" /> Restock</label>
+              </div>
+            }
+          </div>
+          <label>Reason<input [(ngModel)]="correctionReason" name="correctionReason" placeholder="Required permanent reason" autocomplete="off" /></label>
+          @if (cardCorrectionOnTerminal(transaction)) {
+            <div class="card-confirmation correction-card-note">Paid on the card machine ({{ cardLabel(transaction.card) }}). A void or refund runs there too; for a refund the customer presents their card.</div>
+          } @else if (transaction.paymentMethod === 'card') {
+            <!-- The card terminal here is standalone (docs/12, "Card") — a
+                 refund needs its own action on it, and this reference is the
+                 only proof it actually happened, same as the original sale. -->
+            <label>Refund terminal reference<input [(ngModel)]="refundTerminalReference" name="refundTerminalReference" placeholder="From the terminal's refund slip" autocomplete="off" /></label>
+          } @else if (transaction.paymentMethod === 'sadad') {
+            <!-- Sadad refunds are issued in the Sadad merchant panel; its
+                 refund transaction ID is the proof, same as the card slip. -->
+            <label>Sadad refund transaction ID<input [(ngModel)]="refundTerminalReference" name="refundTerminalReference" placeholder="From the Sadad merchant panel" maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false" /></label>
+          }
+          <!-- autocomplete="one-time-code" is the only value Chrome honours on a
+               password input: with plain autocomplete="off" the password manager
+               filled the account email into Reason and the saved login password
+               into the PIN box, so every override failed with PIN_INVALID. -->
+          @if (managerPinConfigured()) {
+            <label>Manager PIN<input [(ngModel)]="managerPin" name="correctionManagerPin" type="password" inputmode="numeric" maxlength="8" autocomplete="one-time-code" /></label>
+          } @else {
+            <small class="pin-not-required-hint">No manager PIN is set up for this store yet — approved automatically. Set one in Settings, General, Manager PIN for stricter approval.</small>
+          }
+          <div class="correction-actions">
+            <button type="button" [disabled]="busy() || transaction.status !== 'completed' || (needsCorrectionReference(transaction) && !refundTerminalReference.trim())" (click)="refundCurrentTransaction()">Refund selected</button>
+            <button class="danger-action" type="button" [disabled]="busy() || transaction.status !== 'completed' || !!transaction.refunds?.length" (click)="voidCurrentTransaction()">Void entire sale</button>
+          </div>
+        }
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'hardware') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet compact" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
+        <span class="eyebrow">QZ TRAY</span>
+        <h2>Receipt hardware</h2>
+        <label>Printer name
+          <div class="printer-scan-row">
+            <input [(ngModel)]="hardwarePrinter" placeholder="Exact QZ printer name" list="discovered-printers" />
+            <button type="button" [disabled]="discoveringPrinters()" (click)="discoverPrinters()">
+              {{ discoveringPrinters() ? 'Scanning…' : 'Scan' }}
+            </button>
+          </div>
+          <datalist id="discovered-printers">
+            @for (name of discoveredPrinters(); track name) {
+              <option [value]="name"></option>
+            }
+          </datalist>
+          @if (discoveredPrinters().length > 1) {
+            <div class="printer-scan-hint">{{ discoveredPrinters().length }} printers found — pick one from the list.</div>
+          }
+        </label>
+        <label>Offline device signer<input [(ngModel)]="hardwareSignerUrl" placeholder="http://127.0.0.1:8182" /></label>
+        <label>Cash drawer
+          <select [(ngModel)]="hardwareDrawerPulse">
+            <option value="epson-pin-2">ESC/POS pin 2</option>
+            <option value="epson-pin-5">ESC/POS pin 5</option>
+            <option value="disabled">Disabled</option>
+          </select>
+        </label>
+        <button class="primary-action" type="button" [disabled]="busy()" (click)="saveHardware()">Save and connect</button>
+
+        <div class="card-terminal-settings">
+          <h3>Card machine (QNB)</h3>
+          @if (canManageCardTerminal()) {
+            <div class="card-mode-row" role="radiogroup" aria-label="Card payments on this till">
+              <button type="button" role="radio" [attr.aria-checked]="cardMode() === 'manual'" [class.active]="cardMode() === 'manual'" [disabled]="cardAdminBusy()" (click)="setTillCardMode('manual')">Manual</button>
+              <button type="button" role="radio" [attr.aria-checked]="cardMode() === 'integrated'" [class.active]="cardMode() === 'integrated'" [disabled]="cardAdminBusy()" (click)="setTillCardMode('integrated')">Linked to this till</button>
+            </div>
+          }
+          @if (cardIntegrated()) {
+            <p class="muted-note">
+              @if (cardBridgeHealth(); as health) {
+                Card bridge {{ health.version }} on {{ health.comPort }}, {{ health.connected ? 'connected' : 'not connected' }}{{ health.mode === 'simulator' ? ' (simulator)' : '' }}.
+              } @else {
+                The card bridge is not running on this computer. Install it with install-windows.ps1 (see the hardware runbook).
+              }
+            </p>
+            <label>Bridge key
+              <div class="printer-scan-row">
+                <input [(ngModel)]="cardBridgeKey" type="password" autocomplete="off" placeholder="Printed by the bridge installer" />
+                <button type="button" (click)="saveCardBridgeKey()">Save</button>
+              </div>
+            </label>
+            @if (canManageCardTerminal() && cardPorts().length) {
+              <label>Serial port
+                <div class="printer-scan-row">
+                  <select [(ngModel)]="cardPort">
+                    @for (port of cardPorts(); track port) { <option [value]="port">{{ port }}</option> }
+                  </select>
+                  <button type="button" [disabled]="cardAdminBusy()" (click)="saveCardPort()">Use</button>
+                </div>
+              </label>
+            }
+            <div class="card-admin-actions">
+              <button type="button" [disabled]="cardAdminBusy()" (click)="cardAdmin('settings')">Test connection</button>
+              <button type="button" [disabled]="cardAdminBusy()" (click)="cardAdmin('logon')">Log on to bank</button>
+              <button type="button" [disabled]="cardAdminBusy()" (click)="cardAdmin('reprintLast')">Reprint last slip</button>
+              <button type="button" [disabled]="cardAdminBusy()" (click)="cardAdmin('summary')">Summary report</button>
+              <button type="button" [disabled]="cardAdminBusy()" (click)="cardAdmin('audit')">Audit report</button>
+              @if (canManageCardTerminal()) {
+                <button type="button" [disabled]="cardAdminBusy()" (click)="cardAdmin('initialize')">Download profile</button>
+                <button type="button" [disabled]="cardAdminBusy()" (click)="cardAdmin('restart')">Restart card machine</button>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="pos-build">
+          <h3>POS version</h3>
+          <p class="muted-note">
+            @if (posBuildRunning()) {
+              This register is running <b>{{ posBuildRunning() }}</b>.
+              @if (posBuildDeployed() && posBuildDeployed() !== posBuildRunning()) {
+                <span class="build-stale">A newer version ({{ posBuildDeployed() }}) is available.</span>
+              } @else if (posBuildDeployed()) {
+                <span>This is the newest version.</span>
+              }
+            } @else {
+              Version unavailable until the offline cache finishes installing.
+            }
+          </p>
+          <button type="button" [disabled]="checkingPosUpdate()" (click)="checkPosUpdate()">
+            {{ checkingPosUpdate() ? 'Checking...' : 'Check for updates' }}
+          </button>
+        </div>
+
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'card-check') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
+        <span class="eyebrow">CARD MACHINE</span>
+        <h2>Card payments to check</h2>
+        @if (!unresolvedCards().length) {
+          <p class="muted-note">Nothing to check. Every card payment on this till is settled.</p>
+        } @else {
+          <p class="muted-note">Each of these reached the card machine but has no matching receipt in Elite. Check with the card machine first; settle by hand only after reading its last slip or audit report.</p>
+          <ul class="card-check-list">
+            @for (attempt of unresolvedCards(); track attempt.utn) {
+              <li>
+                <div>
+                  <b>{{ attempt.kind === 'sale' ? 'Sale' : attempt.kind === 'void' ? 'Void' : 'Refund' }} {{ formatMoney(attempt.amountCents) }}</b>
+                  <span>{{ attempt.status === 'approved' ? (attempt.kind === 'sale' ? 'Approved, no receipt' : 'Approved on the card machine, not saved. Redo it from Refund or void; the card is not run again.') : attempt.status === 'unknown' ? 'Not confirmed' : 'Waiting' }} · {{ attempt.createdAt | date:'shortTime' }}</span>
+                  @if (attempt.maskedPan) { <span>{{ cardLabel(attempt) }} · {{ attempt.authCode }}</span> }
+                </div>
+                <div class="card-check-actions">
+                  @if (attempt.status !== 'approved' || attempt.kind === 'sale') {
+                  <button type="button" [disabled]="cardAdminBusy()" (click)="checkCardAttempt(attempt)">
+                    {{ attempt.status === 'approved' && attempt.kind === 'sale' ? 'Finish sale or reverse charge' : 'Check with card machine' }}
+                  </button>
+                  }
+                  @if (attempt.status !== 'approved') {
+                    <button type="button" class="danger-action" [disabled]="cardAdminBusy() || !cardResolveNote.trim() || (managerPinConfigured() && !cardResolvePin)" (click)="resolveCardByManager(attempt, 'declined')">Mark not charged</button>
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+          <label>Note for "Mark not charged"<input [(ngModel)]="cardResolveNote" placeholder="What the card machine's slip or report shows" autocomplete="off" /></label>
+          @if (managerPinConfigured()) {
+            <label>Manager PIN<input [(ngModel)]="cardResolvePin" type="password" inputmode="numeric" maxlength="8" autocomplete="one-time-code" /></label>
+          }
+        }
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'shift') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet shift-report-sheet" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
+        <span class="eyebrow">X / Z REPORT</span>
+        <h2>Current shift</h2>
+        @if (shiftSummary(); as summary) {
+          <div class="report-grid">
+            <span>Gross <b>{{ formatMoney(summary.grossSalesCents) }}</b></span>
+            <span>Refunds <b>{{ formatMoney(summary.refundTotalCents) }}</b></span>
+            <span>Voids <b>{{ formatMoney(summary.voidTotalCents) }}</b></span>
+            <span>Net <b>{{ formatMoney(summary.netSalesCents) }}</b></span>
+            <span>Cash sales <b>{{ formatMoney(summary.cashSalesCents) }}</b></span>
+            <span>Card sales <b>{{ formatMoney(summary.cardSalesCents) }}</b></span>
+            <span>Sadad sales <b>{{ formatMoney(summary.sadadSalesCents ?? 0) }}</b></span>
+            <span>Cash in <b>{{ formatMoney(summary.cashInCents) }}</b></span>
+            <span>Cash out <b>{{ formatMoney(summary.cashOutCents) }}</b></span>
+            <span>Expected cash <b>{{ formatMoney(summary.expectedCashCents) }}</b></span>
+            <span>Transactions <b>{{ summary.transactionCount }}</b></span>
+          </div>
+          <div class="shift-tool-row">
+            <button type="button" (click)="openCashMovementDialog()">Cash movement</button>
+            <button type="button" (click)="openZHistoryDialog()">Z-report history</button>
+          </div>
+          @if (syncConflicts().length) {
+            <h3>Offline conflicts</h3>
+            @for (conflict of syncConflicts(); track conflict.conflictId) {
+              <div class="conflict-row">
+                <span><b>#{{ conflict.receiptNumber }} · {{ conflict.productName }}</b><small>{{ conflict.type }}</small></span>
+                <button type="button" (click)="resolveSyncConflict(conflict)">Resolve</button>
+              </div>
+            }
+            <label>Resolution note<input [(ngModel)]="conflictResolution" placeholder="How physical stock was reconciled" /></label>
+          }
+          @if (rejectedSales() > 0) {
+            <h3>Rejected offline sales</h3>
+            @for (sale of queuedSales(); track sale.idempotencyKey) {
+              @if (sale.status === 'rejected') {
+                <div class="conflict-row rejected-sale">
+                  <span><b>#{{ sale.receiptNumber }}</b><small>{{ sale.lastError }}</small></span>
+                  <button type="button" (click)="retryRejectedSale(sale)">Retry</button>
+                </div>
+              }
+            }
+          }
+          <label class="money-field"><span>Physical cash</span><div><b>QAR</b><input [(ngModel)]="physicalCash" inputmode="decimal" /></div></label>
+          @if (!shiftSelfCloseAllowed()) {
+            @if (managerPinConfigured()) {
+              <label>Manager PIN<input [(ngModel)]="managerPin" name="zReportManagerPin" type="password" inputmode="numeric" maxlength="8" autocomplete="one-time-code" /></label>
+            } @else {
+              <small class="pin-not-required-hint">No manager PIN is set up for this store yet — approved automatically. Set one in Settings, General, Manager PIN for stricter approval.</small>
+            }
+          }
+          <button class="primary-action" type="button" [disabled]="busy() || pendingSales() > 0 || rejectedSales() > 0" (click)="closeCurrentShift()">Create Z report and close</button>
+        }
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'cash-movement') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet compact" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
+        <span class="eyebrow">CASH DRAWER</span>
+        <h2>Cash movement</h2>
+
+        <label>Type
+          <select [(ngModel)]="cashMovementKind">
+            <option value="paid_in">Paid in</option>
+            <option value="paid_out">Paid out</option>
+            <option value="safe_drop">Safe drop</option>
+            <option value="float_adjust">Float adjust</option>
+            <option value="no_sale_drawer_open">No-sale drawer open</option>
+          </select>
+        </label>
+        @if (cashMovementKind !== 'no_sale_drawer_open') {
+          <label class="money-field"><span>Amount</span><div><b>QAR</b><input [(ngModel)]="cashMovementAmount" inputmode="decimal" /></div></label>
+        }
+        <label>Reason<input [(ngModel)]="cashMovementReason" name="cashMovementReason" placeholder="Required" autocomplete="off" /></label>
+        @if (cashMovementNeedsOverride()) {
+          @if (managerPinConfigured()) {
+            <label>Manager PIN<input [(ngModel)]="cashMovementManagerPin" name="cashMovementManagerPin" type="password" inputmode="numeric" maxlength="8" autocomplete="one-time-code" /></label>
+          } @else {
+            <small class="pin-not-required-hint">No manager PIN is set up for this store yet — approved automatically. Set one in Settings, General, Manager PIN for stricter approval.</small>
+          }
+        }
+        <button class="primary-action" type="button"
+          [disabled]="busy() || !cashMovementReason.trim() || (cashMovementNeedsOverride() && managerPinConfigured() && !cashMovementManagerPin)"
+          (click)="recordCashMovement()">Record movement</button>
+
+        @if (cashMovements().length) {
+          <h3>This shift</h3>
+          <div class="cash-movement-list">
+            @for (movement of cashMovements(); track movement.movementId) {
+              <div class="cash-movement-row">
+                <span class="cash-movement-kind">{{ cashMovementKindLabel(movement.kind) }}</span>
+                <span class="cash-movement-reason">{{ movement.reason }}</span>
+                <b>{{ formatMoney(movement.amountCents) }}</b>
+              </div>
+            }
+          </div>
+        }
+      </section>
+    </div>
+  }
+
+  @if (dialog() === 'z-history') {
+    <div class="modal-backdrop" (click)="dialog.set('none')">
+      <section class="utility-sheet shift-report-sheet" (click)="$event.stopPropagation()">
+        <button class="modal-close" type="button" aria-label="Close" (click)="dialog.set('none')">&times;</button>
+        <span class="eyebrow">HISTORY</span>
+        <h2>Z-reports</h2>
+        @if (loadingZHistory()) {
+          <p class="muted-note">Loading…</p>
+        } @else if (!zReportHistory().length) {
+          <p class="muted-note">No closed shifts yet.</p>
+        } @else {
+          <button type="button" (click)="exportZHistoryCsv()">Export CSV</button>
+          <div class="z-history-list">
+            @for (report of zReportHistory(); track report.zReportId) {
+              <div class="z-history-row">
+                <span>
+                  <b>{{ report.zNumber || (report.createdAt | date:'MMM d, y · HH:mm') }}</b>
+                  <small>{{ report.createdAt | date:'MMM d, y · HH:mm' }} · Net {{ formatMoney(report.netSalesCents) }} · Variance {{ formatMoney(report.varianceCents) }}</small>
+                </span>
+                <div class="z-history-actions">
+                  <button type="button" [disabled]="exportingZReportId() !== null" (click)="downloadZReportExcel(report)">
+                    {{ exportingZReportId() === report.zReportId ? 'Preparing…' : 'Excel' }}
+                  </button>
+                  <button type="button" [disabled]="printingZReportId() !== null" (click)="reprintZReport(report)">
+                    {{ printingZReportId() === report.zReportId ? 'Printing…' : 'Reprint' }}
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </section>
+    </div>
+  }
+</main>

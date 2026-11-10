@@ -2,8 +2,24 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "../../out-tsc/app",
-    "types": []
+    "types": [
+      "node"
+    ]
   },
-  "files": ["src/main.ts"],
-  "include": ["src/**/*.d.ts"]
+  "files": [
+    "src/main.ts",
+    "src/main.server.ts",
+    "src/server.ts"
+  ],
+  "include": [
+    "src/**/*.d.ts"
+  ],
+  "angularCompilerOptions": {
+    "extendedDiagnostics": {
+      "checks": {
+        "nullishCoalescingNotNullable": "suppress",
+        "optionalChainNotNullable": "suppress"
+      }
+    }
+  }
 }

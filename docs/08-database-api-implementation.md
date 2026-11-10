@@ -88,6 +88,11 @@ The implementation added:
 | `server/db/migrations/007_sub_collections.sql` | `ALTER TABLE collections ADD COLUMN parent_id uuid REFERENCES collections(id) ON DELETE SET NULL` + index |
 | `server/db/migrations/009_product_reviews.sql` | `product_reviews` table — rating 1–5, optional contact, indexed by `(tenant_id, product_id, created_at DESC)` |
 | `server/db/migrations/010_color_images.sql` | **Color-image pivot:** `CREATE TABLE product_color_images (tenant_id, product_id, color text, media_id FK, sort_order)` — replaces fragile JSON metadata color linking. `ALTER TABLE ref_colors ADD COLUMN swatch_image_url text` (nullable — for textured leather thumbnail). `ALTER TABLE product_variants ADD COLUMN color_ref_id uuid REFERENCES ref_colors(id) ON DELETE SET NULL` + backfill. |
+| `server/db/migrations/040_ref_color_arabic_names.sql` | **Arabic colour names for receipts:** fills blank `ref_colors.name_ar` from a seed of ~60 catalogue colours, inserts missing `ref_colors` rows only for tenants whose `product_variants` use that colour, and re-backfills blank `pos_transaction_items.color_ar`. Runs every boot from `db/pos-schema.js`; never overwrites Arabic staff entered. A seeded colour deleted in Reference Data while variants still use it comes back on next boot. Supplier codes / unclear trade names (Accadue, Cosmo, Tonka, N10…) are not seeded. |
+| `server/db/migrations/043_pos_sadad_payment.sql` | **Sadad as a third POS tender:** `pos_transactions.sadad_amount_cents` plus named checks `pos_transactions_payment_method_valid` (`cash`/`card`/`sadad`) and `pos_transactions_payment_shape_check` (exactly one tender carries the total); `pos_refunds.method` / `payment_refunds.method` widened (`*_method_valid`); `pos_z_reports.sadad_sales_cents`; partial unique index `payments_pos_sadad_reference_uq` on `(tenant_id, terminal_reference)` for POS Sadad payments (one Sadad transaction ID per sale); `pos_card_reconciliation.method` (`card`/`sadad`) with unique key `pos_card_reconciliation_day_method_key (tenant_id, register_id, business_date, method)`. The unnamed 015 checks are looked up in `pg_constraint` and swapped once (guarded on the new names). Runs every boot from `db/pos-schema.js`. Rollback SQL is in the file's DOWN comment and only works while no Sadad rows exist. |
+| `server/db/migrations/044_pos_z_report_number.sql` | **Z-report closing number:** `pos_z_reports.business_date` (Qatar day the shift opened) and `pos_z_reports.z_number` (`Z-DDMM-YYYY-NNN`, sequence per branch per business date), backfilled for existing closings, plus partial unique index `pos_z_reports_branch_number_uq (tenant_id, branch_id, z_number)`. New closings are numbered in `shift-service.js` `closeShift`. Runs every boot from `db/pos-schema.js`. |
+| `server/db/migrations/048_color_image_primary.sql` | **Colour cover image:** `ALTER TABLE product_color_images ADD COLUMN is_primary boolean NOT NULL DEFAULT false`. The flagged row is the colour's card/cart image; none flagged = lowest `sort_order`. Registered in `ensure-migrations.js`. |
+| `server/db/migrations/047_pos_card_terminal.sql` | **Integrated QNB card terminal:** `pos_card_attempts` (one row per terminal sale/void/refund, keyed `(tenant_id, utn)`; status `pending/approved/declined/cancelled/unknown/reversed`; masked PAN CHECK `^[0-9]{6}X{2,9}[0-9]{4}$`; links to `pos_transactions`/`pos_refunds`/`pos_voids`, one sale per approval via `pos_card_attempts_transaction_uq`); `pos_registers.card_mode` (`manual`/`integrated`) and `card_manual_fallback`; `pos_z_reports.card_batch_status/closed_at/receipt_text`; `payments_qnb_ecr_utn_uq` on `(tenant_id, provider_payment_id) WHERE provider = 'qnb-ecr'`; `pos_manager_overrides` action `card-resolve`. Runs every boot from `db/pos-schema.js`; DOWN in the file. Used by `server/lib/pos/card-terminal-service.js`, `sale-service.js`, `correction-service.js`, `shift-service.js`. |
 | `server/db/ensure-migrations.js` | Idempotent `IF NOT EXISTS` runner — includes all migrations up to 010. Called on every server boot. |
 | `server/db/client.js` | Shared `pg` connection pool |
 | `server/db/tenant.js` | Creates/loads the default white-label tenant + seeds the default admin user |
@@ -271,7 +276,7 @@ Creates one admin per role — `owner`, `admin`, `manager`, `viewer` — and wri
 | Driver selection | `STORAGE_DRIVER=disk` (default). New drivers register in `server/lib/storage.js`. |
 | Local disk path | `server/uploads/` — gitignored. Served as `/uploads/*` via `express.static`. |
 | Max file size | `UPLOAD_MAX_SIZE_BYTES` env (default `52428800` = 50 MB). 413 returned on overflow. |
-| Allowed types | `image/{jpeg,png,webp,gif,avif}` + `.glb` (model/gltf-binary). 415 on mismatch. |
+| Allowed types | `image/{jpeg,png,webp,gif,avif}`. 415 on mismatch. (3D/GLB support was removed — see root commit "remove 3D/GLB".) |
 | Filenames on disk | `<base36-timestamp>-<8 hex>.<ext>` — collision-free and never exposes the user-supplied name. |
 | Tracking on disk | `media_assets.metadata->>'storagePath'` stores the absolute path so DELETE can clean up the file. |
 
@@ -290,6 +295,8 @@ Creates one admin per role — `owner`, `admin`, `manager`, `viewer` — and wri
 | Media library drop zone → real upload + auto-refresh | [pages/media/media.component.ts](../client/projects/admin-portal/src/app/pages/media/media.component.ts) |
 
 Validation runs locally first (same rules the server enforces) so the UI rejects obvious mismatches without a round-trip; the server check is the authority.
+
+**Exception — the product drawer's pre-save gallery.** A brand-new, not-yet-saved product (`P-NEW-*`) has no server-side row for the multipart endpoint to attach to, so its gallery images are base64-encoded and carried inline in the JSON `create-product` request instead — which goes through `express.json({ limit: '10mb' })`, not the 50 MB multer limit above. `MediaUploadService.validate()` takes an optional `maxBytes` override for exactly this: the drawer calls it with a 4 MB per-image / 7 MB combined budget (base64 inflates raw bytes by ~4/3, and the JSON needs headroom for the rest of the form). This path previously had no local validation at all, so an oversized image only failed — with a generic message — at save time, disconnected from the image that caused it.
 
 Touch UX: every upload trigger is a `<label>` wrapping a hidden `<input type="file">`, so phones get the OS file picker on tap without needing drag/drop.
 
@@ -395,6 +402,8 @@ This is used by `server/db/client.js` to connect Express routes to PostgreSQL.
 | `POST` | `/api/admin/orders` | Transaction: `INSERT` order, `INSERT` order items, `INSERT` timeline entry |
 | `PATCH` | `/api/admin/orders/:id/status` | Transaction: `UPDATE` statuses, `INSERT` timeline entry |
 | `POST` | `/api/admin/orders/:id/notes` | `INSERT` internal order note |
+
+**`orders.public_number` generation.** `server/lib/order-number.js` is shared by this route and the storefront checkout (`server/routes/carts.route.js`) — POS sales use a different, DB-sequence-backed number (`docs/12-pos-system.md`, "Receipt Numbers and Idempotency") and don't need this. `generateOrderNumber()` produces a non-sequential `EC-YY-` + 12 digits (a customer or admin should not be able to infer order volume or guess another order's number from their own), and `insertWithRetry()` wraps the `INSERT` in a `SAVEPOINT`, regenerating and retrying (up to 5 times) specifically on a `public_number` collision (`orders_tenant_public_number_key`, `23505`) rather than failing the request — a real duplicate-key error inside a transaction aborts it in Postgres, so the retry rolls back to the savepoint instead of redoing everything from `BEGIN`. Any other error (including an idempotency-key collision, which the caller already handles by returning the existing row) is rethrown unchanged, not retried. Before this, both call sites generated their own number inline with no retry path at all — a collision surfaced as a raw 500 to whoever was checking out.
 
 ### Media
 
@@ -537,7 +546,7 @@ Temporary smoke-test rows were removed after testing where appropriate.
 - **Analytics** — wire `AnalyticsComponent` to `GET /api/admin/analytics/overview`; remove remaining `mock.ts` import
 - **Password reset emails** — `POST /api/auth/forgot` currently logs the reset URL to stdout; wire a real email transport (Resend / SES / SendGrid) in production
 - **Team invitation emails** — `POST /api/admin/settings/invitations` returns `inviteLink` in the response body; the admin copies it manually. Wire email delivery in production
-- **POS backend** — `admin-pos.route.js` is planned but not yet built; see `docs/pos-system-plan.html`
+- **POS production certification** — the backend and cashier UI are implemented; complete physical QZ/printer/drawer/scanner acceptance using [12 – POS System and Integration](./12-pos-system.md) and the [POS Hardware Runbook](./pos-hardware-runbook.md)
 - **S3 / Supabase storage** — currently disk-only; add driver in `server/lib/storage.js` and set `STORAGE_DRIVER` env
 
 ---
@@ -578,3 +587,29 @@ This section maps the admin-portal features shipped in May 2026 onto the tables/
 - Admin pages still on mock data: Media, Storefront, Analytics, Settings. Their services need to be created following the existing `Admin*Service` pattern.
 - Password reset emails: `POST /api/auth/forgot` currently logs the URL to stdout. Wire a real email transport (Resend / SES / SendGrid) and replace the `console.log` in [server/routes/auth.route.js](../server/routes/auth.route.js).
 - No automated backend test suite exists yet.
+
+
+## Migration 039 · Restock availability and alerts (2026-09-14)
+
+`restock_notifications` is tenant- and product-scoped, with cascading foreign keys. Migration 039 adds `color_key`, `attempts`, `next_attempt_at`, `claimed_at`, `claim_token` and unique `unsubscribe_token`; states are `pending`, `sending`, `notified`, `failed`, `cancelled`. The active-request unique index includes both pending and sending requests and normalized colours. A database trigger cancels waiting consent when a product leaves active status. The runtime ensure only checks the schema; `ensureAllMigrations()` runs the SQL file during serialized startup.
+
+| Endpoint / operation | Persistence |
+|---|---|
+| `POST /api/products/:id/restock-notifications` | Locks/validates active product and offered variant, rejects available stock, upserts an open request |
+| `GET /api/restock-notifications/unsubscribe?token=…` | Cancels the token's request without login |
+| `GET /api/admin/restock-requests`, `/summary`, `/export.csv` | Tenant-scoped request rows, grouped demand and current matching stock |
+| `POST /api/admin/restock-requests/:id/resend`, `/:id/cancel` | Schedules retry / cancels consent; cancelled requests cannot be resent |
+| Dispatch / retention worker | Claims due available requests in batches of 50 with `SKIP LOCKED`, retries failed delivery, expires closed/pending requests after 180/365 days |
+
+Apply manually if needed (normal startup also applies it):
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/db/migrations/039_restock_dispatch.sql
+```
+
+For rollback, stop the dispatcher and use the migration's commented `DOWN` section before running an older API. It preserves request history and cancels sending/failed rows; it cannot reverse already-sent email or restore cleaned-up/merged requests. Extract and review that section before applying:
+
+```sh
+sed -n '/^-- DOWN/,$p' server/db/migrations/039_restock_dispatch.sql | sed '1d;s/^-- //' > /tmp/restock-rollback.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/restock-rollback.sql
+```

@@ -1,6 +1,7 @@
 import {
   Component, EventEmitter, Input, OnDestroy, OnInit, Output,
   computed, inject, signal,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -8,12 +9,16 @@ import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
+import { MediaPickerComponent } from '../../shared/media-picker/media-picker.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
-import { Collection, Product } from '../../models';
+import { Collection, MediaFile, Product } from '../../models';
 import { AdminCollectionsService } from '../../services/admin-collections.service';
 import { AdminProductsService } from '../../services/admin-products.service';
+import { ApiClient } from '../../services/api-client.service';
+import { MediaUploadService } from '../../services/media-upload.service';
+import { NO_IMAGE_LOGO, onProductImgError } from '../../utils/no-image';
 
 interface FormShape {
   title: string;
@@ -30,10 +35,9 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
 
 @Component({
-  selector: 'ap-collection-drawer',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, SaveBarComponent],
-  template: `
+    selector: 'ap-collection-drawer',
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, SaveBarComponent, MediaPickerComponent],
+    template: `
     <div class="overlay" (click)="handleClose()"></div>
     <div class="drawer drawer-wide product-drawer" [class.is-dirty]="dirty()">
 
@@ -140,7 +144,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
                (dragover)="onCoverDragOver($event)"
                (drop)="onCoverDrop($event)">
             @if (form().imageUrl) {
-              <img class="cover-preview" [src]="form().imageUrl" [alt]="form().title"/>
+              <img class="cover-preview" [src]="mediaUrl(form().imageUrl)" [alt]="form().title"/>
               <button class="cover-remove-btn" type="button" (click)="set('imageUrl', null)" title="Remove image">
                 <ap-icon name="x" [size]="12"/>
               </button>
@@ -156,8 +160,11 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
             <label class="btn btn-gold btn-sm" style="cursor:pointer;">
               <ap-icon name="upload" [size]="12"/>
               {{ form().imageUrl ? t('collections.cover.replace') : t('collections.cover.upload') }}
-              <input type="file" accept="image/*" hidden (change)="onCoverPick($event)"/>
+              <input type="file" accept="image/*" hidden [disabled]="uploading()" (change)="onCoverPick($event)"/>
             </label>
+            <button class="btn btn-outline btn-sm" type="button" (click)="mediaPickerOpen.set(true)">
+              <ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}
+            </button>
             <button class="btn btn-outline btn-sm" type="button" (click)="addCoverUrl()">
               <ap-icon name="link" [size]="12"/> URL
             </button>
@@ -251,7 +258,7 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
                   <button class="sub-item" (click)="navigateTo(child.id)" [class.sub-hidden]="child.hidden">
                     <div class="sub-thumb">
                       @if (child.imageUrl) {
-                        <img [src]="child.imageUrl" [alt]="child.title"/>
+                        <img [src]="mediaUrl(child.imageUrl)" [alt]="child.title"/>
                       } @else {
                         <ap-icon name="collections" [size]="14"/>
                       }
@@ -343,7 +350,11 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
                        [class.drag-over]="dragOverIndex() === i">
                     <span class="reorder-handle"><ap-icon name="drag" [size]="14"/></span>
                     <span class="reorder-pos">{{ i + 1 }}</span>
-                    <img [src]="p.image" [alt]="p.name" class="reorder-thumb"/>
+                    @if (p.image) {
+                      <img [src]="p.image" [alt]="p.name" class="reorder-thumb" (error)="onImgError($event)"/>
+                    } @else {
+                      <img class="reorder-thumb no-img" [src]="noImageLogo" [alt]="p.name" style="background:var(--surface);"/>
+                    }
                     <div class="reorder-info">
                       <div class="strong small" style="font-size:13px;">{{ p.name }}</div>
                       <div class="muted mono" style="font-size:11px;">{{ p.sku }}</div>
@@ -366,8 +377,12 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
                        (dragover)="onProductDragOver($event)"
                        (drop)="onProductDrop(i, $event)">
                     <div class="prod-img">
-                      <img [src]="p.image" [alt]="p.name"/>
-                      <span class="prod-3d-badge" style="top:8px;inset-inline-start:8px;background:rgba(2,70,56,0.85);">{{ i + 1 }}</span>
+                      @if (p.image) {
+                        <img [src]="p.image" [alt]="p.name" (error)="onImgError($event)"/>
+                      } @else {
+                        <img class="no-img" [src]="noImageLogo" [alt]="p.name"/>
+                      }
+                      <span class="corner-badge" style="top:8px;inset-inline-start:8px;background:rgba(2,70,56,0.85);">{{ i + 1 }}</span>
                       <button class="head-icon-btn" style="position:absolute;top:8px;inset-inline-end:8px;background:rgba(255,255,255,0.9);" (click)="removeProduct(p.id)">
                         <ap-icon name="x" [size]="12"/>
                       </button>
@@ -438,7 +453,11 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
             @for (p of pickerProducts(); track p.id) {
               <div class="picker-row" [class.selected]="form().productIds.includes(p.id)" (click)="toggleProduct(p.id)">
                 <input type="checkbox" [checked]="form().productIds.includes(p.id)" style="pointer-events:none;flex-shrink:0;"/>
-                <img [src]="p.image" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;"/>
+                @if (p.image) {
+                  <img [src]="p.image" [alt]="p.name" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;" (error)="onImgError($event)"/>
+                } @else {
+                  <img class="no-img" [src]="noImageLogo" [alt]="p.name" style="width:36px;height:36px;border-radius:6px;flex-shrink:0;background:var(--surface);"/>
+                }
                 <div style="flex:1;min-width:0;">
                   <div class="strong" style="font-size:13px;">{{ p.name }}</div>
                   <div class="muted small mono">{{ p.sku }}</div>
@@ -453,8 +472,16 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
         </div>
       </div>
     }
+
+    <!-- Cover image: pick from the media library, or upload from inside it. -->
+    <ap-media-picker
+      [open]="mediaPickerOpen()"
+      (picked)="set('imageUrl', $event)"
+      (close)="mediaPickerOpen.set(false)"
+    />
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .drawer-wide { width: min(720px, 100vw); }
     @media (max-width: 720px) { .drawer-wide { width: 100vw; } }
 
@@ -647,9 +674,12 @@ const DRAFT_KEY_PREFIX = 'elite-admin:col-draft:';
     }
     .picker-row:hover { border-color: var(--green); background: rgba(2,70,56,0.03); }
     .picker-row.selected { background: rgba(2,70,56,0.05); border-color: rgba(2,70,56,0.25); }
-  `],
+  `]
 })
 export class CollectionDrawerComponent implements OnInit, OnDestroy {
+  readonly noImageLogo = NO_IMAGE_LOGO;
+  onImgError(e: Event): void { onProductImgError(e); }
+
   private readonly _collections = signal<Collection[]>([]);
   private readonly _currentId = signal<string>('');
 
@@ -672,6 +702,13 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
   private readonly i18n = inject(I18nService);
   private readonly collectionsApi = inject(AdminCollectionsService);
   private readonly productsApi = inject(AdminProductsService);
+  private readonly api = inject(ApiClient);
+  private readonly uploads = inject(MediaUploadService);
+
+  /** True while a cover upload is in flight. */
+  readonly uploading = signal(false);
+  /** Media library panel for choosing an existing cover. */
+  readonly mediaPickerOpen = signal(false);
   readonly t = (k: string): string => this.i18n.t(k);
 
   private readonly initial = signal<FormShape>({ title: '', handle: '', description: '', imageUrl: null, productIds: [], hidden: false, parentId: null });
@@ -759,9 +796,9 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
     try {
       const products = await this.productsApi.list();
       this.products.set(products.filter((product) => !product.hidden));
-    } catch {
+    } catch (caught) {
       this.products.set([]);
-      this.toast.warning(this.t('collections.toast.productsUnavailableTitle'), this.t('collections.toast.productsUnavailable'));
+      this.toast.warningFrom(caught, this.t('collections.toast.productsUnavailableTitle'), this.t('collections.toast.productsUnavailable'));
     }
   }
 
@@ -872,10 +909,55 @@ export class CollectionDrawerComponent implements OnInit, OnDestroy {
     const url = window.prompt(this.t('collections.cover.urlPrompt'), 'https://');
     if (url && url.trim()) this.set('imageUrl', url.trim());
   }
+  /** Covers are stored as `/uploads/...` paths; this resolves one for display. */
+  mediaUrl(path: string | null): string {
+    return this.api.mediaUrl(path || '');
+  }
+
+  /**
+   * Upload the cover and keep only the path the server returns.
+   *
+   * This used to read the file with FileReader and store the `data:` URL
+   * itself, so every cover lived as base64 inside `collections.seo`. The
+   * storefront ships that JSON twice on every page it appears on (once in the
+   * markup, once in the hydration payload): six covers were ~720 kB on each
+   * home and collection page. Uploading also produces the sized variants a
+   * data URL can never have.
+   */
   private readCover(file: File): void {
-    const reader = new FileReader();
-    reader.onload = () => this.set('imageUrl', reader.result as string);
-    reader.readAsDataURL(file);
+    const reason = this.uploads.validate(file);
+    if (reason) {
+      this.toast.error(this.t('storefront.editor.toast.uploadFailed'), reason);
+      return;
+    }
+    this.uploading.set(true);
+    this.uploads.uploadMedia([file]).subscribe({
+      next: (progress) => {
+        if (progress.stage !== 'done') return;
+        this.uploading.set(false);
+        const result = progress.result as MediaFile[] | MediaFile | null | undefined;
+        const item = Array.isArray(result) ? result[0] : result;
+        // The relative path, never `api.mediaUrl()`'s absolute form: in
+        // development that is `http://localhost:3000/...`, which would then be
+        // saved into real data. The storefront resolves `/uploads/` itself.
+        const url = item?.storageUrl || item?.preview || '';
+        if (url) {
+          this.set('imageUrl', url);
+        } else {
+          this.toast.error(
+            this.t('storefront.editor.toast.uploadError'),
+            this.t('storefront.editor.toast.uploadError.sub'),
+          );
+        }
+      },
+      error: (caught) => {
+        this.uploading.set(false);
+        this.toast.errorFrom(caught,
+          this.t('storefront.editor.toast.uploadFailed'),
+          this.t('storefront.editor.toast.uploadFailed.sub'),
+        );
+      },
+    });
   }
 
   // Drag-to-reorder products

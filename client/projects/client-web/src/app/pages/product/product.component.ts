@@ -1,14 +1,24 @@
-import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, RESPONSE_INIT, ViewChild, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
-import { ActivatedRoute, Router } from '@angular/router';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom, Subscription } from 'rxjs';
 import { CartService } from '../../services/cart.service';
 import { ProductsService } from '../../services/products.service';
 import { Product, ProductVariant } from '../../models/product.model';
 import { I18nService } from '../../services/i18n.service';
+import { LocaleService } from '../../services/locale.service';
 import { ReferenceDataService } from '../../services/reference-data.service';
 import { AnalyticsService } from '../../services/analytics.service';
+import { colorKey, colorSlug } from '../../utils/color-slug';
+import { SeoService } from '../../services/seo.service';
+import { API_BASE } from '../../core/api-base';
+
+import { sizeOptions, productSoldOut, defaultColor, colorStock, colorState, availableStock, selectedVariant, productColors, carriedSize } from '../../shared/stock-availability';
+import { displayPrice, priceRange, variantPrice } from '../../shared/product-price';
+import { SizeSheetComponent } from '../../shared/size-sheet/size-sheet.component';
+import { BodyScrollLock, MOBILE_SHEET_QUERY, prefersReducedMotion } from '../../shared/overlay/body-scroll-lock';
+import { RestockService } from '../../shared/restock/restock.service';
 
 interface Accordion {
   id: string;
@@ -35,35 +45,138 @@ interface StorefrontCollectionLink {
   children?: StorefrontCollectionLink[];
 }
 
+interface ReviewFieldErrors {
+  rating?: string;
+  phone?: string;
+  email?: string;
+  contact?: string;
+}
+
 const FALLBACK_IMAGE = '/assets/brand/elite-logo-green.png';
 
+/**
+ * At or below this many left, the stock line switches from silence to "Only n left".
+ *
+ * A front-end constant on purpose: the admin has its own low-stock threshold, but that is for
+ * staff restocking decisions and `/api/config` does not publish it. Wiring it through would mean
+ * a server change for a number that reads differently to a shopper than to a warehouse.
+ */
+const LOW_STOCK_AT = 5;
+
 @Component({
-  selector: 'cw-product',
-  standalone: true,
-  imports: [CommonModule],
-  templateUrl: './product.component.html',
-  styleUrl: './product.component.scss',
+    selector: 'cw-product',
+    imports: [CommonModule, RouterLink, SizeSheetComponent],
+    templateUrl: './product.component.html',
+    /**
+     * `Eager` here was written by the v17 to v22 migration, which preserved the
+     * old framework default rather than making a choice about this component.
+     * It means the whole template is re-evaluated every time change detection
+     * reaches it, and with zone.js that is every touch, scroll and timer on the
+     * page: roughly a hundred translation lookups, the price formatter, the
+     * per-image srcset builders and every loop, on each one. On a phone that is
+     * what the delay between pressing a size and seeing it select is made of.
+     *
+     * Every value this template reads comes from a signal, so OnPush is safe:
+     * the signals read during rendering (including the ones read inside the
+     * methods the template calls) mark the view dirty on their own. Anything
+     * added later that the template must react to has to be a signal too.
+     */
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    styleUrl: './product.component.scss'
 })
 export class ProductComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly http = inject(HttpClient);
+  private readonly scrollLock = inject(BodyScrollLock);
+  private readonly restock = inject(RestockService);
   private readonly cart = inject(CartService);
   private readonly productsSvc = inject(ProductsService);
   private readonly i18n = inject(I18nService);
+  private readonly locale = inject(LocaleService);
   private readonly referenceData = inject(ReferenceDataService);
   private readonly analytics = inject(AnalyticsService);
-  private readonly apiBase = this.resolveApiBase();
+  private readonly seo = inject(SeoService);
+  private readonly apiBase = inject(API_BASE);
+  /** Null in the browser; during a server render it carries the response status. */
+  private readonly responseInit = inject(RESPONSE_INIT, { optional: true });
+
+  /**
+   * Head tags for the product on screen. Null while it loads, so a shared link
+   * never resolves to an empty title.
+   *
+   * The canonical deliberately drops the `?color=` query: each colour is the
+   * same product at the same price, and letting four colour URLs compete would
+   * split whatever ranking the product earns.
+   */
+  private readonly seoTags = this.seo.watch(() => {
+    const p = this.product();
+    if (!p) return null;
+
+    const name = this.i18n.productName(p);
+    const inStock = !productSoldOut(p);
+    // Product copy is rich text, so it is flattened before it goes anywhere
+    // a crawler reads it verbatim.
+    const description = this.seo.plainText(
+      this.productTeaser(p) || this.productDescription(p),
+    ) || this.i18n.t('seo.product.description', {
+      name,
+      leather: this.i18n.productLeather(p.leather),
+      price: this.i18n.price(priceRange(p).min),
+    });
+    const material = this.i18n.productLeather(p.leather).trim();
+
+    return {
+      title: name,
+      description,
+      image: this.gallery()[0],
+      canonicalPath: this.productsSvc.productPath(p),
+      type: 'product' as const,
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name,
+        description,
+        image: this.gallery().slice(0, 6).map((src) => this.seo.absolute(src)),
+        brand: { '@type': 'Brand', name: p.brand?.trim() || this.i18n.t('seo.siteName') },
+        // Omitted rather than emitted empty: a blank property is worse than
+        // an absent one, and not every product has a leather on record.
+        ...(material ? { material } : {}),
+        // A product whose variants are priced differently is an AggregateOffer, not an
+        // Offer: a single `price` that disagrees with what the page and the checkout show
+        // is exactly what gets a product rejected from a merchant feed.
+        offers: (() => {
+          const spread = priceRange(p);
+          const url = `${this.seo.origin()}${this.productsSvc.productPath(p)}`;
+          const availability = inStock
+            ? 'https://schema.org/InStock'
+            : 'https://schema.org/OutOfStock';
+          return spread.isRange
+            ? {
+              '@type': 'AggregateOffer',
+              lowPrice: spread.min,
+              highPrice: spread.max,
+              offerCount: (p.variants || []).filter((v) => v.isActive !== false).length,
+              priceCurrency: 'QAR',
+              availability,
+              url,
+            }
+            : { '@type': 'Offer', price: spread.min, priceCurrency: 'QAR', availability, url };
+        })(),
+      },
+    };
+  });
 
   private feedbackTimer: number | undefined;
   private routeSub?: Subscription;
   private querySub?: Subscription;
   private loadToken = 0;
-  private previousBodyOverflow = '';
-  private bodyScrollLocked = false;
   private thumbStrip?: HTMLElement;
   private thumbStripResizeObserver?: ResizeObserver;
   private thumbStripMutationObserver?: MutationObserver;
+  private gallerySyncFrame: number | undefined;
+  private gallerySwipeStart: { x: number; y: number; pointerId: number } | null = null;
+  private reviewTrigger?: HTMLElement;
 
   readonly accordions: Accordion[] = [
     {
@@ -87,12 +200,15 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly productLoading = signal(true);
   readonly productError = signal('');
   readonly galleryIdx = signal(0);
+  readonly loadedGalleryImages = signal<Record<string, boolean>>({});
   readonly thumbStripCanScrollStart = signal(false);
   readonly thumbStripCanScrollEnd = signal(false);
   readonly selectedSize = signal<number | null>(null);
+  readonly sizeSelectionError = signal(false);
   readonly selectedColor = signal<string | null>(null);
   readonly colorHexByName = this.referenceData.colorHexByName;
   readonly colorSwatchImageByName = this.referenceData.colorSwatchImageByName;
+  readonly colorNameArByName = this.referenceData.colorNameArByName;
   readonly sizeSets = this.referenceData.sizeSets;
   readonly openAccordion = signal<string | null>(null);
   readonly addedFeedback = signal(false);
@@ -104,6 +220,19 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly sizeGuideError = signal('');
   readonly restockFormOpen = signal(false);
   readonly restockEmail = signal('');
+  readonly restockSize = signal<number | null>(null);
+  readonly productSoldOut = productSoldOut;
+  readonly maxQty = computed(() => {
+    const p = this.product();
+    if (!p) return 0;
+    // Before a size is picked, the colour's best stock stands in. Asking `availableStock` with a
+    // null size would answer 0 for every sized product, which would freeze the quantity stepper
+    // and render the restock panel on a product that is perfectly in stock. `selectSize` clamps
+    // the quantity down once a specific size is known.
+    const size = this.selectedSize();
+    return size === null ? colorStock(p, this.selectedColor()) : availableStock(p, this.selectedColor(), size);
+  });
+  readonly restockSizes = computed(() => this.availableSizes().filter(s => s.available && !s.inStock));
   readonly restockSubmitting = signal(false);
   readonly restockSubmitted = signal(false);
   readonly restockError = signal('');
@@ -113,6 +242,8 @@ export class ProductComponent implements OnInit, OnDestroy {
   readonly reviewName = signal('');
   readonly reviewPhone = signal('');
   readonly reviewEmail = signal('');
+  readonly reviewContactConsent = signal(false);
+  readonly reviewFieldErrors = signal<ReviewFieldErrors>({});
   readonly reviewSubmitting = signal(false);
   readonly reviewSubmitted = signal(false);
   readonly reviewError = signal('');
@@ -127,6 +258,8 @@ export class ProductComponent implements OnInit, OnDestroy {
     const images = [...(p.images ?? []), p.image]
       .map((src) => String(src || '').trim())
       .filter(Boolean);
+    const colorGallery = this.colorGalleryImages(p, this.selectedColor(), images);
+    if (colorGallery) return colorGallery;
     const selectedColorImage = this.selectedColor()
       ? this.productImageForColor(p, this.selectedColor() || '', images)
       : null;
@@ -158,47 +291,165 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   readonly availableSizes = computed<AvailableSize[]>(() => {
     const p = this.product();
-    if (!p?.sizes?.length) return [];
+    if (!p) return [];
 
-    const sizes = [...p.sizes].sort((a, b) => a - b);
-    const variants = p.variants || [];
-    const fallbackStock = (p.stock ?? 1) > 0;
-    if (variants.length === 0) {
-      return sizes.map((size) => ({ size, available: true, inStock: fallbackStock }));
-    }
+    // Driven by `sizeOptions`, not `product.sizes`: a product can carry its sizes only on its
+    // variants. Bailing out on an empty `product.sizes` used to render no size UI at all for
+    // those, which left the purchase ungated.
+    const offered = sizeOptions(p, this.selectedColor());
+    return [
+      ...offered.map(s => ({ size: s.size, available: true, inStock: s.state === 'available' })),
+      ...(p.sizes ?? []).filter(size => !offered.some(s => s.size === size)).sort((a, b) => a - b)
+        .map(size => ({ size, available: false, inStock: false })),
+    ];
+  });
+
+  /**
+   * Product-wide note: a fact that holds for every size, so it shows from the
+   * moment the page loads rather than waiting for a size to be picked. Sits
+   * above selectedSizeNote() when both exist — the general statement first,
+   * then the one that only applies to the size in hand.
+   */
+  readonly productNote = computed<string>(() => {
+    const p = this.product();
+    if (!p) return '';
+    const ar = (p.noteAr || '').trim();
+    const en = (p.noteEn || '').trim();
+    return this.locale.locale() === 'ar' ? (ar || en) : (en || ar);
+  });
+
+  /**
+   * Note attached to the size the customer has picked, e.g. "Back zipper" on
+   * the small sizes of a dress whose larger sizes have none. The same gallery
+   * covers the whole range, so this line is what tells the two apart.
+   *
+   * Scoped by colour the same way availableSizes is: a note set on the sage
+   * variant must not surface while the customer is looking at the navy one.
+   * Empty string means the template renders nothing at all.
+   */
+  readonly selectedSizeNote = computed<string>(() => {
+    const p = this.product();
+    const size = this.selectedSize();
+    if (!p || size === null) return '';
 
     const selectedColorKey = this.selectedColor() ? this.colorKey(this.selectedColor() || '') : '';
-    return sizes.map((size) => {
-      const sizeVariants = variants.filter((variant) => Number(variant.size) === size);
-      if (sizeVariants.length === 0) {
-        return { size, available: false, inStock: false };
-      }
-
-      const colorScoped = selectedColorKey && sizeVariants.some((variant) => variant.color)
-        ? sizeVariants.filter((variant) => this.colorKey(variant.color || '') === selectedColorKey)
-        : sizeVariants;
-      const available = colorScoped.length > 0;
-      const inStock = available && colorScoped.some((variant) => Number(variant.stock) > 0);
-      return { size, available, inStock };
+    const matches = (p.variants || []).filter((variant) => {
+      if (Number(variant.size) !== size) return false;
+      if (!selectedColorKey || !variant.color) return true;
+      return this.colorKey(variant.color) === selectedColorKey;
     });
+
+    const isArabic = this.locale.locale() === 'ar';
+    for (const variant of matches) {
+      const ar = (variant.noteAr || '').trim();
+      const en = (variant.noteEn || '').trim();
+      const note = isArabic ? (ar || en) : (en || ar);
+      if (note) return note;
+    }
+    return '';
   });
 
   readonly selectedSizeInStock = computed(() => {
+    return this.maxQty() > 0;
+  });
+
+  /**
+   * Whether there is a size here the customer could actually pick.
+   *
+   * Counts selectable sizes, not rows: `availableSizes()` also lists sizes the product has but
+   * this colour does not offer, as struck-out disabled chips. A colour whose variants carry no
+   * size at all lists every size that way, and counting rows made the purchase gate demand a
+   * size that no chip could satisfy. 30 of the 43 products in the catalogue have such a colour.
+   */
+  readonly hasSizeOptions = computed(() => this.availableSizes().some((option) => option.available));
+
+  /**
+   * How many are left, but only when that is worth saying.
+   *
+   * Silent while stock is comfortable: "Max 10" told a shopper a number they have no use for,
+   * and it sat between the quantity stepper and the buy button as a stray line. It also stays
+   * silent until a size is chosen, because before that `maxQty` is the colour's best size and
+   * would be a promise about the wrong variant. Reuses `cart.stock.onlyLeft`, which the cart
+   * drawer already shows in both languages.
+   */
+  readonly lowStockLeft = computed(() => {
+    if (this.hasSizeOptions() && this.selectedSize() === null) return 0;
+    const left = this.maxQty();
+    return left > 0 && left <= LOW_STOCK_AT ? left : 0;
+  });
+
+  readonly canPurchaseProduct = computed(() => {
     const p = this.product();
     if (!p) return false;
-    if (!p.sizes?.length) {
-      if (p.variants?.length) return p.variants.some(v => v.stock > 0);
-      return (p.stock ?? 1) > 0;
+    // `hasSizeOptions`, not `p.sizes`, so a product whose sizes live on its variants is treated
+    // as sized here too.
+    if (!this.hasSizeOptions()) return this.selectedSizeInStock();
+    if (this.selectedSize() === null) {
+      return this.availableSizes().some((item) => item.available && item.inStock);
     }
-    const size = this.selectedSize();
-    if (!size) return true;
-    const state = this.availableSizes().find((item) => item.size === size);
-    return state ? state.available && state.inStock : false;
+    return this.selectedSizeInStock();
   });
 
   readonly t = (key: string, params?: Record<string, string | number>): string => this.i18n.t(key, params);
   readonly price = (value: number): string => this.i18n.price(value);
+
+  /**
+   * The price for what the customer has chosen: the colour's, narrowing to one size's once
+   * they pick a size. The page used to print the product's own price while the bag charged
+   * the variant's, so a product whose sizes ran 1,000 to 1,300 was advertised at 1,000.
+   */
+  readonly shownPrice = computed(() => {
+    const product = this.product();
+    if (!product) return null;
+    return displayPrice(product, this.selectedColor(), this.selectedSize());
+  });
+
+  readonly shownPriceLabel = computed(() => {
+    const span = this.shownPrice();
+    return span ? this.i18n.priceSpan(span) : '';
+  });
+
+  /** What the CTA charges: the chosen variant's price, or the cheapest on offer until then. */
+  readonly lineTotalLabel = computed(() => {
+    const span = this.shownPrice();
+    if (!span) return '';
+    return this.i18n.price(span.min * this.qty());
+  });
   readonly productName = (product: Product): string => this.i18n.productName(product);
+
+  /**
+   * Long description in the active locale, falling back to the other language
+   * so a product with copy in only one still shows it. Empty means the template
+   * renders the generic house description instead.
+   */
+  productDescription(product: Product): string {
+    const ar = (product.descriptionAr || '').trim();
+    const en = (product.descriptionEn || '').trim();
+    return (this.locale.locale() === 'ar' ? (ar || en) : (en || ar));
+  }
+
+  /**
+   * Short description shown under the product name, locale-aware with a
+   * same-fallback-shape as productDescription. Empty means the template
+   * renders nothing rather than a placeholder line.
+   */
+  productTeaser(product: Product): string {
+    const ar = (product.teaserAr || '').trim();
+    const en = (product.teaserEn || '').trim();
+    return (this.locale.locale() === 'ar' ? (ar || en) : (en || ar));
+  }
+
+  /**
+   * Material & Care copy. Falls back to the legacy long description so
+   * products saved before this field existed still show something in that
+   * section during the transition period.
+   */
+  productCareInstructions(product: Product): string {
+    const ar = (product.careInstructionsAr || '').trim();
+    const en = (product.careInstructionsEn || '').trim();
+    const direct = this.locale.locale() === 'ar' ? (ar || en) : (en || ar);
+    return direct || this.productDescription(product);
+  }
   readonly productLeather = (value: string): string => this.i18n.productLeather(value);
   readonly productTag = (value: string): string => this.i18n.productTag(value);
 
@@ -238,6 +489,7 @@ export class ProductComponent implements OnInit, OnDestroy {
         void this.resolveLegacyCollectionParent(collectionHandle);
       }
       this.applyColorParam(queryParams.get('color'));
+      this.applySizeAndNotifyParams();
     });
 
     this.routeSub = this.route.paramMap.subscribe((params) => {
@@ -250,13 +502,17 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.querySub?.unsubscribe();
     this.thumbStripResizeObserver?.disconnect();
     this.thumbStripMutationObserver?.disconnect();
+    if (this.gallerySyncFrame) cancelAnimationFrame(this.gallerySyncFrame);
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
-    this.unlockBodyScroll();
+    if (this.reviewOpen()) this.scrollLock.release();
+    if (this.sizeGuideOpen()) this.scrollLock.release();
   }
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
+    // The size sheet closes itself; cw-overlay owns Escape for everything it renders.
     if (this.reviewOpen()) this.closeReview();
+    else if (this.sizeGuideOpen()) this.closeSizeGuide();
   }
 
   async goCollection(): Promise<void> {
@@ -288,65 +544,176 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.productLoading.set(true);
     this.productError.set('');
     this.product.set(null);
-    await (force ? this.productsSvc.refresh() : this.productsSvc.ensureLoaded());
-    if (token !== this.loadToken) return;
+    // The catalogue is a browser concern: search, related products and the
+    // collection grid all read from it. A server render of one product page
+    // would pull roughly a megabyte to find a single row, on every request, so
+    // there it fetches just this product instead (below).
+    if (typeof window !== 'undefined') {
+      await (force ? this.productsSvc.refresh() : this.productsSvc.ensureLoaded());
+      if (token !== this.loadToken) return;
+    }
 
-    const p = idParam ? this.productsSvc.getById(idParam) : undefined;
-    const nextProduct = p ?? (idParam ? undefined : this.productsSvc.getAll()[0]);
+    // The route segment is a slug today and a UUID in every link shared or
+    // indexed before slugs existed. Both resolve; the UUID is swapped for the
+    // slug below so only one URL ends up in search results.
+    let nextProduct = idParam
+      ? this.productsSvc.getBySlug(idParam) ?? this.productsSvc.getById(idParam)
+      : this.productsSvc.getAll()[0];
+    // Told apart deliberately: "this product is gone" and "the catalogue is
+    // unreachable right now" look the same to a visitor but must not look the
+    // same to a crawler (see the status codes below).
+    let apiUnavailable = false;
+    if (!nextProduct && idParam) {
+      try {
+        nextProduct = await this.productsSvc.fetchOne(idParam);
+      } catch {
+        apiUnavailable = true;
+      }
+      if (token !== this.loadToken) return;
+    }
     if (!nextProduct) {
       this.productError.set(this.productsSvc.error() || 'Product not found.');
       this.productLoading.set(false);
+      // A removed product must answer 404, not 200 with a "not found" page:
+      // search engines call that a soft 404 and keep the URL in the index.
+      // But a product we merely could not load is 503 — "come back later" —
+      // so a minute of API trouble cannot get the whole catalogue deindexed.
+      if (this.responseInit) this.responseInit.status = apiUnavailable ? 503 : 404;
       return;
     }
     this.product.set(nextProduct);
+    // An old UUID link keeps working, but the address bar and anything copied
+    // from it should carry the slug. `replaceUrl` so Back still leaves the page
+    // rather than returning to the same product under its other URL.
+    const key = this.productsSvc.productKey(nextProduct);
+    if (idParam && idParam !== key) {
+      void this.router.navigate(['/product', key], {
+        replaceUrl: true,
+        queryParamsHandling: 'preserve',
+      });
+    }
     // Record a product view so "Most Engaged Products" reflects views, not just
     // cart clicks. Fired here (canonical load path) to avoid double counting.
     this.analytics.track('product_view', { productId: nextProduct.id });
     this.galleryIdx.set(0);
-    this.selectedColor.set(null);
-    this.applyColorParam(this.route.snapshot.queryParamMap.get('color'), nextProduct);
-    this.selectedSize.set(this.defaultSizeForProduct(nextProduct));
+    this.selectedColor.set(defaultColor(nextProduct, this.route.snapshot.queryParamMap.get('color')));
+    // No size is chosen for the customer: a shoe size is their decision, not the first one in stock.
+    this.selectedSize.set(null);
+    this.sizeSelectionError.set(false);
     this.qty.set(1);
     this.sizePickerOpen.set(false);
-    this.sizeGuideOpen.set(false);
+    this.closeSizeGuide();
     this.resetRestockForm();
+    this.resetReviewForm();
     void this.referenceData.ensureColors();
     this.productLoading.set(false);
+    this.applySizeAndNotifyParams();
   }
 
-  goToProduct(nextProduct: Product): void {
+  /**
+   * Where a recommended product points.
+   *
+   * These cards were buttons that navigated in script, which meant a product
+   * page linked to nothing: the one place in the site that could pass
+   * relevance between related products emitted no `href` for a crawler to
+   * follow.
+   */
+  relatedPath(item: Product): unknown[] {
+    return ['/product', this.productsSvc.productKey(item)];
+  }
+
+  /**
+   * Swapping the rendered product is a side effect of the click, not the
+   * navigation itself: `routerLink` handles that, and leaves modified clicks
+   * to the browser, so a card opened in a background tab must not replace the
+   * product on the tab the visitor is still reading.
+   */
+  onRelatedLinkClick(event: MouseEvent, nextProduct: Product): void {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     this.product.set(nextProduct);
     this.galleryIdx.set(0);
-    this.selectedSize.set(nextProduct.sizes[0] ?? null);
+    this.selectedSize.set(null);
+    this.sizeSelectionError.set(false);
     this.selectedColor.set(null);
     this.qty.set(1);
     this.sizePickerOpen.set(false);
-    this.sizeGuideOpen.set(false);
+    this.closeSizeGuide();
     this.resetRestockForm();
-    void this.router.navigate(['/product', nextProduct.id], {
-      queryParamsHandling: 'preserve',
-    });
+    this.resetReviewForm();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   setGalleryIdx(i: number): void {
-    this.galleryIdx.set(i);
+    this.selectGalleryIndex(i);
   }
 
   scrollThumbnails(toward: 'start' | 'end'): void {
-    if (!this.thumbStrip) return;
-    const inlineDirection = getComputedStyle(this.thumbStrip).direction === 'rtl' ? -1 : 1;
-    const scrollDirection = toward === 'end' ? inlineDirection : -inlineDirection;
-    this.thumbStrip.scrollBy({
-      left: scrollDirection * Math.max(this.thumbStrip.clientWidth * 0.7, 160),
-      behavior: 'smooth',
-    });
+    this.navGallery(toward === 'end' ? 1 : -1);
   }
 
   navGallery(dir: number): void {
-    this.galleryIdx.update(
-      (i) => (i + dir + this.gallery().length) % this.gallery().length,
-    );
+    this.selectGalleryIndex(this.galleryIdx() + dir);
+  }
+
+  onGalleryPointerDown(event: PointerEvent): void {
+    if (
+      this.gallery().length < 2 ||
+      (event.target instanceof HTMLElement && event.target.closest('button'))
+    ) {
+      return;
+    }
+    this.gallerySwipeStart = {
+      x: event.clientX,
+      y: event.clientY,
+      pointerId: event.pointerId,
+    };
+  }
+
+  onGalleryPointerUp(event: PointerEvent): void {
+    const start = this.gallerySwipeStart;
+    this.gallerySwipeStart = null;
+    if (!start || start.pointerId !== event.pointerId) return;
+
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (Math.abs(dx) < 42 || Math.abs(dx) <= Math.abs(dy)) return;
+    this.navGallery(dx < 0 ? 1 : -1);
+  }
+
+  onGalleryPointerCancel(event: PointerEvent): void {
+    if (this.gallerySwipeStart?.pointerId === event.pointerId) {
+      this.gallerySwipeStart = null;
+    }
+  }
+
+  galleryImageLoading(index: number): 'eager' | 'lazy' {
+    const count = this.gallery().length;
+    if (count <= 3) return 'eager';
+    const distance = Math.abs(index - this.galleryIdx());
+    return distance <= 1 || distance >= count - 1 ? 'eager' : 'lazy';
+  }
+
+  private selectGalleryIndex(index: number): void {
+    const count = this.gallery().length;
+    if (!count) return;
+
+    const normalizedIndex = (index + count) % count;
+    this.galleryIdx.set(normalizedIndex);
+
+    // Same guard as openRestockForm(): scrolling the thumbnail strip is a
+    // browser-only concern, and this page is server-rendered.
+    if (typeof window === 'undefined') return;
+    if (this.gallerySyncFrame) cancelAnimationFrame(this.gallerySyncFrame);
+    this.gallerySyncFrame = requestAnimationFrame(() => {
+      this.gallerySyncFrame = undefined;
+      const activeThumbnail = this.thumbStrip?.querySelector<HTMLElement>('.thumb.is-active');
+      activeThumbnail?.scrollIntoView({
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+      this.updateThumbStripState();
+    });
   }
 
   updateThumbStripState(): void {
@@ -364,22 +731,37 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   selectSize(s: number): void {
+    if (!this.availableSizes().some(option => option.size === s && option.available)) return;
     this.selectedSize.set(s);
-    this.sizePickerOpen.set(false);
+    this.qty.set(Math.max(1, Math.min(this.qty(), this.maxQty())));
+    this.sizeSelectionError.set(false);
+    this.closeSizePicker();
     this.resetRestockForm();
   }
 
   selectProductColor(color: string): void {
+    const product = this.product();
+    // Same rule as the collection card: a size follows to the new colour while it is in
+    // stock there, so the customer does not pick their own size again for every colour.
+    const size = product ? carriedSize(product, this.selectedSize(), this.selectedColor(), color) : null;
     this.selectedColor.set(color);
-    this.galleryIdx.set(0);
-    this.selectedSize.set(this.defaultSizeForProduct(this.product()));
+    this.selectGalleryIndex(0);
+    this.selectedSize.set(size);
+    this.qty.set(1);
+    this.sizeSelectionError.set(false);
     this.resetRestockForm();
     void this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { color: this.colorSlug(color) || null },
+      queryParams: { color: this.colorSlug(color) || null, size: size === null ? null : String(size), notify: null },
       queryParamsHandling: 'merge',
       replaceUrl: true,
     });
+  }
+
+  /** Every size of this colour is sold out; drawn struck through, as on the collection card. */
+  colorSoldOut(color: string): boolean {
+    const product = this.product();
+    return !!product && colorState(product, color) === 'sold-out';
   }
 
   onProductColorKeydown(color: string, event: KeyboardEvent): void {
@@ -394,9 +776,13 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   closeSizePicker(): void {
     this.sizePickerOpen.set(false);
+    // `sizeSelectionError` is deliberately left set: dismissing the sheet without picking does not
+    // answer the question, and the inline message under the trigger is what keeps asking it.
   }
 
   async openSizeGuide(): Promise<void> {
+    // The guide is a modal; without the lock the page scrolled behind it.
+    if (!this.sizeGuideOpen()) this.scrollLock.acquire();
     this.sizeGuideOpen.set(true);
     this.sizeGuideError.set('');
     if (this.sizeSets().length > 0) return;
@@ -413,11 +799,13 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   closeSizeGuide(): void {
+    if (!this.sizeGuideOpen()) return;
     this.sizeGuideOpen.set(false);
+    this.scrollLock.release();
   }
 
   decQty(): void { this.qty.update((q) => Math.max(1, q - 1)); }
-  incQty(): void { this.qty.update((q) => q + 1); }
+  incQty(): void { this.qty.update((q) => Math.max(1, Math.min(q + 1, this.maxQty()))); }
 
   toggleAccordion(id: string): void {
     this.openAccordion.update((cur) => (cur === id ? null : id));
@@ -430,11 +818,14 @@ export class ProductComponent implements OnInit, OnDestroy {
   add(): void {
     const p = this.product();
     if (!p) return;
+    if (!this.requireSizeSelection()) return;
     if (!this.selectedSizeInStock()) {
       this.openRestockForm();
       return;
     }
-    this.cart.add(this.cartItem(p));
+    const size = this.selectedSize();
+    if (size === null && this.hasSizeOptions()) return;
+    this.cart.add(this.cartItem(p, size ?? 0));
     this.addedFeedback.set(true);
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
     this.feedbackTimer = window.setTimeout(() => this.addedFeedback.set(false), 2200);
@@ -443,11 +834,14 @@ export class ProductComponent implements OnInit, OnDestroy {
   buyNow(): void {
     const p = this.product();
     if (!p) return;
+    if (!this.requireSizeSelection()) return;
     if (!this.selectedSizeInStock()) {
       this.openRestockForm();
       return;
     }
-    this.cart.add(this.cartItem(p));
+    const size = this.selectedSize();
+    if (size === null && this.hasSizeOptions()) return;
+    this.cart.add(this.cartItem(p, size ?? 0));
     this.cart.closeDrawer();
     void this.router.navigate(['/checkout']);
     window.scrollTo(0, 0);
@@ -460,6 +854,14 @@ export class ProductComponent implements OnInit, OnDestroy {
       return;
     }
     img.style.display = 'none';
+  }
+
+  isGalleryImageLoaded(src: string): boolean {
+    return !!this.loadedGalleryImages()[src];
+  }
+
+  markGalleryImageLoaded(src: string): void {
+    this.loadedGalleryImages.update((loaded) => loaded[src] ? loaded : { ...loaded, [src]: true });
   }
 
   productColorNames(product: Product): string[] {
@@ -475,6 +877,22 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   colorSwatchImage(name: string): string | null {
     return this.colorSwatchImageByName()[this.colorKey(name)] ?? null;
+  }
+
+  /**
+   * Display name for a colour. Products store the English name (it is the join
+   * key for swatches, variants and the ?color= deep link), so the Arabic name
+   * is looked up from ref_colors at render time and never persisted here.
+   *
+   * Falls back to the stored name when a colour has no Arabic translation yet,
+   * or when it is a free-text value with no ref_colors row at all — better an
+   * English label than a blank one.
+   */
+  colorLabel(name: string | null | undefined): string {
+    const value = String(name || '').trim();
+    if (!value) return '';
+    if (this.locale.locale() !== 'ar') return value;
+    return this.colorNameArByName()[this.colorKey(value)] || value;
   }
 
   colorSelected(name: string): boolean {
@@ -495,9 +913,19 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   openRestockForm(): void {
+    this.restockSize.set(this.restockSizes().some(s => s.size === this.selectedSize()) ? this.selectedSize() : null);
     this.restockFormOpen.set(true);
     this.restockSubmitted.set(false);
     this.restockError.set('');
+    if (typeof window === 'undefined') return;
+    requestAnimationFrame(() => {
+      const panel = document.getElementById('restock-panel');
+      panel?.scrollIntoView({
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+        block: 'center',
+      });
+      document.getElementById(this.hasSizeOptions() && this.restockSize() === null ? 'restock-size' : 'restock-email')?.focus({ preventScroll: true });
+    });
   }
 
   onRestockEmailInput(event: Event): void {
@@ -507,51 +935,63 @@ export class ProductComponent implements OnInit, OnDestroy {
   async submitRestockRequest(event?: Event): Promise<void> {
     event?.preventDefault();
     const p = this.product();
-    const size = this.selectedSize() ?? p?.sizes?.[0] ?? 0;
-    const email = this.restockEmail().trim();
     if (!p || this.restockSubmitting()) return;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      this.restockError.set(this.t('product.restock.emailError'));
+
+    const size = this.restockSize();
+    this.restockSubmitting.set(true);
+    this.restockError.set('');
+    const result = await this.restock.submit({
+      productId: p.id,
+      size,
+      hasSizes: this.hasSizeOptions(),
+      soldOutSizes: this.restockSizes().map((s) => s.size),
+      color: this.selectedColor(),
+      email: this.restockEmail(),
+    });
+    this.restockSubmitting.set(false);
+
+    if (result.kind === 'ok') {
+      this.restockSubmitted.set(true);
+      this.restockFormOpen.set(false);
       return;
     }
 
-    this.restockSubmitting.set(true);
-    this.restockError.set('');
-    try {
-      await firstValueFrom(
-        this.http.post<ApiResponse<unknown>>(`${this.apiBase}/products/${encodeURIComponent(p.id)}/restock-notifications`, {
-          email,
-          size,
-          color: this.selectedColor(),
-          locale: document.documentElement.lang || 'en',
-        }),
-      );
-      this.restockSubmitted.set(true);
+    if (result.kind === 'error') {
+      this.restockError.set(this.t(result.messageKey));
+      return;
+    }
+
+    // Back in stock while the form was open: reload the catalogue and put the page into a
+    // buyable state on the selection they asked about, rather than showing them an error.
+    const requestedColor = this.selectedColor();
+    await this.productsSvc.refresh();
+    if (this.product()?.id === p.id) {
+      this.product.set(this.productsSvc.getById(p.id) || p);
+      this.selectedColor.set(requestedColor);
+      this.selectedSize.set(size);
+      this.qty.set(1);
       this.restockFormOpen.set(false);
-    } catch {
-      this.restockError.set(this.t('product.restock.submitError'));
-    } finally {
-      this.restockSubmitting.set(false);
     }
   }
 
   openReview(): void {
-    this.resetReviewForm();
+    if (this.reviewSubmitted()) this.resetReviewForm();
+    this.reviewTrigger = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : undefined;
     this.reviewOpen.set(true);
-    if (!this.bodyScrollLocked) {
-      this.previousBodyOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      this.bodyScrollLocked = true;
-    }
+    this.scrollLock.acquire();
   }
 
   closeReview(): void {
     this.reviewOpen.set(false);
-    this.unlockBodyScroll();
+    this.scrollLock.release();
+    requestAnimationFrame(() => this.reviewTrigger?.focus());
   }
 
   selectReviewRating(rating: number): void {
     this.reviewRating.set(this.reviewRating() === rating ? null : rating);
+    this.reviewFieldErrors.update(({ rating: _rating, ...errors }) => errors);
     this.reviewError.set('');
   }
 
@@ -566,10 +1006,22 @@ export class ProductComponent implements OnInit, OnDestroy {
 
   onReviewPhoneInput(event: Event): void {
     this.reviewPhone.set((event.target as HTMLInputElement).value);
+    this.reviewFieldErrors.update(({ phone: _phone, contact: _contact, ...errors }) => errors);
   }
 
   onReviewEmailInput(event: Event): void {
     this.reviewEmail.set((event.target as HTMLInputElement).value);
+    this.reviewFieldErrors.update(({ email: _email, contact: _contact, ...errors }) => errors);
+  }
+
+  onReviewContactConsentChange(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.reviewContactConsent.set(checked);
+    this.reviewFieldErrors.update(({ phone: _phone, email: _email, contact: _contact, ...errors }) => errors);
+    if (!checked) {
+      this.reviewPhone.set('');
+      this.reviewEmail.set('');
+    }
   }
 
   async submitReview(event?: Event): Promise<void> {
@@ -577,15 +1029,28 @@ export class ProductComponent implements OnInit, OnDestroy {
     const product = this.product();
     const body = this.reviewDescription().trim();
     const rating = this.reviewRating();
+    const phone = this.reviewPhone().trim();
     const email = this.reviewEmail().trim();
+    const contactConsent = this.reviewContactConsent();
     if (!product || this.reviewSubmitting()) return;
 
-    if (!rating && !body) {
-      this.reviewError.set(this.t('product.review.validation'));
-      return;
+    const fieldErrors: ReviewFieldErrors = {};
+    if (!rating) {
+      fieldErrors.rating = this.t('product.review.ratingError');
     }
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      this.reviewError.set(this.t('product.review.emailError'));
+    if (contactConsent && !phone && !email) {
+      fieldErrors.contact = this.t('product.review.contactValidation');
+    }
+    if (contactConsent && phone && !this.validReviewPhone(phone)) {
+      fieldErrors.phone = this.t('product.review.phoneError');
+    }
+    if (contactConsent && email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      fieldErrors.email = this.t('product.review.emailError');
+    }
+    this.reviewFieldErrors.set(fieldErrors);
+    if (Object.keys(fieldErrors).length > 0) {
+      this.reviewError.set('');
+      this.focusFirstReviewError(fieldErrors);
       return;
     }
 
@@ -599,15 +1064,20 @@ export class ProductComponent implements OnInit, OnDestroy {
             rating,
             body: body || null,
             authorName: this.reviewName().trim() || null,
-            authorPhone: this.reviewPhone().trim() || null,
-            authorEmail: email || null,
+            authorPhone: contactConsent ? phone || null : null,
+            authorEmail: contactConsent ? email || null : null,
+            contactConsent,
             source: 'storefront',
           },
         ),
       );
       this.reviewSubmitted.set(true);
-    } catch {
-      this.reviewError.set(this.t('product.review.error'));
+    } catch (error) {
+      this.reviewError.set(
+        error instanceof HttpErrorResponse && error.status === 429
+          ? this.t('product.review.rateLimitError')
+          : this.t('product.review.error'),
+      );
     } finally {
       this.reviewSubmitting.set(false);
     }
@@ -617,7 +1087,7 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.resetReviewForm();
   }
 
-  private cartItem(p: Product) {
+  private cartItem(p: Product, size: number) {
     const variant = this.selectedVariant(p);
     return {
       id: p.id,
@@ -628,13 +1098,13 @@ export class ProductComponent implements OnInit, OnDestroy {
       image: this.gallery()[this.galleryIdx()] ?? p.image,
       leather: p.leather,
       color: this.selectedColor(),
-      size: this.selectedSize() ?? p.sizes?.[0] ?? 0,
+      size,
       qty: this.qty(),
     };
   }
 
   private productColors(product: Product): string[] {
-    return this.compact([product.color, ...(product.colors || [])]);
+    return productColors(product);
   }
 
   private applyColorParam(colorParam: string | null, product = this.product()): void {
@@ -644,31 +1114,63 @@ export class ProductComponent implements OnInit, OnDestroy {
     if (!match || this.colorSelected(match)) return;
 
     this.selectedColor.set(match);
-    this.galleryIdx.set(0);
+    this.selectedSize.set(null);
+    this.qty.set(1);
+    this.selectGalleryIndex(0);
     this.resetRestockForm();
   }
 
-  private defaultSizeForProduct(product: Product | null): number | null {
-    if (!product?.sizes?.length) return null;
-    const current = this.selectedSize();
-    const sizes = this.availableSizes();
-    if (current && sizes.some((item) => item.size === current && item.available && item.inStock)) return current;
+  onRestockSizeChange(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    this.restockSize.set(value === '' ? null : Number(value));
+  }
 
-    return sizes.find((item) => item.available && item.inStock)?.size
-      ?? sizes.find((item) => item.available)?.size
-      ?? product.sizes[0]
-      ?? null;
+  private applySizeAndNotifyParams(): void {
+    if (!this.product()) return;
+    const params = this.route.snapshot.queryParamMap;
+    const size = params.get('size');
+    if (size !== null && this.availableSizes().some(s => s.size === Number(size) && s.inStock)) {
+      this.selectedSize.set(Number(size));
+      this.qty.set(1);
+    }
+    if (params.get('notify') === '1' && (this.restockSizes().length || (!this.hasSizeOptions() && !this.selectedSizeInStock()))) {
+      this.openRestockForm();
+    }
+  }
+
+  /**
+   * Refuse to buy without a size, and put the size picker where the customer is looking.
+   *
+   * Keyed off the sizes actually offered rather than `product.sizes`: `sizeOptions` also derives
+   * sizes from the variants, and a product whose sizes come only from variants used to pass this
+   * guard and then silently open the restock form instead of adding to the cart.
+   */
+  private requireSizeSelection(): boolean {
+    if (!this.hasSizeOptions() || this.selectedSize() !== null) return true;
+    this.sizeSelectionError.set(true);
+
+    if (typeof window === 'undefined') return false;
+
+    // On a phone the sheet *is* the size picker. On a laptop the sizes are already on the page, so
+    // opening a panel over them would hide the thing we are asking them to look at.
+    if (window.matchMedia(MOBILE_SHEET_QUERY).matches) {
+      this.openSizePicker();
+      return false;
+    }
+
+    requestAnimationFrame(() => {
+      const section = document.getElementById('size-section');
+      section?.scrollIntoView({
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+        block: 'center',
+      });
+      section?.querySelector<HTMLElement>('.size-options .size-btn:not([disabled])')?.focus({ preventScroll: true });
+    });
+    return false;
   }
 
   private selectedVariant(product: Product): ProductVariant | undefined {
-    const size = this.selectedSize();
-    const selectedColorKey = this.selectedColor() ? this.colorKey(this.selectedColor() || '') : '';
-    const variants = product.variants || [];
-    return variants.find((variant) => {
-      const sizeMatches = !size || Number(variant.size) === size;
-      const colorMatches = !selectedColorKey || this.colorKey(variant.color || '') === selectedColorKey;
-      return sizeMatches && colorMatches;
-    });
+    return selectedVariant(product, this.selectedColor(), this.selectedSize());
   }
 
   private productImageForColor(product: Product, color: string, galleryImages: string[]): string | null {
@@ -676,12 +1178,29 @@ export class ProductComponent implements OnInit, OnDestroy {
     const mappedImage = this.mappedImageForColor(product, key);
     if (mappedImage) return this.resolveGalleryImage(product, mappedImage, galleryImages);
 
-    const hintedImage = galleryImages.find((image) => this.urlContainsColor(image, key));
-    if (hintedImage) return hintedImage;
+    // Filename hints are a real signal; gallery position is not, so there is no positional guess.
+    return galleryImages.find((image) => this.urlContainsColor(image, key)) || null;
+  }
 
-    const colors = this.productColors(product);
-    const colorIndex = colors.findIndex((item) => this.colorKey(item) === key);
-    return colorIndex >= 0 && galleryImages.length >= colors.length ? galleryImages[colorIndex] || null : null;
+  /**
+   * A colour with its own images shows those (cover first) plus the images no colour claims,
+   * and hides the other colours' images, whatever their count. Returns null only when the
+   * colour has no tagged image, which keeps the full gallery with the product image first.
+   */
+  private colorGalleryImages(product: Product, color: string | null, galleryImages: string[]): string[] | null {
+    const galleries = product.colorGalleries;
+    if (!color || !galleries) return null;
+    const key = this.colorKey(color);
+    const target = this.colorSlug(key);
+    const own = galleries[key] ?? Object.entries(galleries).find(([name]) => this.colorSlug(name) === target)?.[1];
+    if (!own?.length) return null;
+
+    const resolve = (urls: string[]) => urls.map((url) => this.resolveGalleryImage(product, url, galleryImages));
+    const ownImages = resolve(own);
+    // The same photo can sit in the gallery at two sizes (card and pdp), so compare identities.
+    const claimed = new Set(Object.values(galleries).flat().map((url) => this.mediaIdentity(url)));
+    const shared = galleryImages.filter((image) => !claimed.has(this.mediaIdentity(image)));
+    return [...new Set([...ownImages, ...shared])];
   }
 
   private mappedImageForColor(product: Product, key: string): string | null {
@@ -716,12 +1235,14 @@ export class ProductComponent implements OnInit, OnDestroy {
     return this.colorSlug(decodeURIComponent(String(url || ''))).includes(color);
   }
 
+  // Delegate to the shared helpers so the home hero generates `?color=` slugs
+  // that match what this page resolves. See utils/color-slug.ts.
   private colorKey(value: string): string {
-    return String(value || '').trim().toLowerCase();
+    return colorKey(value);
   }
 
   private colorSlug(value: string): string {
-    return this.colorKey(value).replace(/[^a-z0-9]+/g, '');
+    return colorSlug(value);
   }
 
   private mediaIdentity(url: string): string {
@@ -736,6 +1257,7 @@ export class ProductComponent implements OnInit, OnDestroy {
   }
 
   private resetRestockForm(): void {
+    this.restockSize.set(null);
     this.restockFormOpen.set(false);
     this.restockSubmitted.set(false);
     this.restockError.set('');
@@ -747,15 +1269,27 @@ export class ProductComponent implements OnInit, OnDestroy {
     this.reviewName.set('');
     this.reviewPhone.set('');
     this.reviewEmail.set('');
+    this.reviewContactConsent.set(false);
+    this.reviewFieldErrors.set({});
     this.reviewSubmitting.set(false);
     this.reviewSubmitted.set(false);
     this.reviewError.set('');
   }
 
-  private unlockBodyScroll(): void {
-    if (!this.bodyScrollLocked) return;
-    document.body.style.overflow = this.previousBodyOverflow;
-    this.bodyScrollLocked = false;
+  private validReviewPhone(phone: string): boolean {
+    const digits = phone.replace(/\D/g, '');
+    return /^[+\d\s().-]+$/.test(phone) && digits.length >= 7 && digits.length <= 15;
+  }
+
+  private focusFirstReviewError(errors: ReviewFieldErrors): void {
+    const id = errors.rating
+      ? 'review-star-1'
+      : errors.phone
+        ? 'review-mobile'
+        : errors.email
+          ? 'review-email'
+          : 'review-contact-consent';
+    requestAnimationFrame(() => document.getElementById(id)?.focus());
   }
 
   private async resolveLegacyCollectionParent(childKey: string): Promise<void> {
@@ -779,15 +1313,4 @@ export class ProductComponent implements OnInit, OnDestroy {
     }
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost'
-      || hostname === '127.0.0.1'
-      || hostname === '::1'
-      || hostname === '[::1]'
-      || /^10\./.test(hostname)
-      || /^192\.168\./.test(hostname)
-      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 }

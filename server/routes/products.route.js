@@ -1,8 +1,9 @@
+const { restockRequestLimiter } = require('../middleware/rate-limit');
 const { Router } = require('express');
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { ensureProductRecommendationsSchema } = require('../db/product-recommendations-schema');
-const { createRestockNotification, processRestockNotifications } = require('../lib/restock-notifications');
+const { createRestockNotification } = require('../lib/restock-notifications');
 
 const router = Router();
 const cardUrl = (alias) => `COALESCE(${alias}.metadata #>> '{imageVariants,card,url}', ${alias}.metadata #>> '{imageVariants,grid,url}', ${alias}.preview_url, ${alias}.storage_url)`;
@@ -19,14 +20,33 @@ async function getDefaultImage(client, tenantId) {
     return BUILT_IN_FALLBACK;
   }
 }
+// Every image of each colour, cover first, then gallery order. Same URL flavour as `images`
+// so the product page can match them to gallery entries.
+const COLOR_GALLERIES_SELECT = `
+          COALESCE((
+            SELECT jsonb_object_agg(color, urls)
+            FROM (
+              SELECT pci.color AS color,
+                     jsonb_agg(${pdpUrl('m')} ORDER BY pci.is_primary DESC, pci.sort_order) AS urls
+              FROM product_color_images pci
+              JOIN media_assets m ON m.id = pci.media_id
+              WHERE pci.product_id = p.id
+              GROUP BY pci.color
+            ) per_color
+          ), '{}'::jsonb) AS color_galleries`;
+
 const COLOR_IMAGES_SELECT = `
           COALESCE(
             -- Prefer pivot table written by migration 010 + replaceColorImages()
             (
-              SELECT jsonb_object_agg(pci.color, ${pdpUrl('m')})
-              FROM product_color_images pci
-              JOIN media_assets m ON m.id = pci.media_id
-              WHERE pci.product_id = p.id
+              SELECT jsonb_object_agg(color, url)
+              FROM (
+                SELECT DISTINCT ON (pci.color) pci.color AS color, ${pdpUrl('m')} AS url
+                FROM product_color_images pci
+                JOIN media_assets m ON m.id = pci.media_id
+                WHERE pci.product_id = p.id
+                ORDER BY pci.color, pci.is_primary DESC, pci.sort_order
+              ) primary_color_media
             ),
             -- Fall back to legacy media_assets.metadata->>'color' JSON path
             (
@@ -43,26 +63,80 @@ const COLOR_IMAGES_SELECT = `
                       sku_variant.color
                     ))) AS color_key,
                     ${pdpUrl('m')} AS url,
-                    CASE
-                      WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
-                        OR m.metadata ? 'storagePath'
-                      THEN 0
-                      ELSE 1
-                    END AS role_rank,
                     ml.sort_order
                   FROM media_links ml
                   JOIN media_assets m ON m.id = ml.media_id
                   LEFT JOIN product_variants linked_variant ON linked_variant.id = ml.variant_id
-                  LEFT JOIN product_variants sku_variant ON sku_variant.product_id = p.id AND sku_variant.sku = m.metadata->>'variantSku'
+                  LEFT JOIN product_variants sku_variant ON sku_variant.product_id = p.id AND (
+                    sku_variant.sku = m.metadata->>'variantSku'
+                    OR EXISTS (
+                      SELECT 1 FROM catalog_identifier_aliases cia
+                       WHERE cia.tenant_id = p.tenant_id
+                         AND cia.variant_id = sku_variant.id
+                         AND cia.identifier_type = 'variant_sku'
+                         AND cia.normalized_value = lower(btrim(m.metadata->>'variantSku'))
+                    )
+                  )
                   WHERE ml.role IN ('gallery', 'primary')
                     AND (ml.product_id = p.id OR linked_variant.product_id = p.id)
                 ) color_media
                 WHERE color_key IS NOT NULL AND color_key <> '' AND url IS NOT NULL AND url <> ''
-                ORDER BY color_key, role_rank, sort_order
+                ORDER BY color_key, sort_order
               ) first_color_media
             ),
             '{}'::jsonb
           ) AS color_images`;
+
+// The card image and the gallery order both follow media_links.sort_order, which the admin
+// portal writes from the drag order of the product gallery (first thumbnail = card image).
+// products.primary_media_id and role='primary' are legacy fallbacks for products that have
+// no gallery rows yet.
+const CARD_IMAGE_SELECT = `COALESCE(
+            (
+              SELECT ${cardUrl('m')}
+              FROM media_links ml
+              JOIN media_assets m ON m.id = ml.media_id
+              WHERE ml.product_id = p.id AND ml.role = 'gallery'
+              ORDER BY ml.sort_order
+              LIMIT 1
+            ),
+            ${cardUrl('primary_media')},
+            (
+              SELECT ${cardUrl('m')}
+              FROM media_links ml
+              JOIN media_assets m ON m.id = ml.media_id
+              WHERE ml.product_id = p.id AND ml.role = 'primary'
+              ORDER BY ml.sort_order
+              LIMIT 1
+            )
+          ) AS image`;
+
+const GALLERY_IMAGES_SELECT = `COALESCE(
+            ARRAY(
+              SELECT url
+              FROM (
+                SELECT DISTINCT ON (url) url, role_rank, sort_order
+                FROM (
+                  SELECT ${pdpUrl('m')} AS url, 0 AS role_rank, ml.sort_order
+                  FROM media_links ml
+                  JOIN media_assets m ON m.id = ml.media_id
+                  WHERE ml.product_id = p.id AND ml.role = 'gallery'
+                  UNION ALL
+                  SELECT ${pdpUrl('primary_media')} AS url, 2 AS role_rank, 0 AS sort_order
+                  WHERE primary_media.id IS NOT NULL
+                  UNION ALL
+                  SELECT ${pdpUrl('m')} AS url, 2 AS role_rank, ml.sort_order
+                  FROM media_links ml
+                  JOIN media_assets m ON m.id = ml.media_id
+                  WHERE ml.product_id = p.id AND ml.role = 'primary'
+                ) product_media
+                WHERE url IS NOT NULL AND url <> ''
+                ORDER BY url, role_rank, sort_order
+              ) deduped_product_media
+              ORDER BY role_rank, sort_order
+            ),
+            ARRAY[]::text[]
+          ) AS images`;
 
 function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
   const sizes = Array.isArray(row.sizes) ? row.sizes.filter(Boolean) : [];
@@ -93,10 +167,16 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
       .filter((variant) => variant && typeof variant === 'object')
       .map((variant) => ({
         id: variant.id,
+        isActive: variant.isActive !== false,
         sku: variant.sku || '',
-        size: Number.isFinite(Number(variant.size)) ? Number(variant.size) : undefined,
+        size: variant.size != null && String(variant.size).trim() !== '' && Number.isFinite(Number(variant.size)) ? Number(variant.size) : undefined,
         color: variant.color || '',
         material: variant.material || '',
+        // Bilingual note describing a construction detail that only applies to
+        // some sizes (e.g. a back zipper on the small sizes). Surfaced next to
+        // the size the customer picked instead of being burned onto the photo.
+        noteEn: variant.noteEn || '',
+        noteAr: variant.noteAr || '',
         price: Math.round(Number(variant.price || 0)),
         stock: Math.max(0, Number.parseInt(variant.stock, 10) || 0),
       }))
@@ -109,13 +189,45 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
       return map;
     }, {})
     : {};
+  const colorGalleries = row.color_galleries && typeof row.color_galleries === 'object'
+    ? Object.entries(row.color_galleries).reduce((map, [color, urls]) => {
+      const key = String(color || '').trim().toLowerCase();
+      const list = Array.isArray(urls) ? [...new Set(urls.map((u) => String(u || '').trim()).filter(Boolean))] : [];
+      if (key && list.length) map[key] = list;
+      return map;
+    }, {})
+    : {};
   const image = row.image || media[0] || defaultImage;
   const images = [...new Set([image, ...media])];
 
+  // Hook (shortEn/shortAr) drives the home hero and other compact surfaces.
+  // teaserEn/teaserAr is the short blurb under the product name on the PDP.
+  // descriptionEn/Ar is the legacy long copy, kept only as a fallback for the
+  // Material & Care section on products that predate care_instructions.
+  const desc = (row.description && typeof row.description === 'object') ? row.description : {};
+  const care = (row.care_instructions && typeof row.care_instructions === 'object') ? row.care_instructions : {};
+
   return {
     id: row.id,
+    // The storefront's public URL for this product. Unique per tenant and
+    // generated from the name on save; the id stays the identifier everywhere
+    // else (cart, orders, analytics).
+    slug: row.slug || '',
     name: row.name,
+    nameAr: row.name_ar || '',
     brand: row.brand || '',
+    descriptionEn: desc.en || '',
+    descriptionAr: desc.ar || '',
+    shortDescriptionEn: desc.shortEn || '',
+    shortDescriptionAr: desc.shortAr || '',
+    teaserEn: desc.teaserEn || '',
+    teaserAr: desc.teaserAr || '',
+    // Product-wide note. Always shown; a per-variant note stacks under it once
+    // the customer picks a size that has one.
+    noteEn: desc.noteEn || '',
+    noteAr: desc.noteAr || '',
+    careInstructionsEn: care.en || '',
+    careInstructionsAr: care.ar || '',
     price: Math.round(Number(row.base_price_cents || 0) / 100),
     tag: row.tag || '',
     leather: row.leather || '',
@@ -127,6 +239,7 @@ function mapRow(row, defaultImage = BUILT_IN_FALLBACK) {
     images,
     imageVariants,
     colorImages,
+    colorGalleries,
     stock: Math.max(0, Number(row.stock_quantity || 0)),
     variants,
     relatedProductIds: row.related_product_ids || [],
@@ -142,11 +255,14 @@ function variantsSelect() {
               'size', sv.size,
               'color', sv.color,
               'material', sv.material,
+              'noteEn', sv.note_en,
+              'noteAr', sv.note_ar,
               'price', round(sv.price_cents / 100.0),
-              'stock', sv.stock_quantity
+              'stock', sv.stock_quantity,
+              'isActive', sv.is_active
             ) ORDER BY sv.sort_order, sv.created_at)
             FROM product_variants sv
-            WHERE sv.product_id = p.id AND sv.is_active = true
+            WHERE sv.product_id = p.id AND sv.is_active
           ), '[]'::jsonb) AS variants`;
 }
 
@@ -177,9 +293,14 @@ router.get('/', async (_req, res, next) => {
       `
         SELECT
           p.id,
+          p.slug,
           p.name,
+          pt_ar.name AS name_ar,
           p.brand,
+          p.description,
+          p.care_instructions,
           p.base_price_cents,
+          p.stock_quantity,
           p.tag,
           p.leather,
           p.style,
@@ -199,68 +320,11 @@ router.get('/', async (_req, res, next) => {
             ARRAY[]::text[]
           ) AS materials,
           ${variantsSelect()},
-          COALESCE(
-            (
-              SELECT ${cardUrl('m')}
-              FROM media_links ml
-              JOIN media_assets m ON m.id = ml.media_id
-              WHERE ml.product_id = p.id AND ml.role = 'gallery'
-              ORDER BY
-                CASE
-                  WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
-                    OR m.metadata ? 'storagePath'
-                  THEN 0
-                  ELSE 1
-                END,
-                ml.sort_order
-              LIMIT 1
-            ),
-            ${cardUrl('primary_media')},
-            (
-              SELECT ${cardUrl('m')}
-              FROM media_links ml
-              JOIN media_assets m ON m.id = ml.media_id
-              WHERE ml.product_id = p.id AND ml.role = 'primary'
-              ORDER BY ml.sort_order
-              LIMIT 1
-            )
-          ) AS image,
-          COALESCE(
-            ARRAY(
-              SELECT url
-              FROM (
-                SELECT DISTINCT ON (url) url, role_rank, sort_order
-                FROM (
-                  SELECT
-                    ${pdpUrl('m')} AS url,
-                    CASE
-                      WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
-                        OR m.metadata ? 'storagePath'
-                      THEN 0
-                      ELSE 1
-                    END AS role_rank,
-                    ml.sort_order
-                  FROM media_links ml
-                  JOIN media_assets m ON m.id = ml.media_id
-                  WHERE ml.product_id = p.id AND ml.role = 'gallery'
-                  UNION ALL
-                  SELECT ${pdpUrl('primary_media')} AS url, 2 AS role_rank, 0 AS sort_order
-                  WHERE primary_media.id IS NOT NULL
-                  UNION ALL
-                  SELECT ${pdpUrl('m')} AS url, 2 AS role_rank, ml.sort_order
-                  FROM media_links ml
-                  JOIN media_assets m ON m.id = ml.media_id
-                  WHERE ml.product_id = p.id AND ml.role = 'primary'
-                ) product_media
-                WHERE url IS NOT NULL AND url <> ''
-                ORDER BY url, role_rank, sort_order
-              ) deduped_product_media
-              ORDER BY role_rank, sort_order
-            ),
-            ARRAY[]::text[]
-          ) AS images,
+          ${CARD_IMAGE_SELECT},
+          ${GALLERY_IMAGES_SELECT},
           ${imageVariantsSelect()},
           ${COLOR_IMAGES_SELECT},
+          ${COLOR_GALLERIES_SELECT},
           COALESCE((
             SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
             FROM product_recommendations pr
@@ -270,10 +334,11 @@ router.get('/', async (_req, res, next) => {
               AND rp.status = 'active'
           ), ARRAY[]::uuid[]) AS related_product_ids
         FROM products p
-        LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = true
+        LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
+        LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
         WHERE p.tenant_id = $1 AND p.status = 'active'
-        GROUP BY p.id, primary_media.id, primary_media.preview_url, primary_media.storage_url, primary_media.metadata
+        GROUP BY p.id, pt_ar.name, primary_media.id, primary_media.preview_url, primary_media.storage_url, primary_media.metadata
         ORDER BY p.created_at DESC
       `,
       [tenant.id],
@@ -292,8 +357,19 @@ router.get('/', async (_req, res, next) => {
   }
 });
 
-router.get('/:id', async (req, res, next) => {
+/**
+ * One product, by either its slug (`/product/kids-brown-sandal`, what the
+ * storefront links to) or its id (every URL shared or indexed before slugs
+ * existed, and what the admin links to).
+ *
+ * The id is a uuid column, so passing a slug straight into `p.id = $2` made
+ * Postgres raise a type error and the endpoint answered 500 where it should
+ * answer 404.
+ */
+router.get('/:idOrSlug', async (req, res, next) => {
   res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+  const key = String(req.params.idOrSlug || '').trim();
+  const asUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key) ? key : null;
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
@@ -302,9 +378,14 @@ router.get('/:id', async (req, res, next) => {
       `
         SELECT
           p.id,
+          p.slug,
           p.name,
+          pt_ar.name AS name_ar,
           p.brand,
+          p.description,
+          p.care_instructions,
           p.base_price_cents,
+          p.stock_quantity,
           p.tag,
           p.leather,
           p.style,
@@ -324,68 +405,11 @@ router.get('/:id', async (req, res, next) => {
             ARRAY[]::text[]
           ) AS materials,
           ${variantsSelect()},
-          COALESCE(
-            (
-              SELECT ${cardUrl('m')}
-              FROM media_links ml
-              JOIN media_assets m ON m.id = ml.media_id
-              WHERE ml.product_id = p.id AND ml.role = 'gallery'
-              ORDER BY
-                CASE
-                  WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
-                    OR m.metadata ? 'storagePath'
-                  THEN 0
-                  ELSE 1
-                END,
-                ml.sort_order
-              LIMIT 1
-            ),
-            ${cardUrl('primary_media')},
-            (
-              SELECT ${cardUrl('m')}
-              FROM media_links ml
-              JOIN media_assets m ON m.id = ml.media_id
-              WHERE ml.product_id = p.id AND ml.role = 'primary'
-              ORDER BY ml.sort_order
-              LIMIT 1
-            )
-          ) AS image,
-          COALESCE(
-            ARRAY(
-              SELECT url
-              FROM (
-                SELECT DISTINCT ON (url) url, role_rank, sort_order
-                FROM (
-                  SELECT
-                    ${pdpUrl('m')} AS url,
-                    CASE
-                      WHEN COALESCE(m.preview_url, m.storage_url) LIKE '/uploads/%'
-                        OR m.metadata ? 'storagePath'
-                      THEN 0
-                      ELSE 1
-                    END AS role_rank,
-                    ml.sort_order
-                  FROM media_links ml
-                  JOIN media_assets m ON m.id = ml.media_id
-                  WHERE ml.product_id = p.id AND ml.role = 'gallery'
-                  UNION ALL
-                  SELECT ${pdpUrl('primary_media')} AS url, 2 AS role_rank, 0 AS sort_order
-                  WHERE primary_media.id IS NOT NULL
-                  UNION ALL
-                  SELECT ${pdpUrl('m')} AS url, 2 AS role_rank, ml.sort_order
-                  FROM media_links ml
-                  JOIN media_assets m ON m.id = ml.media_id
-                  WHERE ml.product_id = p.id AND ml.role = 'primary'
-                ) product_media
-                WHERE url IS NOT NULL AND url <> ''
-                ORDER BY url, role_rank, sort_order
-              ) deduped_product_media
-              ORDER BY role_rank, sort_order
-            ),
-            ARRAY[]::text[]
-          ) AS images,
+          ${CARD_IMAGE_SELECT},
+          ${GALLERY_IMAGES_SELECT},
           ${imageVariantsSelect()},
           ${COLOR_IMAGES_SELECT},
+          ${COLOR_GALLERIES_SELECT},
           COALESCE((
             SELECT array_agg(pr.recommended_product_id ORDER BY pr.sort_order)
             FROM product_recommendations pr
@@ -395,13 +419,16 @@ router.get('/:id', async (req, res, next) => {
               AND rp.status = 'active'
           ), ARRAY[]::uuid[]) AS related_product_ids
         FROM products p
-        LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = true
+        LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active
         LEFT JOIN media_assets primary_media ON primary_media.id = p.primary_media_id
-        WHERE p.tenant_id = $1 AND p.id = $2 AND p.status = 'active'
-        GROUP BY p.id, primary_media.id, primary_media.preview_url, primary_media.storage_url, primary_media.metadata
+        LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.locale = 'ar'
+        WHERE p.tenant_id = $1
+          AND p.status = 'active'
+          AND ($2::uuid IS NOT NULL AND p.id = $2::uuid OR $2::uuid IS NULL AND p.slug = $3)
+        GROUP BY p.id, pt_ar.name, primary_media.id, primary_media.preview_url, primary_media.storage_url, primary_media.metadata
         LIMIT 1
       `,
-      [tenant.id, req.params.id],
+      [tenant.id, asUuid, key],
     );
 
     if (result.rowCount === 0) {
@@ -424,7 +451,10 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-router.post('/:id/restock-notifications', async (req, res, next) => {
+router.post('/:id/restock-notifications', restockRequestLimiter, async (req, res, next) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
+    return res.status(422).json({ success: false, message: 'Invalid product.' });
+  }
   const email = String(req.body.email || '').trim().toLowerCase();
   const name = String(req.body.name || '').trim() || email.split('@')[0] || 'Customer';
   const phone = String(req.body.phone || '').trim() || null;
@@ -432,34 +462,29 @@ router.post('/:id/restock-notifications', async (req, res, next) => {
   const color = String(req.body.color || '').trim();
   const locale = String(req.body.locale || 'en').trim() || 'en';
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (email.length > 254 || name.length > 200 || (phone || '').length > 50 || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({
       success: false,
       message: 'A valid email address is required.',
     });
   }
 
-  if (!size) {
-    return res.status(400).json({
-      success: false,
-      message: 'Size is required.',
-    });
-  }
-
   const client = await db.pool.connect();
   try {
     const tenant = await ensureDefaultTenant(client);
+    await client.query('BEGIN');
     const product = await client.query(
       `
         SELECT id, name
         FROM products
         WHERE tenant_id = $1 AND id = $2 AND status = 'active'
-        LIMIT 1
+        LIMIT 1 FOR SHARE
       `,
       [tenant.id, req.params.id],
     );
 
     if (product.rowCount === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Product not found.',
@@ -475,14 +500,15 @@ router.post('/:id/restock-notifications', async (req, res, next) => {
       color,
       locale,
     });
-    await processRestockNotifications(client, tenant.id, product.rows[0].id);
 
+    await client.query('COMMIT');
     res.status(201).json({
       success: true,
       data: inserted,
       message: 'Restock notification saved.',
     });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     next(err);
   } finally {
     client.release();
@@ -490,3 +516,4 @@ router.post('/:id/restock-notifications', async (req, res, next) => {
 });
 
 module.exports = router;
+module.exports._test = { mapRow };

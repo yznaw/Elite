@@ -1,6 +1,10 @@
 const { Router } = require('express');
 const db = require('../db/client');
 const { bookNboxForPaidOrder } = require('../lib/order-delivery');
+const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
+const { notifyNewWebOrder } = require('../lib/staff-notify');
+const { perLocationEnabled } = require('../lib/location-stock');
+const { ensurePaidOrderStock } = require('../lib/order-stock');
 const sadad = require('../lib/sadad');
 
 const router = Router();
@@ -54,6 +58,7 @@ router.post('/', async (req, res) => {
   // ── 3. Idempotency + update ───────────────────────────────────────────────
   const client = await db.pool.connect();
   try {
+    if (paymentStatus === 'paid' && !(await require('../lib/fulfillment-payment').verify(client, websiteRefNo, payload, transactionNumber))) return;
     // Check if this exact transaction was already processed
     const existing = await client.query(
       `SELECT provider_payment_id FROM payments WHERE order_id = $1`,
@@ -64,10 +69,26 @@ router.post('/', async (req, res) => {
       console.warn('[sadad-webhook] No payments record for order', { websiteRefNo });
     }
 
+    // A delivery for an order that is already paid still completes the
+    // idempotent follow-ups. Without this, a first delivery that set the paid
+    // flag and then crashed left the order without its stock deduction until
+    // the browser callback or the sweep happened to run.
+    async function repairAlreadyPaid() {
+      if (paymentStatus !== 'paid') return;
+      const paid = await client.query(
+        `SELECT tenant_id FROM orders WHERE id = $1::uuid AND payment_status = 'paid'`,
+        [websiteRefNo],
+      );
+      if (!paid.rowCount) return;
+      await ensurePaidOrderStock(paid.rows[0].tenant_id, websiteRefNo, { source: 'sadad-webhook-repair' });
+      await notifyNewWebOrder(client, paid.rows[0].tenant_id, websiteRefNo);
+    }
+
     // Idempotency: Sadad may deliver the same webhook more than once.
     // If this transaction was already recorded, skip the update entirely.
     if (existing.rows[0]?.provider_payment_id === transactionNumber) {
       console.log('[sadad-webhook] Duplicate — already processed', { transactionNumber });
+      await repairAlreadyPaid();
       return;
     }
 
@@ -85,7 +106,8 @@ router.post('/', async (req, res) => {
     );
 
     if (orderResult.rowCount === 0) {
-      console.warn('[sadad-webhook] Order not found', { websiteRefNo });
+      console.warn('[sadad-webhook] Order not found or already paid', { websiteRefNo });
+      await repairAlreadyPaid();
       return;
     }
 
@@ -161,7 +183,9 @@ router.post('/', async (req, res) => {
         });
       });
 
-      await bookNboxForPaidOrder(client, orderResult.rows[0].tenant_id, websiteRefNo)
+      // Stock per location: the courier is booked at approval, from the
+      // chosen location (routes/admin-orders.route.js POST /:id/approve).
+      if (!(await perLocationEnabled(client, orderResult.rows[0].tenant_id))) await bookNboxForPaidOrder(client, orderResult.rows[0].tenant_id, websiteRefNo)
         .then((deliveryResult) => {
           if (deliveryResult.failed) {
             console.warn('[sadad-webhook] NBOX booking failed after payment confirmation', {
@@ -177,6 +201,16 @@ router.post('/', async (req, res) => {
             message: err.message,
           });
         });
+      await sendReceiptForPaidOrder(client, orderResult.rows[0].tenant_id, websiteRefNo).catch((err) => {
+        console.warn('[sadad-webhook] Receipt email failed:', err.message);
+      });
+      // Idempotent and never throws; the browser callback may have notified already.
+      await notifyNewWebOrder(client, orderResult.rows[0].tenant_id, websiteRefNo);
+
+      // See the matching call in payments.route.js. Sadad delivers webhooks
+      // more than once by design, which is exactly why this is keyed on an
+      // existing ledger row rather than on winning the paid-flag update.
+      await ensurePaidOrderStock(orderResult.rows[0].tenant_id, websiteRefNo, { source: 'sadad-webhook' });
     }
 
     console.log('[sadad-webhook] Order updated', { websiteRefNo, paymentStatus, transactionNumber });

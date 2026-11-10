@@ -1,14 +1,14 @@
-import { Component, HostListener, inject } from '@angular/core';
+import { Component, HostListener, inject, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
 import { IconComponent } from '../icons/icon.component';
 
 @Component({
-  selector: 'ap-confirm-dialog',
-  standalone: true,
-  imports: [CommonModule, IconComponent],
-  template: `
+    selector: 'ap-confirm-dialog',
+    imports: [CommonModule, IconComponent],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     @if (svc.request(); as r) {
       <div class="overlay" (click)="cancel()"></div>
       <div class="modal" style="width:min(440px,92vw);" role="dialog" aria-modal="true" [attr.aria-labelledby]="'confirm-title'">
@@ -55,6 +55,13 @@ import { IconComponent } from '../icons/icon.component';
       </div>
     }
   `,
+    // A confirmation always belongs on top of whatever asked for it. The global
+    // .overlay/.modal share z-index 200/210 with .drawer, so a confirm opened
+    // from inside a drawer (orders: cancel, refund, approve) rendered behind it.
+    styles: [`
+      .overlay { z-index: 1000; }
+      .modal { z-index: 1001; }
+    `],
 })
 export class ConfirmDialogComponent {
   readonly svc = inject(ConfirmService);

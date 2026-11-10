@@ -2,9 +2,16 @@ export interface HomeDiscountHeroContent {
   imageUrl: string;
   title: string;
   body: string;
-  discountText: string;
+  kickerEn: string;
+  kickerAr: string;
   ctaText: string;
   ctaLink: string;
+  titleEn: string;
+  titleAr: string;
+  bodyEn: string;
+  bodyAr: string;
+  ctaTextEn: string;
+  ctaTextAr: string;
 }
 
 export interface HomeCollectionTileContent {
@@ -13,6 +20,17 @@ export interface HomeCollectionTileContent {
   imageUrl: string;
   link: string;
   ctaText?: string;
+  titleEn: string;
+  titleAr: string;
+  ctaTextEn: string;
+  ctaTextAr: string;
+}
+
+export interface HomeCollectionsIntroContent {
+  titleEn: string;
+  titleAr: string;
+  bodyEn: string;
+  bodyAr: string;
 }
 
 export interface StoryHeroContent {
@@ -22,12 +40,28 @@ export interface StoryHeroContent {
   body: string;
   imageUrl: string;
   imageAlt: string;
+  imageAltEn: string;
+  imageAltAr: string;
+  kickerEn: string;
+  kickerAr: string;
+  titleEn: string;
+  titleAr: string;
+  accentEn: string;
+  accentAr: string;
+  bodyEn: string;
+  bodyAr: string;
 }
 
 export interface StoryIntroContent {
   kicker: string;
   headline: string;
   body: string;
+  kickerEn: string;
+  kickerAr: string;
+  headlineEn: string;
+  headlineAr: string;
+  bodyEn: string;
+  bodyAr: string;
 }
 
 export interface StoryChapterContent {
@@ -37,17 +71,31 @@ export interface StoryChapterContent {
   body: string;
   imageUrl: string;
   imageAlt: string;
+  imageAltEn: string;
+  imageAltAr: string;
+  eyebrowEn: string;
+  eyebrowAr: string;
+  titleEn: string;
+  titleAr: string;
+  bodyEn: string;
+  bodyAr: string;
 }
 
 export interface StoryAtelierItemContent {
   id: string;
   title: string;
   meta: string;
+  titleEn: string;
+  titleAr: string;
+  metaEn: string;
+  metaAr: string;
 }
 
 export interface StoryHeroFact {
   id: string;
   label: string;
+  labelEn: string;
+  labelAr: string;
 }
 
 export interface StoryContentData {
@@ -59,37 +107,76 @@ export interface StoryContentData {
     text: string;
     accent: string;
     author: string;
+    textEn: string;
+    textAr: string;
+    accentEn: string;
+    accentAr: string;
+    authorEn: string;
+    authorAr: string;
   };
   atelier: {
     kicker: string;
     title: string;
     body: string;
+    kickerEn: string;
+    kickerAr: string;
+    titleEn: string;
+    titleAr: string;
+    bodyEn: string;
+    bodyAr: string;
     items: StoryAtelierItemContent[];
   };
 }
 
-export interface HeroCalloutContent {
-  id: string;
-  titleEn: string;
-  titleAr: string;
-  subtitleEn: string;
-  subtitleAr: string;
-  thumbnail: string;
-  alt: string;
+/**
+ * One featured colorway on a hero slide. `hex` is deliberately absent: colour
+ * values are resolved from `ref_colors` at render time so a colour edited in
+ * Reference Data updates every swatch across the app.
+ */
+export interface HeroColorContent {
+  /** Colour name as stored on the product variant, e.g. "Copper Brown". */
+  label: string;
+  /** URL-safe form of `label`, matched against the product page `?color=` param. */
+  slug: string;
+  /**
+   * Hero shot for this colourway, chosen in the storefront editor. Deliberately
+   * separate from the product's own gallery images: hero art is a cutout styled
+   * for the hero stage, while gallery photos serve the product detail page.
+   * Empty means this colour keeps the slide's default image.
+   */
+  imageUrl: string;
 }
 
 export interface HeroSliderItem {
   id: string;
   name: string;
   subtitle: string;
+  nameEn: string;
+  nameAr: string;
+  subtitleEn: string;
+  subtitleAr: string;
+  descriptionEn: string;
+  descriptionAr: string;
+  /**
+   * Image the slide opens on. Derived from the default colourway rather than
+   * edited directly, so the hero always opens on a real colour a visitor can
+   * then switch away from and back to.
+   */
   imageUrl: string;
   alt: string;
-  callouts: HeroCalloutContent[];
+  /** Product this slide links to. Empty means the swatch row is not rendered. */
+  productId: string;
+  /** Featured colourways, max 4. */
+  colors: HeroColorContent[];
+  /** Slug of the colourway the slide opens on. Falls back to the first colour. */
+  defaultColorSlug: string;
 }
 
 export interface HeroSliderContent {
   ctaEn: string;
   ctaAr: string;
+  productCtaEn: string;
+  productCtaAr: string;
   items: HeroSliderItem[];
 }
 
@@ -103,6 +190,10 @@ export interface PromiseCard {
 }
 
 export interface PromiseContent {
+  kickerEn: string;
+  kickerAr: string;
+  titleEn: string;
+  titleAr: string;
   cards: PromiseCard[];
 }
 
@@ -113,12 +204,49 @@ export interface StatItem {
   labelAr: string;
 }
 
-export interface ContactInfoBlock {
+/**
+ * One of Elite's own shops.
+ *
+ * Hours are whole hours on a 24h clock rather than a display string, so the
+ * page can work out whether a shop is open right now and emit the same values
+ * as `openingHoursSpecification`. Addresses may contain newlines.
+ */
+export interface ContactBranch {
   id: string;
-  icon: string;
-  titleEn: string;
-  titleAr: string;
-  lines: string[];
+  nameEn: string;
+  nameAr: string;
+  addressEn: string;
+  addressAr: string;
+  phone: string;
+  mapUrl: string;
+  /** Google Maps embed URL. Empty renders the card without a map. */
+  mapEmbedUrl: string;
+  /** Coordinates, emitted as `geo` in the Store structured data. */
+  lat: number | null;
+  lng: number | null;
+  parking: boolean;
+  weekdayOpen: number;
+  weekdayClose: number;
+  weekendOpen: number;
+  weekendClose: number;
+}
+
+/**
+ * A shop that carries Elite but is not Elite's own premises, such as the
+ * counter inside Printemps. It has no map of its own, no direct line, and
+ * hours that belong to the host store, so it is a distinct shape rather than
+ * a branch with empty fields.
+ */
+export interface ContactStockist {
+  id: string;
+  nameEn: string;
+  nameAr: string;
+  locationEn: string;
+  locationAr: string;
+  hoursNoteEn: string;
+  hoursNoteAr: string;
+  /** The host store's own map link, never Elite's. */
+  mapUrl: string;
 }
 
 export type SocialPlatform = 'whatsapp' | 'instagram' | 'twitter' | 'facebook' | 'tiktok' | 'snapchat' | 'youtube' | 'linkedin';
@@ -137,23 +265,72 @@ export interface ContactContent {
   headlineAr: string;
   headlineAccentAr: string;
   subhead: string;
+  subheadAr: string;
   email: string;
   phone: string;
   whatsapp: string;
   promiseLine: string;
+  promiseLineAr: string;
   promiseSignature: string;
-  infoBlocks: ContactInfoBlock[];
+  promiseSignatureAr: string;
+  branches: ContactBranch[];
+  stockists: ContactStockist[];
   socialLinks: SocialLink[];
+}
+
+/** One generated size of an uploaded image, as the server actually wrote it. */
+export interface MediaVariant {
+  url: string;
+  width: number;
+}
+
+/**
+ * The little a hero slide needs to know about the product it links to: the slug
+ * its call to action points at, and the colourways the `+N` chip counts.
+ *
+ * Not a `Product`. Widening it invites the page back into loading the catalogue
+ * for fields it can already get from `ProductsService` in the browser.
+ */
+export interface HeroProductRef {
+  id: string;
+  slug: string;
+  colors: string[];
 }
 
 export interface HomeContentData {
   hero: HomeDiscountHeroContent;
   collections: HomeCollectionTileContent[];
+  collectionsIntro: HomeCollectionsIntroContent;
   story: StoryContentData;
   heroSlider: HeroSliderContent;
   promise: PromiseContent;
   stats: StatItem[];
   contact: ContactContent;
+  /**
+   * Responsive candidates for hero imagery, keyed by upload filename.
+   *
+   * A read-time projection rather than stored content: the server joins the
+   * media table on each hero image and reports the sizes that exist. The hero
+   * used to derive these by pasting suffixes onto the filename and asserting a
+   * width for each, which is wrong whenever the upload was too small for a
+   * given size to be generated.
+   *
+   * Keyed by basename so a lookup survives the `/api` prefix that
+   * `resolveClientMediaUrl` adds and any absolute host in older content. An
+   * absent key means no `srcset`, which is correct-but-heavy rather than broken.
+   */
+  mediaVariants: Record<string, MediaVariant[]>;
+  /**
+   * Hero-linked products, keyed by the `productId` on the slide.
+   *
+   * Also a read-time projection. It exists so the home page does not have to
+   * load the catalogue to read a slug and a colour list: doing that put roughly
+   * 730 kB of products into the rendered HTML's transfer state on every
+   * request. An absent key means the product was deleted, unpublished, or the
+   * slide carries a non-uuid id — the hero falls back to linking by id, which
+   * still resolves.
+   */
+  heroProducts: Record<string, HeroProductRef>;
 }
 
 export function createEmptyHomeContent(): HomeContentData {
@@ -162,17 +339,22 @@ export function createEmptyHomeContent(): HomeContentData {
       imageUrl: '',
       title: '',
       body: '',
-      discountText: '',
+      kickerEn: '', kickerAr: '',
       ctaText: '',
       ctaLink: '',
+      titleEn: '', titleAr: '', bodyEn: '', bodyAr: '', ctaTextEn: '', ctaTextAr: '',
     },
     collections: [],
+    collectionsIntro: { titleEn: '', titleAr: '', bodyEn: '', bodyAr: '' },
     heroSlider: {
       ctaEn: '',
       ctaAr: '',
+      productCtaEn: '',
+      productCtaAr: '',
       items: [],
     },
     promise: {
+      kickerEn: '', kickerAr: '', titleEn: '', titleAr: '',
       cards: [],
     },
     stats: [],
@@ -183,12 +365,16 @@ export function createEmptyHomeContent(): HomeContentData {
       headlineAr: '',
       headlineAccentAr: '',
       subhead: '',
+      subheadAr: '',
       email: '',
       phone: '',
       whatsapp: '',
       promiseLine: '',
+      promiseLineAr: '',
       promiseSignature: '',
-      infoBlocks: [],
+      promiseSignatureAr: '',
+      branches: [],
+      stockists: [],
       socialLinks: [],
     },
     story: {
@@ -200,25 +386,33 @@ export function createEmptyHomeContent(): HomeContentData {
         body: '',
         imageUrl: '',
         imageAlt: '',
+        imageAltEn: '',
+        imageAltAr: '',
+        kickerEn: '', kickerAr: '', titleEn: '', titleAr: '', accentEn: '', accentAr: '', bodyEn: '', bodyAr: '',
       },
       intro: {
         kicker: '',
         headline: '',
         body: '',
+        kickerEn: '', kickerAr: '', headlineEn: '', headlineAr: '', bodyEn: '', bodyAr: '',
       },
       chapters: [],
       quote: {
         text: '',
         accent: '',
         author: '',
+        textEn: '', textAr: '', accentEn: '', accentAr: '', authorEn: '', authorAr: '',
       },
       atelier: {
         kicker: '',
         title: '',
         body: '',
+        kickerEn: '', kickerAr: '', titleEn: '', titleAr: '', bodyEn: '', bodyAr: '',
         items: [],
       },
     },
+    mediaVariants: {},
+    heroProducts: {},
   };
 }
 

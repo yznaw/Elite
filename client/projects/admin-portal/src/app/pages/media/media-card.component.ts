@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { I18nService } from '../../services/i18n.service';
@@ -11,23 +11,25 @@ interface Suggestion {
 }
 
 @Component({
-  selector: 'ap-media-card',
-  standalone: true,
-  imports: [CommonModule, IconComponent],
-  template: `
+    selector: 'ap-media-card',
+    imports: [CommonModule, IconComponent],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     <div class="media-card" [class.selected]="selected" (click)="clicked.emit()">
+      @if (selectionMode) {
+        <div class="sel-check" [class.checked]="selected">
+          @if (selected) { <ap-icon name="check" [size]="12"/> }
+        </div>
+      }
       <div class="media-thumb">
-        @if (media.kind === 'image') {
-          <img [src]="media.preview" [alt]="media.name" (error)="onImgError($event)"/>
-        } @else {
-          <div class="glb-thumb">
-            <ap-icon name="cube" [size]="42"/>
-            <div class="glb-thumb-label">{{ t('media.thumb.gridLabel') }}</div>
-          </div>
-        }
-        <span class="type-badge">{{ media.kind === 'glb' ? '.GLB' : extension(media.name) }}</span>
+        <img [src]="media.preview" [alt]="media.name" (error)="onImgError($event)"/>
+        <span class="type-badge">{{ extension(media.name) }}</span>
         @if (linkedProduct) {
           <span class="link-pill linked"><ap-icon name="check" [size]="9"/> {{ t('media.thumb.linked') }}</span>
+        } @else if (media.usedInContent) {
+          <span class="link-pill content" title="Referenced by the homepage hero or story content">
+            <ap-icon name="check" [size]="9"/> {{ t('media.thumb.usedInContent') }}
+          </span>
         } @else if (suggestion) {
           <span class="link-pill suggest" [attr.title]="suggestion.why">{{ t('media.thumb.match') }}</span>
         } @else {
@@ -49,6 +51,16 @@ interface Suggestion {
       </div>
     </div>
   `,
+    styles: [`
+    .sel-check {
+      position: absolute; top: 8px; left: 8px; z-index: 2;
+      width: 22px; height: 22px; border-radius: 6px;
+      background: rgba(255,255,255,0.92); border: 2px solid #d4d4d8;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,.12);
+    }
+    .sel-check.checked { background: var(--gold, #c9a84c); border-color: var(--gold, #c9a84c); color: #fff; }
+  `]
 })
 export class MediaCardComponent {
   private readonly i18n = inject(I18nService);
@@ -57,6 +69,7 @@ export class MediaCardComponent {
   @Input({ required: true }) media!: MediaFile;
   @Input() products: Product[] = [];
   @Input() selected = false;
+  @Input() selectionMode = false;
   @Output() clicked = new EventEmitter<void>();
 
   get linkedProduct() { return this.products.find((p) => p.id === this.media.linkedTo); }

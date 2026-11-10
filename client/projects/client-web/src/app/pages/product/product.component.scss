@@ -93,7 +93,11 @@
 }
 
 .breadcrumb button {
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 6px;
+  margin-inline: -6px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -135,6 +139,7 @@
   aspect-ratio: 4 / 3;
   min-height: 320px;
   overflow: hidden;
+  touch-action: pan-y;
   border: 1px solid var(--pdp-line-soft);
   border-radius: var(--pdp-radius);
   background:
@@ -144,6 +149,19 @@
     0 1px 0 rgba(255, 255, 255, 0.8) inset,
     0 30px 70px -28px rgba(28, 26, 21, 0.32),
     0 8px 22px -16px rgba(28, 26, 21, 0.22);
+}
+
+.gallery-frame::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  content: "";
+  // background:
+  //   linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.68) 48%, transparent 66%),
+  //   linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(239, 235, 226, 0.9));
+  background:#faf8f9;
+  background-size: 220% 100%, 100% 100%;
+  // animation: productGalleryShimmer 1.45s ease-in-out infinite;
 }
 
 .gallery-frame::after {
@@ -156,26 +174,57 @@
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
 }
 
+/* Every image in the gallery is stacked in the frame at once and the inactive
+   ones are faded out rather than removed, which is what makes the swipe a
+   cross-fade instead of a flash. The cost of that is paid per image, so the
+   two properties that promote an image to its own composited layer are kept off
+   the ones nobody is looking at: `visibility: hidden` takes them out of paint
+   entirely, and the colour `filter` only lands on the image on screen. A
+   product with eight photos was otherwise holding eight full-size layers live
+   in the viewport, which is where the phone's memory and its scroll frames go.
+
+   `visibility` is transitioned rather than set outright so the outgoing image
+   stays visible for the length of the fade and only then drops out; without the
+   delay it would disappear instantly and the cross-fade would become a cut. */
 .gallery-frame img {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   opacity: 0;
-  filter: saturate(0.98) contrast(1.02);
+  visibility: hidden;
   transform: scale(1.04);
-  transition: opacity 0.55s ease, transform 6s ease, filter 0.55s ease;
+  transition: opacity 0.55s ease, transform 6s ease, filter 0.55s ease, visibility 0s linear 0.55s;
 }
 
 .gallery-frame img.is-active {
-  opacity: 1;
+  opacity: 0;
+  visibility: visible;
+  filter: saturate(0.98) contrast(1.02);
   transform: scale(1);
+  transition: opacity 0.55s ease, transform 6s ease, filter 0.55s ease, visibility 0s;
 }
 
-.gallery-frame:hover img.is-active {
-  transform: scale(1.045);
+.gallery-frame img.is-active.is-loaded {
+  opacity: 1;
+}
+
+@keyframes productGalleryShimmer {
+  from { background-position: 180% 0, 0 0; }
+  to { background-position: -40% 0, 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-frame::before { animation: none; }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .gallery-frame:hover img.is-active {
+    transform: scale(1.045);
+  }
 }
 
 .tag-chip {
@@ -262,6 +311,30 @@
 
 .gallery-nav-next {
   right: 16px;
+}
+
+.gallery-count {
+  flex-shrink: 0;
+  /* Physical, not logical: parks the counter on the right whether or not a
+     note shares the bar, and in both text directions. */
+  margin-left: auto;
+  min-width: 48px;
+  /* "1 / 16" is a fraction, not prose. Without this it renders as "16 / 1" in
+     Arabic, because bidi reorders the operands around the slash. */
+  direction: ltr;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  border-radius: 999px;
+  background: rgba(22, 18, 12, 0.62);
+  color: #fff;
+  font-family: var(--ff-sans);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-align: center;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 /* ── Thumbnails ── */
@@ -442,6 +515,15 @@
   text-transform: uppercase;
 }
 
+.teaser {
+  margin: 0 0 20px;
+  color: var(--pdp-ink-soft);
+  font-family: var(--ff-sans);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
 .price-row {
   flex-wrap: wrap;
   gap: 10px 14px;
@@ -463,15 +545,6 @@
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-}
-
-.description {
-  margin: 0 0 2px;
-  color: var(--pdp-ink-soft);
-  font-family: var(--ff-sans);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.78;
 }
 
 .attribute-grid {
@@ -508,7 +581,153 @@
   margin-bottom: 26px;
   padding-top: 26px;
   border-top: 1px solid var(--pdp-line);
+  /* Pressing Add with no size scrolls this block into view; keep it clear of the sticky header. */
+  scroll-margin-block: 110px;
 }
+
+.size-required-message {
+  margin-top: 8px;
+  color: #a33a32;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+/* Size note beside the picker — a plain restatement of the line already shown
+   on the photo, placed where the customer is actually choosing the size. The
+   product note is not repeated here; it is permanent on the frame. */
+.note-panel {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--pdp-line);
+  border-radius: 10px;
+  background: var(--pdp-surface);
+}
+
+/* ── Gallery bottom bar ──
+   Mounted on the photo itself so the note cannot be scrolled past, with the
+   image counter folded into the same row. Two chips fighting for the same
+   corner reads as clutter; one bar reads as design. */
+.gallery-bar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 14px;
+  pointer-events: none;
+}
+
+/* The counter keeps its corner in both languages — it is a UI landmark people
+   look for in a fixed spot, not prose that should mirror. Reversing the bar in
+   RTL puts the main axis left-to-right in both directions, so the note falls on
+   the free side and the plain margin below always parks the counter on the
+   right. The note itself still inherits the document direction, so its Arabic
+   text and size badge lay out correctly. */
+:host-context(html[dir='rtl']) .gallery-bar {
+  flex-direction: row-reverse;
+}
+
+/* Scrim only when a note is present — with just the counter the photo needs
+   no darkening, and adding it anyway would dull every product shot. */
+.gallery-bar--noted::before {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: -1;
+  height: 190%;
+  content: "";
+  border-radius: 0 0 var(--pdp-radius) var(--pdp-radius);
+  background: linear-gradient(180deg, rgba(24, 20, 14, 0) 0%, rgba(24, 20, 14, 0.42) 100%);
+}
+
+/* Same material as the counter, so the two read as one component. */
+.gallery-note {
+  max-width: min(74%, 430px);
+  padding: 10px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 13px;
+  background: rgba(22, 18, 12, 0.66);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 10px 26px -14px rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  animation: productNoteRise 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gallery-note-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #f6f1e6;
+  font-family: var(--ff-sans);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.gallery-note-row--size {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.gallery-note-row--size:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* Gold against the dark panel: the one element on the bar meant to be caught
+   from across the page, since it marks the line as size-specific. */
+.gallery-note-size {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--pdp-gold);
+  color: #211c12;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+@keyframes productNoteRise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-note { animation: none; }
+}
+
+/* Blur is decoration here, not structure — without it the panel must still be
+   opaque enough to carry white text over any photo. */
+@media (prefers-reduced-transparency: reduce) {
+  .gallery-note {
+    background: rgba(22, 18, 12, 0.94);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.note-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--pdp-ink);
+  font-family: var(--ff-sans);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 
 .size-section:first-of-type,
 .color-section + .size-section {
@@ -520,6 +739,14 @@
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
+}
+
+/* Label and value read as one phrase ("Select colour — Black"), so they sit
+   together. space-between belongs on the size row, where the trailing item is
+   a separate Size Guide control that should hold the far end. */
+.section-label--pair {
+  justify-content: flex-start;
+  gap: 10px;
 }
 
 .section-label span,
@@ -541,8 +768,14 @@
   text-transform: uppercase;
 }
 
+/* 10px uppercase text is ~13px tall. The padding buys a 24px target and the negative
+   margin keeps the label sitting where it was (WCAG 2.5.8). */
 .section-label button {
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 6px;
+  margin-inline: -6px;
   border: 0;
   border-bottom: 1px solid rgba(184, 146, 74, 0.5);
   background: transparent;
@@ -592,7 +825,27 @@
   display: block;
   width: 100%;
   height: 100%;
+  border-radius: 50%;
   object-fit: cover;
+}
+
+/*
+ * 34px reads well beside the gallery but is under Apple's 44px. On touch the disc keeps its
+ * size and an invisible ::before carries the target out to 44. `overflow` has to give way for
+ * it, so the image rounds itself instead of being clipped by the button.
+ */
+@media (pointer: coarse) {
+  .color-swatch {
+    position: relative;
+    overflow: visible;
+  }
+
+  .color-swatch::before {
+    content: '';
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+  }
 }
 
 .color-swatch:hover {
@@ -602,6 +855,22 @@
 .color-swatch.is-selected {
   box-shadow: 0 0 0 3px var(--pdp-surface), 0 0 0 5px var(--pdp-gold), 0 6px 16px rgba(30, 28, 24, 0.2);
   transform: translateY(-2px);
+}
+
+/* Matches the collection card's sold-out swatch. Still selectable: choosing it is how a
+   customer asks to be told when a size returns. */
+.color-swatch.is-sold-out {
+  position: relative;
+  opacity: 0.45;
+}
+
+.color-swatch.is-sold-out::after {
+  content: '';
+  position: absolute;
+  inset: 50% -2px auto;
+  height: 1px;
+  background: #272727;
+  transform: rotate(-45deg);
 }
 
 .sr-only {
@@ -656,10 +925,18 @@
   display: none;
 }
 
+/*
+ * The lift is for any enabled chip. The colour change is not: `.size-btn.active` already paints
+ * the chip green, and this rule is one specificity step above it, so on hover the selected chip
+ * got green text on its own green background and the size vanished.
+ */
 .size-btn:not(:disabled):hover {
+  transform: translateY(-2px);
+}
+
+.size-btn:not(:disabled):not(.active):hover {
   border-color: var(--pdp-green);
   color: var(--pdp-green);
-  transform: translateY(-2px);
 }
 
 .size-btn:disabled {
@@ -684,10 +961,6 @@
 
 .size-btn.unavailable .size-value {
   text-decoration: line-through;
-}
-
-.size-sheet {
-  display: none;
 }
 
 .size-guide-modal {
@@ -893,6 +1166,16 @@
   text-align: center;
 }
 
+/* Scarcity line under the quantity row, shown only when stock is genuinely low. */
+.stock-left {
+  margin: -14px 0 20px;
+  color: #9a5b2d;
+  font-family: var(--ff-sans);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 /* ── Quantity ── */
 .qty-row {
   justify-content: space-between;
@@ -1021,6 +1304,7 @@
   display: grid;
   grid-template-rows: 0fr;
   overflow: hidden;
+  scroll-margin-block: 110px;
   transition: grid-template-rows 0.24s ease, margin 0.24s ease;
 }
 
@@ -1160,6 +1444,9 @@
   z-index: 1100;
   display: grid;
   place-items: center;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: contain;
   padding: 18px;
 }
 
@@ -1172,6 +1459,7 @@
   border: 0;
   background: rgba(20, 18, 14, 0.58);
   cursor: pointer;
+  touch-action: none;
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
 }
@@ -1182,6 +1470,7 @@
   width: min(620px, 100%);
   max-height: min(88vh, 760px);
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 30px;
   border: 1px solid rgba(31, 28, 23, 0.12);
   border-radius: 20px;
@@ -1287,6 +1576,11 @@
   letter-spacing: 0.08em;
 }
 
+.review-character-count {
+  margin-inline-start: auto;
+  text-align: end;
+}
+
 .review-stars {
   display: flex;
   gap: 5px;
@@ -1364,8 +1658,77 @@
   gap: 12px;
 }
 
-.review-field--email {
-  grid-column: 1 / -1;
+.review-contact-consent {
+  display: grid;
+  gap: 7px;
+}
+
+.review-contact-consent > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  cursor: pointer;
+}
+
+.review-contact-consent input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  margin: 1px 0 0;
+  accent-color: var(--pdp-green);
+}
+
+.review-contact-consent span {
+  display: grid;
+  gap: 3px;
+  color: var(--pdp-ink-soft);
+  font-family: var(--ff-sans);
+}
+
+.review-contact-consent strong {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.review-contact-consent small {
+  color: var(--pdp-muted);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.review-contact-fields {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--pdp-line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.review-contact-fields > p {
+  margin: 0;
+  color: var(--pdp-ink-soft);
+  font-family: var(--ff-sans);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.review-field-error {
+  margin: 6px 0 0;
+  color: #9a3d34;
+  font-family: var(--ff-sans);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.review-field input[aria-invalid='true'],
+.review-stars[aria-invalid='true'] button {
+  border-color: rgba(154, 61, 52, 0.55);
 }
 
 .review-privacy,
@@ -1532,7 +1895,8 @@
   grid-template-rows: 1fr;
 }
 
-.accordion-content p {
+.accordion-content p,
+.accordion-content .description {
   min-height: 0;
   margin: 0;
   padding: 0 0 20px;
@@ -1595,6 +1959,7 @@
   color: inherit;
   cursor: pointer;
   text-align: start;
+  text-decoration: none;
 }
 
 .related-image {
@@ -1735,7 +2100,8 @@ button:focus-visible {
 
   .gallery-frame {
     min-height: 0;
-    aspect-ratio: 1.04 / 1;
+    height: min(92vw, 45svh);
+    aspect-ratio: auto;
     border-radius: 14px;
     box-shadow: 0 20px 48px -28px rgba(28, 26, 21, 0.34);
   }
@@ -1764,19 +2130,26 @@ button:focus-visible {
     scroll-snap-type: inline proximity;
   }
 
+  .thumb-scroll-cue {
+    display: none;
+  }
+
   .thumb {
     border-radius: 9px;
     scroll-snap-align: start;
   }
 
   .details-panel {
-    padding: 30px 2px 0;
+    padding: 14px 2px 0;
   }
 
   .details-panel h1 {
     margin-bottom: 10px;
-    font-size: clamp(36px, 11vw, 48px);
-    line-height: 1;
+    max-width: 100%;
+    font-size: clamp(34px, 10vw, 44px);
+    line-height: 0.98;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
   }
 
   .descriptor {
@@ -1791,13 +2164,6 @@ button:focus-visible {
 
   .price-row span {
     font-size: 30px;
-  }
-
-  .description {
-    margin-bottom: 24px;
-    padding-bottom: 22px;
-    font-size: 14px;
-    line-height: 1.7;
   }
 
   .attribute-grid {
@@ -1854,177 +2220,6 @@ button:focus-visible {
     display: none;
   }
 
-  .size-sheet {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    display: block;
-  }
-
-  .size-guide-modal {
-    align-items: end;
-    padding: 0;
-  }
-
-  .size-guide-panel {
-    width: 100%;
-    max-height: min(88vh, 680px);
-    padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
-    border-radius: 22px 22px 0 0;
-  }
-
-  .size-guide-head h2 {
-    font-size: 28px;
-  }
-
-  .sg-table th {
-    padding: 10px 14px;
-    font-size: 9px;
-  }
-
-  .sg-table td {
-    padding: 9px 14px;
-    font-size: 13px;
-  }
-
-  .size-sheet-backdrop {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    min-height: 100%;
-    padding: 0;
-    border: 0;
-    background: rgba(20, 18, 14, 0.46);
-    cursor: pointer;
-  }
-
-  .size-sheet-panel {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    display: grid;
-    gap: 14px;
-    padding: 18px 16px calc(20px + env(safe-area-inset-bottom));
-    border-radius: 22px 22px 0 0;
-    background: var(--pdp-surface);
-    box-shadow: 0 -22px 70px rgba(26, 24, 21, 0.26);
-    max-height: 50%;
-  }
-
-  .size-sheet-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-  }
-
-  .size-sheet-head div {
-    display: grid;
-    gap: 4px;
-  }
-
-  .size-sheet-head span {
-    color: var(--pdp-gold-deep);
-    font-family: var(--ff-sans);
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-
-  .size-sheet-head strong {
-    color: var(--pdp-ink);
-    font-family: var(--ff-serif);
-    font-size: 28px;
-    font-weight: 500;
-    line-height: 1;
-  }
-
-  .size-sheet-close {
-    display: inline-grid;
-    width: 40px;
-    height: 40px;
-    place-items: center;
-    border: 1px solid var(--pdp-line);
-    border-radius: 50%;
-    background: #fff;
-    color: var(--pdp-ink);
-    cursor: pointer;
-    font-size: 22px;
-    line-height: 1;
-  }
-
-  .size-list {
-    display: grid;
-    gap: 9px;
-  }
-
-  .size-list .size-btn {
-    width: 100%;
-    height: 52px;
-    padding: 0 16px;
-    border-color: var(--pdp-line);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.74);
-    font-size: 13px;
-    letter-spacing: 0.06em;
-  }
-
-  .size-list .size-btn.active {
-    border-color: var(--pdp-green);
-    background: var(--pdp-green);
-    color: #f3efe4;
-  }
-
-  .size-list .size-btn.out-of-stock {
-    border-color: rgba(31, 28, 23, 0.12);
-    background: rgba(31, 28, 23, 0.06);
-    color: rgba(31, 28, 23, 0.34);
-  }
-
-  .size-list .size-value {
-    text-align: start;
-  }
-
-  .size-list .size-value::before {
-    content: 'EU ';
-    color: var(--pdp-muted);
-    font-size: 10px;
-    letter-spacing: 0.12em;
-  }
-
-  .size-list .size-btn.active .size-value::before {
-    color: rgba(243, 239, 228, 0.7);
-  }
-
-  .size-list .size-btn.out-of-stock .size-value::before {
-    color: rgba(31, 28, 23, 0.3);
-  }
-
-  .size-list .size-state {
-    display: inline-grid;
-    width: 24px;
-    height: 24px;
-    place-items: center;
-    border: 1px solid var(--pdp-line);
-    border-radius: 50%;
-    color: #fff;
-    font-size: 11px;
-  }
-
-  .size-list .size-btn.active .size-state {
-    border-color: var(--pdp-gold);
-    background: var(--pdp-gold);
-    color: #fff;
-  }
-
-  .size-list .size-btn.out-of-stock .size-state {
-    border-color: rgba(31, 28, 23, 0.12);
-    background: transparent;
-    color: rgba(31, 28, 23, 0.3);
-  }
-
   .restock-form-row {
     grid-template-columns: 1fr;
   }
@@ -2048,14 +2243,19 @@ button:focus-visible {
   }
 
   .review-panel {
+    display: flex;
     width: 100%;
-    max-height: min(91vh, 760px);
-    padding: 24px 16px calc(22px + env(safe-area-inset-bottom));
+    height: 80dvh;
+    max-height: 80dvh;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 16px 14px max(14px, env(safe-area-inset-bottom));
     border-radius: 22px 22px 0 0;
+    box-shadow: 0 -22px 70px rgba(26, 24, 21, 0.26);
   }
 
   .review-panel__close {
-    top: 14px;
+    top: 12px;
     inset-inline-end: 14px;
   }
 
@@ -2065,12 +2265,29 @@ button:focus-visible {
 
   .review-head h2,
   .review-success h2 {
-    font-size: 36px;
+    font-size: clamp(24px, 7.2vw, 28px);
+  }
+
+  .review-head h2 {
+    white-space: nowrap;
+  }
+
+  .review-head > span,
+  .review-success > span:not(.review-success__mark) {
+    margin-top: 7px;
+    font-size: 11px;
+    line-height: 1.45;
   }
 
   .review-form {
-    gap: 16px;
-    margin-top: 22px;
+    min-height: 0;
+    flex: 1 1 auto;
+    gap: 10px;
+    margin-top: 14px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 2px;
+    scrollbar-gutter: stable;
   }
 
   .review-stars {
@@ -2079,12 +2296,56 @@ button:focus-visible {
   }
 
   .review-stars button {
-    width: min(52px, 17vw);
-    height: min(52px, 17vw);
+    width: min(44px, 16vw);
+    height: min(44px, 16vw);
+  }
+
+  .review-field > span,
+  .review-rating legend {
+    margin-bottom: 6px;
+  }
+
+  .review-field input {
+    min-height: 44px;
+  }
+
+  .review-field textarea {
+    min-height: 78px;
+    resize: none;
   }
 
   .review-contact-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .review-contact-fields {
+    padding: 10px;
+  }
+
+  .review-privacy,
+  .review-error {
+    line-height: 1.35;
+  }
+
+  .review-submit,
+  .review-secondary {
+    min-height: 46px;
+  }
+
+  .review-form > .review-submit {
+    position: sticky;
+    z-index: 3;
+    bottom: 0;
+    flex: 0 0 auto;
+    outline: 8px solid var(--pdp-surface);
+    box-shadow: 0 -16px 30px 10px var(--pdp-surface);
+  }
+
+  .review-success {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
   }
 
   .trust-row {
@@ -2121,16 +2382,25 @@ button:focus-visible {
     font-size: 10px;
   }
 
+  /* The bar is fixed over the page for the whole scroll, so its backdrop blur
+     is not a one-off cost: the phone re-blurs a full-width strip on every
+     frame the page moves. At 97% opacity there is nothing left underneath for
+     the blur to show, so it was paying for an effect that could not be seen.
+     Opaque here, and the blur is dropped. Desktop, where the bar is hidden,
+     keeps the base rule untouched. */
   .sticky-atc {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
     padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
-    background: rgba(251, 249, 245, 0.97);
+    background: #fbf9f5;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .sticky-atc .add-cart-btn,
-  .sticky-atc .buy-now-btn {
+  .sticky-atc .buy-now-btn,
+  .sticky-atc .notify-btn {
     min-height: 48px;
     display: inline-grid;
     grid-template-columns: 1fr;
@@ -2140,4 +2410,25 @@ button:focus-visible {
     font-size: 10px;
     letter-spacing: 0.12em;
   }
+
+  .sticky-atc .notify-btn {
+    grid-column: 1 / -1;
+  }
+
+  /* The label sits above the price inside the same pill, so the bar stays one row. */
+  .sticky-atc .add-cart-btn {
+    gap: 1px;
+    line-height: 1.1;
+  }
+
+  .sticky-atc .sticky-price {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    opacity: 0.85;
+  }
 }
+
+#restock-size { width: 100%; padding: 12px; margin: 8px 0 16px; border: 1px solid #c6c3bc; background: transparent; color: inherit; font: inherit; }
+.restock-privacy { font-size: .8rem; line-height: 1.5; margin-top: 12px; }
+.qty-control button:disabled { opacity: .4; cursor: default; }

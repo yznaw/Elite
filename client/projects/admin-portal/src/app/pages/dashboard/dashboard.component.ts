@@ -1,4 +1,5 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { RestockRequestsService, RestockSummary } from '../../services/restock-requests.service';
+import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -14,12 +15,12 @@ import { AdminCustomersService } from '../../services/admin-customers.service';
 import { StoreConfigService } from '../../services/store-config.service';
 import { Order, Product, QAR } from '../../models';
 import { IconComponent } from '../../shared/icons/icon.component';
+import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 
 @Component({
-  selector: 'ap-dashboard',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, KpiComponent, LineChartComponent, SortableTableComponent, CellTplDirective, PillComponent, IconComponent],
-  styles: [`
+    selector: 'ap-dashboard',
+    imports: [CommonModule, FormsModule, RouterLink, KpiComponent, LineChartComponent, SortableTableComponent, CellTplDirective, PillComponent, IconComponent, SpinnerComponent],
+    styles: [`
     .range-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .range-pills { display: flex; gap: 2px; background: var(--bg-2); border-radius: 8px; padding: 3px; flex-shrink: 0; }
     .range-pill {
@@ -46,7 +47,8 @@ import { IconComponent } from '../../shared/icons/icon.component';
       .card-header .row.gap-sm.small { display: none; } /* hide chart legend on phone */
     }
   `],
-  template: `
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     <div class="page-fade">
       <div class="range-bar mb-16">
         <div class="range-pills">
@@ -65,6 +67,11 @@ import { IconComponent } from '../../shared/icons/icon.component';
         }
       </div>
 
+      @if (loading()) {
+        <div class="row gap-sm" style="padding:60px 0;justify-content:center;">
+          <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
+        </div>
+      } @else {
       <div class="kpi-grid mb-24">
         <ap-kpi
           [label]="revRangeLabel()"
@@ -102,6 +109,13 @@ import { IconComponent } from '../../shared/icons/icon.component';
         </div>
       </div>
 
+      @if (restockDemand().length) {
+        <section class="card card-pad mb-24"><h2 class="card-title">{{ t('restock.topDemand') }}</h2>
+          @for (r of restockDemand(); track r.product_id + r.color_key + r.size) {
+            <p><a routerLink="/restock-requests">{{ r.product_name }} · {{ r.color }} · {{ r.size === 'ONE_SIZE' ? t('restock.oneSize') : r.size }}</a> — {{ r.waiting_count }} {{ t('restock.customersWaiting') }}</p>
+          }
+        </section>
+      }
       <div class="dashboard-charts mb-24">
         <div class="card">
           <div class="card-header">
@@ -169,10 +183,13 @@ import { IconComponent } from '../../shared/icons/icon.component';
           <ng-template apCellTpl="total" let-r><span class="strong">{{ QAR(r.total) }}</span></ng-template>
         </ap-sortable-table>
       </div>
+      }
     </div>
-  `,
+  `
 })
 export class DashboardComponent implements OnInit {
+  private readonly restockApi = inject(RestockRequestsService);
+  readonly restockDemand = signal<RestockSummary[]>([]);
   private readonly i18n = inject(I18nService);
   private readonly router = inject(Router);
   private readonly ordersApi = inject(AdminOrdersService);
@@ -184,6 +201,7 @@ export class DashboardComponent implements OnInit {
   readonly QAR = QAR;
   readonly Math = Math;
 
+  readonly loading = signal(true);
   readonly orders = signal<Order[]>([]);
   readonly products = signal<Product[]>([]);
   readonly customers = signal<{ id: string; joined?: string }[]>([]);
@@ -240,14 +258,19 @@ export class DashboardComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    const [orders, products, customers] = await Promise.all([
-      this.ordersApi.list().then(r => r.orders).catch(() => []),
-      this.productsApi.list().catch(() => []),
-      this.customersApi.list().catch(() => []),
-    ]);
-    this.orders.set(orders);
-    this.products.set(products);
-    this.customers.set(customers);
+    void this.restockApi.summary('status=pending&soldOut=true&limit=5').then(rows => this.restockDemand.set(rows)).catch(() => {});
+    try {
+      const [orders, products, customers] = await Promise.all([
+        this.ordersApi.list().then(r => r.orders).catch(() => []),
+        this.productsApi.list().catch(() => []),
+        this.customersApi.list({ limit: 200 }).then(r => r.customers).catch(() => []),
+      ]);
+      this.orders.set(orders);
+      this.products.set(products);
+      this.customers.set(customers);
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   // ── KPI computeds ────────────────────────────────────────────────────────

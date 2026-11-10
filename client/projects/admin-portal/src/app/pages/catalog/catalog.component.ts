@@ -1,11 +1,10 @@
-import { Component, HostListener, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnInit, computed, inject, signal, ChangeDetectionStrategy, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { RouterLink, ActivatedRoute } from '@angular/router';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
-import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { ProductDrawerComponent } from './product-drawer.component';
 import { BulkImportDialogComponent } from './bulk-import-dialog.component';
 import { I18nService } from '../../services/i18n.service';
@@ -17,6 +16,7 @@ import { Collection, Product, QAR } from '../../models';
 import { StorageService } from '../../services/storage.service';
 import { StoreConfigService } from '../../services/store-config.service';
 import { COLLECTIONS } from '../../data/mock';
+import { NO_IMAGE_LOGO, onProductImgError } from '../../utils/no-image';
 // import { Product, QAR } from '../../models';
 
 type SortKey = 'name-az' | 'name-za' | 'price-asc' | 'price-desc' | 'stock-asc' | 'stock-desc' | 'newest';
@@ -25,11 +25,11 @@ type StatusFilter = 'all' | 'active' | 'hidden' | 'low-stock' | 'out-of-stock';
 type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
 @Component({
-  selector: 'ap-catalog',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, EmptyStateComponent, SpinnerComponent, ProductDrawerComponent, BulkImportDialogComponent],
-  template: `
+    selector: 'ap-catalog',
+    imports: [RouterLink, CommonModule, FormsModule, IconComponent, PillComponent, EmptyStateComponent, ProductDrawerComponent, BulkImportDialogComponent],
+    template: `
     <div class="page-fade">
+      <a class="btn mb-16" routerLink="/restock-requests">{{ t('restock.title') }}</a>
 
       <!-- ── Top bar ── -->
       <div class="card mb-16" style="padding:12px 14px;">
@@ -189,9 +189,9 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
             <div class="fp-group fp-page">
               <label class="fp-label">{{ t('common.perPage') }}</label>
               <select class="inp inp-sm" [ngModel]="pageSize()" (ngModelChange)="pageSize.set(+$event)">
-                <option [value]="25">25</option>
-                <option [value]="50">50</option>
-                <option [value]="100">100</option>
+                <option [value]="24">24</option>
+                <option [value]="48">48</option>
+                <option [value]="96">96</option>
                 <option [value]="0">{{ t('catalog.filter.all') }}</option>
               </select>
             </div>
@@ -281,7 +281,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
       <!-- ── GRID view ── -->
       @if (effectiveView() === 'grid') {
-        @if (paged().length === 0) {
+        @if (paged().length === 0 && !loading()) {
           <div class="card">
             <ap-empty-state icon="catalog" [title]="t('catalog.empty.title')" [sub]="t('catalog.empty.sub')">
               <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
@@ -305,9 +305,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                     <img [src]="p.image" [alt]="p.name" (error)="onImgError($event)"
                          [style.filter]="p.hidden && !selectionMode() ? 'grayscale(0.6)' : null"/>
                   } @else {
-                    <div class="prod-img-empty">
-                      <ap-icon name="catalog" [size]="32"/>
-                    </div>
+                    <img class="no-img" [src]="noImageLogo" [alt]="p.name"/>
                   }
                   @if (!selectionMode()) {
                     @if (p.hidden) {
@@ -322,7 +320,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                   <div class="prod-name">{{ p.name }}</div>
                   <div class="prod-sku">{{ p.sku }} · {{ p.brand }}</div>
                   <div class="prod-meta">
-                    <span class="prod-price">{{ QAR(p.price) }}</span>
+                    <span class="prod-price">{{ priceLabel(p) }}</span>
                     @if (!selectionMode()) {
                       <span class="prod-stock" [class.low]="p.stock > 0 && p.stock < lowStockThreshold()" [class.out]="p.stock === 0">
                         {{ stockLabel(p) }}
@@ -341,7 +339,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
       <!-- ── LIST view ── -->
       @if (effectiveView() === 'list') {
-        @if (paged().length === 0) {
+        @if (paged().length === 0 && !loading()) {
           <div class="card">
             <ap-empty-state icon="catalog" [title]="t('catalog.empty.title')" [sub]="t('catalog.empty.sub')">
               <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
@@ -371,9 +369,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                   @if (p.image) {
                     <img class="lv-thumb" [src]="p.image" [alt]="p.name" (error)="onImgError($event)"/>
                   } @else {
-                    <div class="lv-thumb" style="display:flex;align-items:center;justify-content:center;background:var(--bg-2);color:var(--muted);">
-                      <ap-icon name="catalog" [size]="16"/>
-                    </div>
+                    <img class="lv-thumb no-img" style="background:var(--surface);" [src]="noImageLogo" [alt]="p.name"/>
                   }
                 </div>
                 <div class="lv-c-name">
@@ -381,7 +377,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
                   <span class="lv-brand muted small">{{ p.brand }}</span>
                 </div>
                 <div class="lv-c-sku hide-mobile mono small muted">{{ p.sku }}</div>
-                <div class="lv-c-price mono">{{ QAR(p.price) }}</div>
+                <div class="lv-c-price mono">{{ priceLabel(p) }}</div>
                 <div class="lv-c-stock hide-mobile">
                   <span class="prod-stock" [class.low]="p.stock > 0 && p.stock < lowStockThreshold()" [class.out]="p.stock === 0">
                     {{ p.stock === 0 ? t('catalog.outOfStock') : p.stock }}
@@ -402,9 +398,9 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       <!-- ── Pagination ── -->
       @if (pageSize() > 0 && filtered().length > pageSize()) {
         <div class="pagination mt-16">
-          <button class="btn btn-sm btn-outline" [disabled]="page() === 0" (click)="prevPage()">← {{ t('common.prev') }}</button>
-          <span class="muted small">{{ t('catalog.pagination.page') }} {{ page() + 1 }} {{ t('catalog.pagination.of') }} {{ totalPages() }}</span>
-          <button class="btn btn-sm btn-outline" [disabled]="page() >= totalPages() - 1" (click)="nextPage()">{{ t('common.next') }} →</button>
+          <button class="btn btn-sm btn-outline" [disabled]="safePage() === 0" (click)="prevPage()">← {{ t('common.prev') }}</button>
+          <span class="muted small">{{ t('catalog.pagination.page') }} {{ safePage() + 1 }} {{ t('catalog.pagination.of') }} {{ totalPages() }}</span>
+          <button class="btn btn-sm btn-outline" [disabled]="safePage() >= totalPages() - 1" (click)="nextPage()">{{ t('common.next') }} →</button>
         </div>
       }
     </div>
@@ -418,7 +414,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
 
     @if (activeId(); as id) {
       <ap-product-drawer
-        [products]="paged()"
+        [products]="drawerProducts()"
         [collections]="collections()"
         [currentId]="id"
         (closed)="onDrawerClosed()"
@@ -429,7 +425,8 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       />
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     /* ── Top bar rows ── */
     .tb-row1 { margin-bottom: 10px; }
     .search-box { width: 100%; position: relative; }
@@ -575,11 +572,6 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
     .result-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 
     /* ── Card grid (existing) ── */
-    .prod-img-empty {
-      width: 100%; height: 100%;
-      display: flex; align-items: center; justify-content: center;
-      background: var(--bg-2); color: var(--muted);
-    }
     .prod-card { position: relative; cursor: pointer; transition: outline .1s; }
     .prod-card.selected { outline: 2px solid #c9a84c; outline-offset: 2px; border-radius: 10px; }
     .sel-check {
@@ -707,7 +699,7 @@ type BulkAction = 'status-active' | 'status-hidden' | 'delete';
       /* Compact grid inside the sheet */
       .filter-panel-grid { grid-template-columns: 1fr 1fr; }
     }
-  `],
+  `]
 })
 export class CatalogComponent implements OnInit {
   private readonly i18n = inject(I18nService);
@@ -719,8 +711,20 @@ export class CatalogComponent implements OnInit {
   private readonly storage = inject(StorageService);
   private readonly storeConfig = inject(StoreConfigService);
   readonly t = (k: string): string => this.i18n.t(k);
+  readonly noImageLogo = NO_IMAGE_LOGO;
 
   readonly QAR = QAR;
+
+  /**
+   * The selling price as staff would quote it: one number, or the span when the sizes are
+   * priced differently. The column used to show the product's own price, which on a product
+   * whose sizes run 1,000 to 1,300 is neither what it costs nor what it sells for.
+   */
+  priceLabel(product: Product): string {
+    const min = product.priceMin ?? product.price;
+    const max = product.priceMax ?? product.price;
+    return min === max ? QAR(min) : `${QAR(min)} – ${max.toLocaleString()}`;
+  }
   readonly collections = signal<Collection[]>([]);
 
   private readonly _products = signal<Product[]>([]);
@@ -736,8 +740,9 @@ export class CatalogComponent implements OnInit {
       this._products.set(list);
       this.collections.set(collections.filter((collection) => !collection.hidden));
       this.refColors.set(colors);
-    } catch {
+    } catch (caught) {
       this._products.set([]);
+      this.toast.errorFrom(caught, this.t('catalog.toast.loadError'));
     } finally {
       this.loading.set(false);
     }
@@ -775,7 +780,11 @@ export class CatalogComponent implements OnInit {
     this.isMobile() ? 'grid' : this.viewMode()
   );
   readonly page          = signal(0);
-  readonly pageSize      = signal(25);
+  // 24 (not 25) so a full page divides evenly across the common column
+  // counts the responsive grid actually renders (3/4/6/8/12) instead of
+  // leaving a single card stranded alone on the last row — see the
+  // grid-cards CSS below (auto-fill, minmax(160px,1fr)).
+  readonly pageSize      = signal(24);
   readonly refColors        = signal<RefColor[]>([]);
   readonly colorFilterOpen  = signal(false);
 
@@ -796,7 +805,8 @@ export class CatalogComponent implements OnInit {
   );
 
   readonly outOfStockCount = computed(() =>
-    this._products().filter(p => !p.hidden && p.stock === 0).length,
+    // Same rule as the Out of Stock filter, so the badge matches what it shows.
+    this._products().filter(p => p.stock === 0).length,
   );
 
   readonly brands = computed(() => {
@@ -892,10 +902,25 @@ export class CatalogComponent implements OnInit {
     this.pageSize() > 0 ? Math.ceil(this.filtered().length / this.pageSize()) : 1,
   );
 
+  /** The page actually shown. Filters, page size or deletes can leave `page`
+      past the end, which used to render an empty grid with no way back. */
+  readonly safePage = computed(() => Math.min(this.page(), Math.max(0, this.totalPages() - 1)));
+
+  /** What the drawer navigates. The open product is always included, so a save
+      that moves it out of the current filter, page or sort cannot swap the
+      drawer onto a different product. */
+  readonly drawerProducts = computed(() => {
+    const list = this.filtered();
+    const id = this.activeId();
+    if (!id || list.some(p => p.id === id)) return list;
+    const open = this._products().find(p => p.id === id);
+    return open ? [open, ...list] : list;
+  });
+
   readonly paged = computed(() => {
     const all = this.filtered();
     if (this.pageSize() === 0) return all;
-    const start = this.page() * this.pageSize();
+    const start = this.safePage() * this.pageSize();
     return all.slice(start, start + this.pageSize());
   });
 
@@ -903,8 +928,8 @@ export class CatalogComponent implements OnInit {
     const total = this.filtered().length;
     const ps = this.pageSize();
     if (ps === 0 || total <= ps) return `${total} ${total !== 1 ? this.t('catalog.products') : this.t('catalog.product')}`;
-    const start = this.page() * ps + 1;
-    const end = Math.min((this.page() + 1) * ps, total);
+    const start = this.safePage() * ps + 1;
+    const end = Math.min((this.safePage() + 1) * ps, total);
     return `${start}–${end} ${this.t('catalog.pagination.of')} ${total}`;
   });
 
@@ -919,7 +944,8 @@ export class CatalogComponent implements OnInit {
     this.selectionMode.update(v => !v);
     this.selectedIds.set(new Set());
     this.confirmingDelete.set(false);
-    this.activeId.set(null);
+    // Through the normal close path so an unsaved new-product row is cleaned up.
+    if (this.activeId()) this.onDrawerClosed();
   }
 
   toggleSelect(id: string): void {
@@ -930,7 +956,7 @@ export class CatalogComponent implements OnInit {
     });
   }
 
-  selectAll(): void { this.selectedIds.set(new Set(this.paged().map(p => p.id))); }
+  selectAll(): void { this.selectedIds.set(new Set(this.paged().filter(p => !p.id.startsWith('P-NEW-')).map(p => p.id))); }
   clearSelection(): void { this.selectedIds.set(new Set()); }
 
   // ── Bulk actions ──────────────────────────────────────────────────────────
@@ -944,7 +970,8 @@ export class CatalogComponent implements OnInit {
   }
 
   async bulkSetStatus(hidden: boolean): Promise<void> {
-    const ids = [...this.selectedIds()];
+    const ids = [...this.selectedIds()].filter(id => !id.startsWith('P-NEW-'));
+    const snapshot = this._products();
     this._products.update(all =>
       all.map(p => ids.includes(p.id) ? { ...p, hidden } : p),
     );
@@ -955,10 +982,12 @@ export class CatalogComponent implements OnInit {
         this.productsApi.update(id, { hidden }),
       ));
       this.toast.success(`${ids.length} ${ids.length === 1 ? this.t('catalog.product') : this.t('catalog.products')} — ${hidden ? this.t('catalog.status.hidden') : this.t('catalog.status.active')}`);
-    } catch {
-      const list = await this.productsApi.list().catch(() => this._products());
+    } catch (caught) {
+      // Reload the truth (some calls may have succeeded); if that fails too,
+      // go back to the list as it was before the change.
+      const list = await this.productsApi.list().catch(() => snapshot);
       this._products.set(list);
-      this.toast.error(this.t('catalog.toast.statusError'));
+      this.toast.errorFrom(caught, this.t('catalog.toast.statusError'));
     }
   }
 
@@ -966,20 +995,33 @@ export class CatalogComponent implements OnInit {
     const ids = [...this.selectedIds()];
     if (!ids.length) return;
     this.confirmingDelete.set(false);
+    const snapshot = this._products();
+    const removed = snapshot.filter(p => ids.includes(p.id) && !p.id.startsWith('P-NEW-'));
     this._products.update(all => all.filter(p => !ids.includes(p.id)));
     this.selectedIds.set(new Set());
     this.selectionMode.set(false);
     try {
-      const { deleted } = await this.productsApi.bulkDelete(ids);
-      this.toast.success(`${deleted} ${deleted === 1 ? this.t('catalog.product') : this.t('catalog.products')} — ${this.t('common.delete').toLowerCase()}`);
-    } catch {
-      const list = await this.productsApi.list().catch(() => this._products());
+      const { deleted } = await this.productsApi.bulkDelete(removed.map(p => p.id));
+      this.toast.success(
+        `${deleted} ${deleted === 1 ? this.t('catalog.product') : this.t('catalog.products')} — ${this.t('common.delete').toLowerCase()}`,
+        undefined,
+        { label: this.t('common.undo'), run: () => { void this.restoreProducts(removed); } },
+      );
+    } catch (caught) {
+      const list = await this.productsApi.list().catch(() => snapshot);
       this._products.set(list);
-      this.toast.error(this.t('catalog.toast.deleteError'));
+      this.toast.errorFrom(caught, this.t('catalog.toast.deleteError'));
     }
   }
 
   // ── Product CRUD ──────────────────────────────────────────────────────────
+
+  @ViewChild(ProductDrawerComponent) private drawer?: ProductDrawerComponent;
+
+  /** Route guard hook: an open product with unsaved edits confirms before leaving. */
+  canLeave(): boolean | Promise<boolean> {
+    return this.drawer ? this.drawer.confirmLeaveIfDirty() : true;
+  }
 
   openProduct(p: Product): void { this.activeId.set(p.id); }
 
@@ -1007,11 +1049,18 @@ export class CatalogComponent implements OnInit {
     const draft: Product = {
       id, name: '', sku: '', brand: '', price: 0, stock: 0,
       hidden: true,
-      image: 'https://images.unsplash.com/photo-1519415943484-9fa1873496d4?w=600&q=80&auto=format&fit=crop',
+      // Empty, not a stock placeholder: the drawer seeds `images[]` from this
+      // field when empty (see product-drawer's form init), and a save with no
+      // real photo would otherwise persist a stock image as the product's
+      // gallery. The catalog/drawer's own no-image fallback (elite logo)
+      // covers the empty state visually.
+      image: '',
       variants: [],
     };
     this._products.update(all => [draft, ...all]);
     this.clearFilters();
+    // Newest keeps the empty draft at the top of the first page.
+    this.sortKey.set('newest');
     this.activeId.set(id);
   }
 
@@ -1027,42 +1076,55 @@ export class CatalogComponent implements OnInit {
     this.page.set(0);
   }
 
-  onDeleted(deleted: Product): void {
-    const before = this._products();
-    const beforeIndex = before.findIndex(p => p.id === deleted.id);
-    if (beforeIndex < 0) return;
-
-    const visible = this.filtered();
-    const visibleIndex = visible.findIndex(p => p.id === deleted.id);
+  async onDeleted(deleted: Product): Promise<void> {
+    if (!this._products().some(p => p.id === deleted.id)) return;
+    const visibleIndex = this.filtered().findIndex(p => p.id === deleted.id);
 
     if (!deleted.id.startsWith('P-NEW-')) {
-      this.productsApi.archive(deleted.id).catch(() => {});
+      try {
+        await this.productsApi.archive(deleted.id);
+      } catch {
+        // The error interceptor explains why; the product stays in the list.
+        return;
+      }
     }
     this._products.update(all => all.filter(p => p.id !== deleted.id));
 
     const nextVisible = this.filtered();
-    if (nextVisible.length === 0) {
-      this.activeId.set(null);
-    } else {
-      this.activeId.set(nextVisible[Math.min(Math.max(visibleIndex, 0), nextVisible.length - 1)].id);
-    }
+    this.activeId.set(nextVisible.length === 0
+      ? null
+      : nextVisible[Math.min(Math.max(visibleIndex, 0), nextVisible.length - 1)].id);
 
+    if (deleted.id.startsWith('P-NEW-')) return;
     this.toast.success(
       this.t('product.toast.deleted.title'),
       `${deleted.name} (${deleted.sku})`,
       {
         label: this.t('common.undo'),
         run: () => {
-          this._products.update(all => {
-            const r = [...all];
-            r.splice(beforeIndex, 0, deleted);
-            return r;
+          void this.restoreProducts([deleted]).then(restored => {
+            if (restored.length) this.activeId.set(deleted.id);
           });
-          this.activeId.set(deleted.id);
-          this.toast.info(this.t('product.toast.restored.title'), deleted.name);
         },
       },
     );
+  }
+
+  /** Undo for delete: restores on the server first, then puts the rows back. */
+  private async restoreProducts(products: Product[]): Promise<Product[]> {
+    const restored: Product[] = [];
+    for (const product of products) {
+      try {
+        restored.push(await this.productsApi.restore(product.id, product.hidden));
+      } catch (caught) {
+        this.toast.errorFrom(caught, this.t('product.toast.restoreFailed'), product.name);
+      }
+    }
+    if (restored.length === 0) return restored;
+    const ids = new Set(restored.map(p => p.id));
+    this._products.update(all => [...restored, ...all.filter(p => !ids.has(p.id))]);
+    this.toast.info(this.t('product.toast.restored.title'), restored.map(p => p.name).join(', '));
+    return restored;
   }
 
   async onBulkImported(): Promise<void> {
@@ -1076,12 +1138,18 @@ export class CatalogComponent implements OnInit {
   exportCsv(): void {
     const products = this.filtered();
     if (products.length === 0) return;
+    const cell = (value: unknown): string => {
+      const text = String(value ?? '');
+      // A leading = + - @ makes spreadsheet apps evaluate the cell as a formula.
+      const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
     const rows = [
       'SKU,Name,Brand,Price (QAR),Stock,Status,Variants',
       ...products.map(p => [
-        `"${p.sku}"`,
-        `"${p.name.replace(/"/g, '""')}"`,
-        `"${p.brand.replace(/"/g, '""')}"`,
+        cell(p.sku),
+        cell(p.name),
+        cell(p.brand),
         p.price,
         p.stock,
         p.hidden ? 'Hidden' : 'Active',
@@ -1094,7 +1162,8 @@ export class CatalogComponent implements OnInit {
     a.href = url;
     a.download = `catalog-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
-    URL.revokeObjectURL(url);
+    // Revoking in the same tick can cancel the download in Safari.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     this.toast.success(this.t('catalog.toast.exported'), `${products.length} ${products.length === 1 ? this.t('catalog.product') : this.t('catalog.products')}`);
   }
 
@@ -1109,5 +1178,5 @@ export class CatalogComponent implements OnInit {
     return `${p.stock} ${this.t('catalog.inStock')}`;
   }
 
-  onImgError(e: Event): void { (e.target as HTMLImageElement).style.display = 'none'; }
+  onImgError(e: Event): void { onProductImgError(e); }
 }

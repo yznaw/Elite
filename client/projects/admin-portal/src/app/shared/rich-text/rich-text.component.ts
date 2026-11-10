@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild, inject } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild, inject, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { I18nService } from '../../services/i18n.service';
 
@@ -14,10 +14,9 @@ import { I18nService } from '../../services/i18n.service';
  * later without changing the public API of this component).
  */
 @Component({
-  selector: 'ap-rich-text',
-  standalone: true,
-  imports: [CommonModule],
-  template: `
+    selector: 'ap-rich-text',
+    imports: [CommonModule],
+    template: `
     <div class="rt" [class.rt-rtl]="dir === 'rtl'">
       <div class="rt-toolbar" role="toolbar">
         <button type="button" class="rt-btn" (mousedown)="cmd($event, 'formatBlock', 'h3')"
@@ -51,7 +50,8 @@ import { I18nService } from '../../services/i18n.service';
       </div>
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .rt {
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -126,7 +126,7 @@ import { I18nService } from '../../services/i18n.service';
     .rt-editor p { margin: 4px 0; }
     .rt-editor strong { color: var(--ink); }
     .rt-rtl .rt-editor { text-align: right; }
-  `],
+  `]
 })
 export class RichTextComponent implements AfterViewInit, OnChanges {
   @Input() value = '';

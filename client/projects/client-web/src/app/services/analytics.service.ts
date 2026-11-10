@@ -1,6 +1,8 @@
-import { Injectable, NgZone, inject } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { Injectable, NgZone, PLATFORM_ID, inject } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
+import { API_BASE } from '../core/api-base';
 
 /** A single tracked interaction, queued client-side before being flushed. */
 interface TrackedEvent {
@@ -41,7 +43,9 @@ const MAX_QUEUE = 25;               // flush early once the queue reaches this
 export class AnalyticsService {
   private readonly router = inject(Router);
   private readonly zone = inject(NgZone);
-  private readonly endpoint = `${this.resolveApiBase()}/analytics/collect`;
+  private readonly endpoint = `${inject(API_BASE)}/analytics/collect`;
+  /** Tracking only ever means a real visitor in a real browser. */
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   private queue: TrackedEvent[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -49,7 +53,7 @@ export class AnalyticsService {
 
   /** Idempotent. Wires the delegated listeners and starts the flush loop. */
   init(): void {
-    if (this.started || typeof document === 'undefined') return;
+    if (this.started || !this.isBrowser) return;
     this.started = true;
 
     // Open the session, carrying the *real* external entry referrer
@@ -78,6 +82,9 @@ export class AnalyticsService {
 
   /** Manually record a semantic event (e.g. add_to_cart) from anywhere. */
   track(type: string, extra: Partial<TrackedEvent> = {}): void {
+    // Pages call this during their own load, which also happens in a server
+    // render, where location, document and sessionStorage don't exist.
+    if (!this.isBrowser) return;
     this.touchSession();
     this.queue.push({
       type,
@@ -183,15 +190,4 @@ export class AnalyticsService {
     });
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost'
-      || hostname === '127.0.0.1'
-      || hostname === '::1'
-      || hostname === '[::1]'
-      || /^10\./.test(hostname)
-      || /^192\.168\./.test(hostname)
-      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 }

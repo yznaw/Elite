@@ -5,12 +5,15 @@ const { ensureDefaultTenant } = require('../db/tenant');
 
 const HOME_COLLECTION_LIMIT = 3;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const DEFAULT_HOME_CONTENT = {
   hero: {
     imageUrl: 'https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=1500&q=85&auto=format&fit=crop',
     title: "Find Your Perfect Look at Elite's New Collection",
     body: 'Step into a sharper wardrobe with curated footwear, outerwear, and everyday essentials selected for modern city style.',
-    discountText: '50%',
+    kickerEn: 'Elite Collection',
+    kickerAr: 'اليت كولكشن',
     ctaText: 'Shop Now',
     ctaLink: '/collection',
   },
@@ -35,111 +38,182 @@ const DEFAULT_HOME_CONTENT = {
       link: '/collection?category=jacket',
     },
   ],
+  collectionsIntro: {
+    titleEn: 'Featured Collections',
+    titleAr: 'المجموعات المميزة',
+    bodyEn: 'Dare to mix and match. Explore the latest edits by category.',
+    bodyAr: 'اكتشف أحدث اختياراتنا وتعرّف على مجموعاتنا حسب الفئة.',
+  },
   story: {
     hero: {
-      kicker: 'Est. 1962 · Doha',
-      title: 'A House Built by Hand',
-      accent: 'and carried by craft',
-      body: 'Elite began as a small atelier serving men who wanted shoes with presence, patience, and a story in every stitch.',
-      imageUrl: 'https://images.unsplash.com/photo-1582588678413-dbf45f4823e9?w=1600&q=85&auto=format&fit=crop',
-      imageAlt: 'Handcrafted leather shoes arranged in warm atelier light',
+      kicker: 'EST. 2018 · QATAR',
+      title: 'A Qatari Perspective',
+      accent: 'crafted in Italy',
+      body: 'Elite Collection is a Qatari brand founded in 2018, creating refined footwear and accessories shaped by the region’s quiet confidence and custom-crafted in Italy.',
+      imageUrl: '/api/uploads/mq8mzu95-06808f73-card.webp',
+      imageAlt: 'Elite Collection founder beside a classic car in Doha',
+      imageAltEn: 'Elite Collection founder beside a classic car in Doha',
+      imageAltAr: 'مؤسس اليت كولكشن بجانب سيارة كلاسيكية في الدوحة',
+      kickerEn: 'EST. 2018 · QATAR',
+      kickerAr: 'منذ 2018 · قطر',
+      titleEn: 'A Qatari Perspective',
+      titleAr: 'رؤية قطرية',
+      accentEn: 'crafted in Italy',
+      accentAr: 'بحِرفة إيطالية',
+      bodyEn: 'Elite Collection is a Qatari brand founded in 2018, creating refined footwear and accessories shaped by the region’s quiet confidence and custom-crafted in Italy.',
+      bodyAr: 'اليت كولكشن علامة قطرية تأسست عام 2018، تقدّم أحذية وإكسسوارات راقية تستلهم أناقة المنطقة الهادئة وتُصنع حسب الطلب في إيطاليا.',
     },
     chapters: [
       {
         id: 'origin',
-        eyebrow: '1962 · The first bench',
-        title: 'A single workbench in old Doha',
-        body: 'Our first pairs were measured by hand, cut in quiet batches, and finished for customers who cared about the feel of leather as much as the look of it.',
-        imageUrl: 'https://images.unsplash.com/photo-1582588678413-dbf45f4823e9?w=1000&q=85&auto=format&fit=crop',
-        imageAlt: 'Leather artisan working on shoe details',
+        eyebrow: '2018 · The beginning',
+        title: 'A Qatari idea with a global finish',
+        body: 'Elite Collection began with a clear ambition: to create pieces that reflect the taste of the region while meeting the standards of Italian craftsmanship.',
+        imageUrl: '/api/uploads/mq9epr8k-3818528c-card.webp',
+        imageAlt: 'Cream leather sandals arranged in a minimal studio',
+        imageAltEn: 'Cream leather sandals arranged in a minimal studio',
+        imageAltAr: 'صنادل جلدية بلون كريمي مرتبة في استوديو بسيط',
+        eyebrowEn: '2018 · The beginning',
+        eyebrowAr: '2018 · البداية',
+        titleEn: 'A Qatari idea with a global finish',
+        titleAr: 'فكرة قطرية برؤية أوسع',
+        bodyEn: 'Elite Collection began with a clear ambition: to create pieces that reflect the taste of the region while meeting the standards of Italian craftsmanship.',
+        bodyAr: 'بدأت اليت كولكشن بفكرة واضحة: قطع تليق بالذوق القطري وتُنفّذ بمعايير الحِرفة الإيطالية.',
       },
       {
         id: 'materials',
-        eyebrow: '1978 · Material codes',
-        title: 'Leather selected like a signature',
-        body: 'As the atelier grew, the ritual stayed strict: choose the hide for character, cut for longevity, and polish until the grain carries depth.',
-        imageUrl: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=1000&q=85&auto=format&fit=crop',
-        imageAlt: 'Polished formal leather shoes',
+        eyebrow: 'Qatar · The point of view',
+        title: 'Designed for the way we live',
+        body: 'Our collections are shaped by clean lines, quiet presence, and a contemporary interpretation of traditional elegance.',
+        imageUrl: '/api/uploads/mq9eq8of-9fc84eb1-card.webp',
+        imageAlt: 'Tan leather sandals arranged in a minimal studio',
+        imageAltEn: 'Tan leather sandals arranged in a minimal studio',
+        imageAltAr: 'صنادل جلدية بلون جملي مرتبة في استوديو بسيط',
+        eyebrowEn: 'Qatar · The point of view',
+        eyebrowAr: 'قطر · مصدر الرؤية',
+        titleEn: 'Designed for the way we live',
+        titleAr: 'تصاميم قريبة من أسلوب الحياة',
+        bodyEn: 'Our collections are shaped by clean lines, quiet presence, and a contemporary interpretation of traditional elegance.',
+        bodyAr: 'تستمد مجموعاتنا اتجاهها من المنطقة: خطوط نظيفة، حضور هادئ، واحترام للأناقة التقليدية بصياغة معاصرة.',
       },
       {
         id: 'shape',
-        eyebrow: '1995 · The modern last',
-        title: 'Classic proportions, sharper lines',
-        body: 'We refined the last for city movement: leaner profiles, softer break-in, and a silhouette that works from majlis to evening.',
-        imageUrl: 'https://images.unsplash.com/photo-1533867617858-e7b97e060509?w=1000&q=85&auto=format&fit=crop',
-        imageAlt: 'Craft tools and leather details',
+        eyebrow: 'Italy · The making',
+        title: 'Custom-crafted with care',
+        body: 'Each piece is custom-crafted in Italy, with attention to material, proportion, comfort, and the details that make it feel right from the first wear.',
+        imageUrl: '/api/uploads/mq9eo4mx-5585445c-card.webp',
+        imageAlt: 'Black leather sandals arranged in a minimal studio',
+        imageAltEn: 'Black leather sandals arranged in a minimal studio',
+        imageAltAr: 'صنادل جلدية سوداء مرتبة في استوديو بسيط',
+        eyebrowEn: 'Italy · The making',
+        eyebrowAr: 'إيطاليا · مرحلة الصنع',
+        titleEn: 'Custom-crafted with care',
+        titleAr: 'حِرفة تُنفّذ بعناية',
+        bodyEn: 'Each piece is custom-crafted in Italy, with attention to material, proportion, comfort, and the details that make it feel right from the first wear.',
+        bodyAr: 'تُصنع كل قطعة حسب الطلب في إيطاليا، مع اهتمام بالخامة والتناسب والتفاصيل التي تجعل ارتداءها سهلًا ومميزًا.',
       },
       {
         id: 'today',
-        eyebrow: 'Today · Made to endure',
-        title: 'Every pair still passes through human hands',
-        body: 'Digital tools help us serve faster, but the final judgment remains tactile: balance, edge, polish, and the quiet confidence of a pair ready to be worn.',
-        imageUrl: 'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=1000&q=85&auto=format&fit=crop',
-        imageAlt: 'Brown leather shoes on a minimal surface',
+        eyebrow: 'Today · The collection',
+        title: 'Made to become part of your wardrobe',
+        body: 'Elite Collection brings together Qatari identity and Italian craft in pieces created for everyday refinement, meaningful occasions, and everything in between.',
+        imageUrl: '/api/uploads/mq9em7j2-d6c14770-card.webp',
+        imageAlt: 'Brown leather sandals arranged in a minimal studio',
+        imageAltEn: 'Brown leather sandals arranged in a minimal studio',
+        imageAltAr: 'صنادل جلدية بنية مرتبة في استوديو بسيط',
+        eyebrowEn: 'Today · The collection',
+        eyebrowAr: 'اليوم · المجموعة',
+        titleEn: 'Made to become part of your wardrobe',
+        titleAr: 'قطع تجد مكانها في حياتك',
+        bodyEn: 'Elite Collection brings together Qatari identity and Italian craft in pieces created for everyday refinement, meaningful occasions, and everything in between.',
+        bodyAr: 'تجمع اليت كولكشن بين الهوية القطرية والحِرفة الإيطالية في قطع تناسب اليوم العادي والمناسبات التي تعني الكثير.',
       },
     ],
     quote: {
-      text: 'Luxury is not loud.',
-      accent: 'It is the evidence of care, repeated until it feels effortless.',
-      author: 'Elite Atelier',
+      text: 'Luxury does not need to announce itself.',
+      accent: 'It lives in the details you notice every time you wear it.',
+      author: 'Elite Collection',
+      textEn: 'Luxury does not need to announce itself.',
+      textAr: 'الفخامة لا تحتاج إلى إعلان.',
+      accentEn: 'It lives in the details you notice every time you wear it.',
+      accentAr: 'تظهر في التفاصيل التي تلاحظها كل مرة ترتدي فيها القطعة.',
+      authorEn: 'Elite Collection',
+      authorAr: 'اليت كولكشن',
     },
     atelier: {
-      kicker: 'Inside the atelier',
-      title: 'Many hands, one standard',
-      body: 'Each role protects a different part of the promise, from the first leather inspection to the final edge finish.',
+      kicker: 'Our standard',
+      title: 'One vision, carefully made',
+      body: 'From the first idea in Qatar to the final finish in Italy, every decision is made with one standard in mind: creating pieces with lasting presence.',
+      kickerEn: 'Our standard',
+      kickerAr: 'معيارنا',
+      titleEn: 'One vision, carefully made',
+      titleAr: 'رؤية واحدة، تُنفّذ بعناية',
+      bodyEn: 'From the first idea in Qatar to the final finish in Italy, every decision is made with one standard in mind: creating pieces with lasting presence.',
+      bodyAr: 'من أول فكرة في قطر إلى اللمسة الأخيرة في إيطاليا، تُتخذ كل خطوة لصناعة قطع بحضور يدوم.',
       items: [
-        { id: 'leather', title: 'Leather selector', meta: '30 years of material instinct' },
-        { id: 'pattern', title: 'Pattern cutter', meta: '22 years shaping the silhouette' },
-        { id: 'last', title: 'Last maker', meta: '18 years balancing comfort' },
-        { id: 'welt', title: 'Welt stitcher', meta: '25 years securing the build' },
-        { id: 'heel', title: 'Heel builder', meta: '15 years refining stance' },
-        { id: 'finish', title: 'Edge finisher', meta: '28 years of final polish' },
+        { id: 'design', title: 'Design direction', meta: 'Rooted in Qatar', titleEn: 'Design direction', titleAr: 'اتجاه التصميم', metaEn: 'Rooted in Qatar', metaAr: 'رؤية تنطلق من قطر' },
+        { id: 'materials', title: 'Material selection', meta: 'Chosen with intention', titleEn: 'Material selection', titleAr: 'اختيار الخامات', metaEn: 'Chosen with intention', metaAr: 'اختيارات مدروسة' },
+        { id: 'craft', title: 'Italian craftsmanship', meta: 'Custom-crafted with care', titleEn: 'Italian craftsmanship', titleAr: 'الحِرفة الإيطالية', metaEn: 'Custom-crafted with care', metaAr: 'صناعة حسب الطلب بعناية' },
+        { id: 'comfort', title: 'Comfort and proportion', meta: 'Considered in every detail', titleEn: 'Comfort and proportion', titleAr: 'الراحة والتناسب', metaEn: 'Considered in every detail', metaAr: 'تفاصيل تُراعى بدقة' },
+        { id: 'finishing', title: 'Final finishing', meta: 'Refined by hand', titleEn: 'Final finishing', titleAr: 'اللمسة النهائية', metaEn: 'Refined by hand', metaAr: 'عناية تظهر في كل قطعة' },
+        { id: 'experience', title: 'Client experience', meta: 'Made for the way you live', titleEn: 'Client experience', titleAr: 'تجربة العميل', metaEn: 'Made for the way you live', metaAr: 'قطع تواكب أسلوب الحياة' },
       ],
     },
     intro: {
       kicker: 'Our philosophy',
-      headline: 'Less decoration. More evidence.',
-      body: 'Every mark on the page below can be shaped from the admin portal, but the story keeps one rhythm: material, hand, proportion, and the quiet confidence of a pair made to last.',
+      headline: 'Rooted in Qatar. Made with purpose.',
+      body: 'Our point of view begins in Qatar: understated elegance, considered detail, and pieces that feel natural in the way you live. Each design is then custom-crafted in Italy, where skilled hands bring balance, comfort, and a refined finish to every piece.',
+      kickerEn: 'Our philosophy',
+      kickerAr: 'فلسفتنا',
+      headlineEn: 'Rooted in Qatar. Made with purpose.',
+      headlineAr: 'من قطر تبدأ الفكرة',
+      bodyEn: 'Our point of view begins in Qatar: understated elegance, considered detail, and pieces that feel natural in the way you live. Each design is then custom-crafted in Italy, where skilled hands bring balance, comfort, and a refined finish to every piece.',
+      bodyAr: 'تنطلق رؤيتنا من قطر: أناقة هادئة، تفاصيل مدروسة، وقطع تواكب أسلوب الحياة اليومي. ثم تُصنع كل قطعة حسب الطلب في إيطاليا، حيث تتحول الفكرة إلى توازن ملموس في الخامة والراحة واللمسة النهائية.',
     },
     heroFacts: [
-      { id: 'year',    label: '1962' },
-      { id: 'atelier', label: 'Doha atelier' },
-      { id: 'finish',  label: 'Hand finished' },
+      { id: 'year', label: '2018', labelEn: '2018', labelAr: '2018' },
+      { id: 'identity', label: 'Qatari Brand', labelEn: 'Qatari Brand', labelAr: 'علامة قطرية' },
+      { id: 'making', label: 'Custom-crafted in Italy', labelEn: 'Custom-crafted in Italy', labelAr: 'تُصنع حسب الطلب في إيطاليا' },
     ],
   },
   heroSlider: {
     ctaEn: 'Shop the Collection',
     ctaAr: 'تسوّق المجموعة',
+    productCtaEn: 'Shop this style',
+    productCtaAr: 'تسوّق هذا التصميم',
     items: [
       {
         id: 'brown-leather',
         name: 'Brown Leather Sandals',
         subtitle: 'صندل جلد طبيعي / Made in Italy',
+        descriptionEn: 'Full-grain leather, hand stitched in Italy over a comfort sole.',
+        descriptionAr: 'جلد طبيعي كامل الحبيبات، مخيط يدوياً في إيطاليا على نعل مريح.',
         imageUrl: '/assets/hero-scroll/elite-hero-sandals-cutout.png',
         alt: 'Brown full-grain leather elite sandals made in Italy',
-        callouts: [
-          { id: 'strap',     titleEn: 'Full-Grain Leather', titleAr: 'جلد عجل طبيعي',   subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-angle-single.png',  alt: 'Leather strap detail' },
-          { id: 'buckle',    titleEn: 'Premium Buckle',     titleAr: 'إبزيم معدني فاخر', subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-front-pair.png',   alt: 'Premium buckle detail' },
-          { id: 'sole',      titleEn: 'Comfort Sole',       titleAr: 'نعل مريح',          subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-side-single.jpeg', alt: 'Comfort sole' },
-          { id: 'stitching', titleEn: 'Hand Stitched',      titleAr: 'خياطة يدوية',       subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-top-pair.png',     alt: 'Hand-stitched edge' },
-        ],
+        // Set from the admin editor: links the swatch row to a real product.
+        productId: '',
+        colors: [],
+        defaultColorSlug: '',
       },
       {
         id: 'white-leather',
         name: 'White Leather Sandals',
         subtitle: 'جلد أبيض فاخر / Italian Craft',
+        descriptionEn: 'White full-grain leather with a silver buckle, finished by hand.',
+        descriptionAr: 'جلد أبيض طبيعي مع إبزيم فضي، بلمسة نهائية يدوية.',
         imageUrl: '/assets/hero-scroll/elite-hero-white-sandals.png',
         alt: 'White leather elite sandals with silver buckle made in Italy',
-        callouts: [
-          { id: 'strap',     titleEn: 'Full-Grain Leather', titleAr: 'جلد طبيعي أبيض',   subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-white-detail-leather.png',   alt: 'White leather texture' },
-          { id: 'buckle',    titleEn: 'Silver Buckle',      titleAr: 'إبزيم فضي فاخر',   subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-white-detail-buckle.png',    alt: 'Silver buckle detail' },
-          { id: 'sole',      titleEn: 'Comfort Sole',       titleAr: 'نعل مريح',          subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-white-detail-brand.png',     alt: 'Branded footbed' },
-          { id: 'stitching', titleEn: 'Hand Stitched',      titleAr: 'خياطة يدوية',       subtitleEn: 'Detail view', subtitleAr: 'تفاصيل', thumbnail: '/assets/hero-scroll/elite-white-detail-stitching.png', alt: 'White stitching' },
-        ],
+        productId: '',
+        colors: [],
+        defaultColorSlug: '',
       },
     ],
   },
   promise: {
+    kickerEn: 'The Promise',
+    kickerAr: 'الوعد',
+    titleEn: 'Crafted for a Lifetime',
+    titleAr: 'صناعة تدوم مدى الحياة',
     cards: [
       { id: 'handStitched', icon: '◊', labelEn: 'Hand Stitched',     labelAr: 'خياطة يدوية',      subEn: 'Every stitch placed by a single artisan.',      subAr: 'كل غرزة تُوضع بيد حرفي واحد.' },
       { id: 'camelLeather', icon: '◆', labelEn: 'Camel Leather',     labelAr: 'جلد الإبل',        subEn: 'Full-grain hide selected for character.',        subAr: 'جلد طبيعي كامل الحبيبات.' },
@@ -153,21 +227,85 @@ const DEFAULT_HOME_CONTENT = {
     { id: 'lifetime', value: '∞',    labelEn: 'Lifetime Promise',  labelAr: 'ضمان مدى الحياة' },
   ],
   contact: {
-    kicker: 'A Private Atelier',
-    headlineEn: 'Commission',
-    headlineAccentEn: 'a pair.',
-    headlineAr: 'اطلب',
-    headlineAccentAr: 'زوجاً خاصاً.',
-    subhead: 'Every enquiry is treated as a personal commission. Our advisors respond within 24 hours.',
-    email: 'hello@elitecollections.qa',
-    phone: '+974 4XXX XXXX',
-    whatsapp: '',
+    // The old copy sold a private atelier taking commissions by appointment.
+    // Elite is a retail business with two shops open twelve hours a day, and
+    // "by appointment only" turned away the walk-in customer it was shown to.
+    kicker: '',
+    headlineEn: 'We are here to help',
+    headlineAccentEn: '',
+    headlineAr: 'نحن هنا لمساعدتك',
+    headlineAccentAr: '',
+    subhead: 'Our team is ready to help, from sizing to following up an order.',
+    subheadAr: 'فريقنا جاهز لمساعدتك، من اختيار المقاس إلى متابعة طلبك.',
+    // Confirmed by Elite, 2026-09-10. The previous values here were
+    // development placeholders that reached production: a literal
+    // "+974 4XXX XXXX" under a call-to-action, a West Bay address the brand
+    // does not trade from, and two conflicting sets of opening hours.
+    // Branch facts are mirrored in client-web `branches.ts`, which builds the
+    // LocalBusiness structured data. Change both together.
+    email: 'we@elitecollections.qa',
+    phone: '+974 44758172',
+    whatsapp: '+974 74007003',
     promiseLine: 'Each conversation is held in confidence, with the same care we give the leather.',
-    promiseSignature: 'Elite Atelier, Doha',
-    infoBlocks: [
-      { id: 'atelier',      icon: '◆', titleEn: 'The Atelier',      titleAr: 'الورشة',         lines: ['West Bay, Doha, Qatar', 'By appointment only', 'Sat – Thu, 10am – 8pm'] },
-      { id: 'appointments', icon: '◇', titleEn: 'Appointments',     titleAr: 'المواعيد',       lines: ['Call or WhatsApp to book', '+974 4XXX XXXX', '24-hour advance notice'] },
-      { id: 'client',       icon: '◈', titleEn: 'Client Services',  titleAr: 'خدمة العملاء',  lines: ['hello@elitecollections.qa', 'Mon – Fri, 9am – 5pm', 'Arabic & English'] },
+    promiseLineAr: 'كل محادثة تبقى بيننا، بنفس العناية التي نمنحها للجلد.',
+    promiseSignature: 'Elite Collection, Doha',
+    promiseSignatureAr: 'اليت كولكشن، الدوحة',
+
+    // Structured, not free text. The old `infoBlocks` held an array of plain
+    // strings with no Arabic counterpart, so the Arabic page rendered English
+    // addresses and hours and no admin edit could fix it. Hours are stored as
+    // 24h numbers rather than a display string so the page can work out
+    // whether a shop is open right now, and so the same values can feed the
+    // LocalBusiness structured data on the client.
+    branches: [
+      {
+        id: 'pearl',
+        nameEn: 'The Pearl', nameAr: 'اللؤلؤة',
+        addressEn: 'Porto Arabia, Tower 24, Marina Way 23\nZone 66 · Street 122 · Building 16',
+        addressAr: 'بورتو أرابيا، برج 24، مارينا واي 23\nالمنطقة 66 · الشارع 122 · المبنى 16',
+        phone: '+974 44758172',
+        mapUrl: 'https://maps.app.goo.gl/dUyLxwkB1uZ18D9P8',
+        mapEmbedUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3605.1233439710213!2d51.54558977598618!3d25.36718232479358!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3e45c35ea5e86499%3A0x750d82eb51849e90!2s%E2%80%98elite%20collection!5e0!3m2!1sen!2sqa!4v1789112800511!5m2!1sen!2sqa',
+        lat: 25.3671775,
+        lng: 51.5481647,
+        parking: true,
+        weekdayOpen: 10, weekdayClose: 22,
+        weekendOpen: 13, weekendClose: 22,
+      },
+      {
+        id: 'rayyan',
+        nameEn: 'Al Rayyan', nameAr: 'الريان',
+        addressEn: 'Al Rayyan Al Jadeed, Al Shafi Street\nZone 53 · Street 989 · Building 20',
+        addressAr: 'الريان الجديد، شارع آل شافي\nالمنطقة 53 · الشارع 989 · المبنى 20',
+        phone: '+974 44604667',
+        mapUrl: 'https://maps.app.goo.gl/zGK525gfyfvofd4r8',
+        mapEmbedUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3607.0974482823026!2d51.418579775984526!3d25.300929827490155!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3e45d9193fc53843%3A0xe0000c0f787c9e9a!2sElite%20collection!5e0!3m2!1sen!2sqa!4v1789112667781!5m2!1sen!2sqa',
+        lat: 25.300925,
+        lng: 51.4211547,
+        parking: true,
+        weekdayOpen: 10, weekdayClose: 22,
+        weekendOpen: 13, weekendClose: 22,
+      },
+    ],
+
+    // A counter inside someone else's shop is not a branch, and presenting it
+    // as one would promise the visitor a shopfront that is not there. Separate
+    // shape, separate treatment: no map of its own, no direct line, and hours
+    // that belong to the host store rather than to Elite.
+    stockists: [
+      {
+        id: 'printemps',
+        nameEn: 'Printemps Doha',
+        nameAr: 'برنتان الدوحة',
+        locationEn: '', // TODO: floor and department inside the store
+        locationAr: '',
+        hoursNoteEn: 'Open during Printemps opening hours',
+        hoursNoteAr: 'يفتح حسب دوام برنتان',
+        // Printemps' own Google listing, not Elite's. It is the right target
+        // for a directions link and the wrong thing to put in Elite's
+        // `sameAs`, which would tell search engines the two are one business.
+        mapUrl: 'https://share.google/Wg7JrCbygdvjmo9vk',
+      },
     ],
     socialLinks: [
       { id: 'whatsapp',  platform: 'whatsapp',  handle: '',                    enabled: false },
@@ -256,13 +394,183 @@ async function loadContent(client, tenantId) {
       return {
         ...tile,
         title:    col.title    || tile.title,
+        titleEn:  col.title    || tile.titleEn,
         imageUrl: col.image_url || tile.imageUrl,
         link:     `/collection/${col.handle}`,
       };
     });
   }
 
+  content.mediaVariants = await loadHeroMediaVariants(client, tenantId, content);
+  content.heroProducts = await loadHeroProducts(client, tenantId, content);
+
   return content;
+}
+
+/**
+ * Real responsive variants for every image the home page can render.
+ *
+ * The storefront used to build its `srcset` by pasting `-card`, `-grid`, `-pdp`
+ * and `-zoom` onto the filename and declaring fixed widths for each. Both
+ * halves of that guess can be wrong. `createImageVariants` skips any size wider
+ * than roughly the source, so a 1200px hero upload has no `-zoom` sibling at
+ * all and the browser could pick a candidate that 404s. When a variant is
+ * missing the whole `srcset` is also a lie about width, which is the more
+ * common outcome: the browser trusts the declared `1800w`, picks it on a retina
+ * screen, and gets nothing.
+ *
+ * Returning what was actually generated makes the client's job a lookup rather
+ * than a guess. Anything absent from this map simply gets no `srcset` and falls
+ * back to a plain `src`, which is slower but always correct.
+ *
+ * Keyed by `media_assets.storage_url`; the client rekeys to the bare filename
+ * (home-content.service.ts) so a lookup succeeds whatever form of the URL the
+ * content happens to be holding.
+ */
+async function loadHeroMediaVariants(client, tenantId, content) {
+  // Every imageUrl in the tree, not just the hero slider's. The narrower walk
+  // this replaced left `content.hero` and `content.collections[]` out of the
+  // map, so those two rendered their original upload at full size: the
+  // discount hero was shipping a 3000x4000 file into a 732x976 box. The
+  // variants existed the whole time; nothing was asking for them.
+  const urls = collectContentImageUrls(content);
+
+  // Bundled art under /assets carries no variants and is not a media asset.
+  const uploads = [...urls].filter((url) => url.includes('/uploads/'));
+  if (uploads.length === 0) return {};
+
+  // Matched on the basename so a row still resolves when the stored value
+  // carries an `/api` prefix or an absolute host from an older admin build.
+  const basenames = uploads.map((url) => url.split('/').pop());
+
+  const { rows } = await client.query(
+    `SELECT storage_url, metadata->'imageVariants' AS variants
+       FROM media_assets
+      WHERE tenant_id = $1
+        AND metadata ? 'imageVariants'
+        AND split_part(storage_url, '/', -1) = ANY($2::text[])`,
+    [tenantId, basenames],
+  );
+
+  const map = {};
+  for (const row of rows) {
+    const entries = Object.values(row.variants || {})
+      .filter((variant) => variant && variant.url && variant.width > 0)
+      // Ascending width, because that is the order `srcset` is read in and it
+      // keeps the payload stable between requests.
+      .sort((a, b) => a.width - b.width)
+      .map((variant) => ({ url: variant.url, width: variant.width }));
+    if (entries.length > 0) map[row.storage_url] = entries;
+  }
+  return map;
+}
+
+/**
+ * The two fields the home hero needs about each product it links to: the slug
+ * its call to action points at, and the colourways the `+N` chip counts.
+ *
+ * Another read-time projection, for the same reason `mediaVariants` is one, but
+ * the motivation here is weight. The hero used to get these by having the page
+ * load the entire catalogue through `ProductsService.ensureLoaded()`, which the
+ * transfer cache then embedded in the rendered HTML: measured at 731 kB of a
+ * 853 kB home page, to read a slug and a colour list off one or two rows. Those
+ * two fields are about 115 bytes each.
+ *
+ * `colors` is sent raw rather than pre-counted. The client dedupes it with
+ * `colorKey`, the same normaliser the swatches use, and a second count computed
+ * here could drift from that one without anything failing loudly.
+ *
+ * `productId` is stored as free text, so ids that are not uuids are dropped
+ * before the query rather than letting Postgres reject the whole array.
+ */
+async function loadHeroProducts(client, tenantId, content) {
+  const ids = [...new Set(
+    (content.heroSlider?.items ?? [])
+      .map((item) => String(item?.productId || '').trim())
+      .filter((id) => UUID_RE.test(id)),
+  )];
+  if (ids.length === 0) return {};
+
+  const { rows } = await client.query(
+    `SELECT p.id,
+            p.slug,
+            COALESCE(
+              array_agg(DISTINCT pv.color ORDER BY pv.color)
+                FILTER (WHERE pv.color IS NOT NULL AND pv.color <> ''),
+              ARRAY[]::text[]
+            ) AS colors
+       FROM products p
+       LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active
+      WHERE p.tenant_id = $1
+        AND p.status = 'active'
+        AND p.id = ANY($2::uuid[])
+      GROUP BY p.id`,
+    [tenantId, ids],
+  );
+
+  const map = {};
+  for (const row of rows) {
+    // Shaped exactly like the catalogue endpoint's `mapRow`, down to the
+    // `filter(Boolean)`. The `+N` chip counts these, and it used to count the
+    // catalogue's copy: any difference between the two would move a number on
+    // the hero without anything failing.
+    map[row.id] = {
+      id: row.id,
+      slug: row.slug || '',
+      colors: Array.isArray(row.colors) ? row.colors.filter(Boolean) : [],
+    };
+  }
+  return map;
+}
+
+// Walks the entire home-content tree (hero, heroSlider + its per-colour
+// images, story hero/chapters/atelier, and anything added later) collecting
+// every `imageUrl` string it finds. A plain recursive walk on the key name
+// rather than a hand-maintained list of paths, so a new content section
+// doesn't silently fall outside of "this image is in use" checks the way
+// loadHeroMediaVariants's hero-slider-only scope did.
+function collectContentImageUrls(node, urls = new Set()) {
+  if (!node || typeof node !== 'object') return urls;
+  if (Array.isArray(node)) {
+    for (const item of node) collectContentImageUrls(item, urls);
+    return urls;
+  }
+  for (const [key, value] of Object.entries(node)) {
+    if (key === 'imageUrl' && typeof value === 'string' && value.trim()) {
+      urls.add(value.trim());
+    } else if (value && typeof value === 'object') {
+      collectContentImageUrls(value, urls);
+    }
+  }
+  return urls;
+}
+
+/**
+ * Media-asset basenames (e.g. "mq8mzu95-06808f73-card.webp") referenced
+ * anywhere in this tenant's home content — published AND draft, so a media
+ * item staged in an unpublished draft is never flagged as unused either.
+ *
+ * Matched on basename rather than the full stored URL for the same reason
+ * loadHeroMediaVariants is: home content can carry an `/api` prefix or an
+ * absolute host that the raw `media_assets.storage_url` value doesn't.
+ * Used by the admin Media library (server/routes/admin-media.route.js) to
+ * decide "linked" status and, more importantly, to keep the "delete
+ * orphaned media" cleanup from deleting a hero/story image that has no
+ * `media_links` row simply because home content links to it by URL instead.
+ */
+async function getContentReferencedBasenames(client, tenantId) {
+  await ensureColumn(client);
+  await ensureDraftColumn(client);
+  const result = await client.query(
+    'SELECT home_content, home_content_draft FROM store_settings WHERE tenant_id = $1',
+    [tenantId],
+  );
+  const row = result.rows[0] || {};
+  const urls = new Set([
+    ...collectContentImageUrls(row.home_content),
+    ...collectContentImageUrls(row.home_content_draft),
+  ]);
+  return new Set([...urls].map((url) => url.split('/').pop()).filter(Boolean));
 }
 
 async function saveContent(client, tenantId, content) {
@@ -280,7 +588,16 @@ async function loadDraft(client, tenantId) {
     [tenantId],
   );
   const raw = result.rows[0]?.home_content_draft;
-  return raw ? normalizeContent(raw) : null;
+  if (!raw) return null;
+  const draft = normalizeContent(raw);
+  // The preview is meant to be the storefront, so it resolves variants and hero
+  // products the same way. Without the first a draft renders every hero image at
+  // full size and the admin reviews a page heavier than the one visitors get;
+  // without the second the `+N` colour chip and the hero's product link are
+  // missing from the preview only.
+  draft.mediaVariants = await loadHeroMediaVariants(client, tenantId, draft);
+  draft.heroProducts = await loadHeroProducts(client, tenantId, draft);
+  return draft;
 }
 
 async function saveDraft(client, tenantId, content) {
@@ -320,11 +637,13 @@ function createEmptyHomeContent() {
       imageUrl: '',
       title: '',
       body: '',
-      discountText: '',
+      kickerEn: '',
+      kickerAr: '',
       ctaText: '',
       ctaLink: '',
     },
     collections: [],
+    collectionsIntro: { titleEn: '', titleAr: '', bodyEn: '', bodyAr: '' },
     story: {
       hero: {
         kicker: '',
@@ -333,6 +652,8 @@ function createEmptyHomeContent() {
         body: '',
         imageUrl: '',
         imageAlt: '',
+        imageAltEn: '',
+        imageAltAr: '',
       },
       chapters: [],
       quote: {
@@ -356,9 +677,15 @@ function createEmptyHomeContent() {
     heroSlider: {
       ctaEn: '',
       ctaAr: '',
+      productCtaEn: '',
+      productCtaAr: '',
       items: [],
     },
     promise: {
+      kickerEn: '',
+      kickerAr: '',
+      titleEn: '',
+      titleAr: '',
       cards: [],
     },
     stats: [],
@@ -369,12 +696,16 @@ function createEmptyHomeContent() {
       headlineAr: '',
       headlineAccentAr: '',
       subhead: '',
+      subheadAr: '',
       email: '',
       phone: '',
       whatsapp: '',
       promiseLine: '',
+      promiseLineAr: '',
       promiseSignature: '',
-      infoBlocks: [],
+      promiseSignatureAr: '',
+      branches: [],
+      stockists: [],
       socialLinks: [],
     },
   };
@@ -389,9 +720,26 @@ function normalizeHero(hero = {}) {
     imageUrl: asText(hero.imageUrl, DEFAULT_HOME_CONTENT.hero.imageUrl),
     title: asText(hero.title, DEFAULT_HOME_CONTENT.hero.title),
     body: asText(hero.body, DEFAULT_HOME_CONTENT.hero.body),
-    discountText: asText(hero.discountText, DEFAULT_HOME_CONTENT.hero.discountText),
+    kickerEn: asText(hero.kickerEn, DEFAULT_HOME_CONTENT.hero.kickerEn),
+    kickerAr: asText(hero.kickerAr, DEFAULT_HOME_CONTENT.hero.kickerAr),
     ctaText: asText(hero.ctaText, DEFAULT_HOME_CONTENT.hero.ctaText),
     ctaLink: asText(hero.ctaLink, DEFAULT_HOME_CONTENT.hero.ctaLink),
+    titleEn: asText(hero.titleEn, asText(hero.title, DEFAULT_HOME_CONTENT.hero.title)),
+    titleAr: asText(hero.titleAr, ''),
+    bodyEn: asText(hero.bodyEn, asText(hero.body, DEFAULT_HOME_CONTENT.hero.body)),
+    bodyAr: asText(hero.bodyAr, ''),
+    ctaTextEn: asText(hero.ctaTextEn, asText(hero.ctaText, DEFAULT_HOME_CONTENT.hero.ctaText)),
+    ctaTextAr: asText(hero.ctaTextAr, ''),
+  };
+}
+
+function normalizeCollectionsIntro(collectionsIntro = {}) {
+  const fallback = DEFAULT_HOME_CONTENT.collectionsIntro;
+  return {
+    titleEn: asText(collectionsIntro.titleEn, fallback.titleEn),
+    titleAr: asText(collectionsIntro.titleAr, fallback.titleAr),
+    bodyEn: asText(collectionsIntro.bodyEn, fallback.bodyEn),
+    bodyAr: asText(collectionsIntro.bodyAr, fallback.bodyAr),
   };
 }
 
@@ -411,6 +759,10 @@ function normalizeCollections(collections = []) {
       title:    asText(item.title,    fallback.title),
       imageUrl: asText(item.imageUrl, fallback.imageUrl),
       link:     asText(item.link,     fallback.link),
+      titleEn: asText(item.titleEn, asText(item.title, fallback.title)),
+      titleAr: asText(item.titleAr, ''),
+      ctaTextEn: asText(item.ctaTextEn, asText(item.ctaText, fallback.ctaText || '')),
+      ctaTextAr: asText(item.ctaTextAr, ''),
       ...(asText(item.ctaText, fallback.ctaText || '') ? { ctaText: asText(item.ctaText, fallback.ctaText || '') } : {}),
     };
   });
@@ -425,6 +777,16 @@ function normalizeStoryHero(hero = {}) {
     body: asText(hero.body, fallback.body),
     imageUrl: asText(hero.imageUrl, fallback.imageUrl),
     imageAlt: asText(hero.imageAlt, fallback.imageAlt),
+    imageAltEn: asText(hero.imageAltEn, asText(hero.imageAlt, fallback.imageAltEn || fallback.imageAlt)),
+    imageAltAr: asText(hero.imageAltAr, ''),
+    kickerEn: asText(hero.kickerEn, asText(hero.kicker, fallback.kicker)),
+    kickerAr: asText(hero.kickerAr, ''),
+    titleEn: asText(hero.titleEn, asText(hero.title, fallback.title)),
+    titleAr: asText(hero.titleAr, ''),
+    accentEn: asText(hero.accentEn, asText(hero.accent, fallback.accent)),
+    accentAr: asText(hero.accentAr, ''),
+    bodyEn: asText(hero.bodyEn, asText(hero.body, fallback.body)),
+    bodyAr: asText(hero.bodyAr, ''),
   };
 }
 
@@ -443,10 +805,28 @@ function normalizeStoryChapters(chapters = []) {
         body: asText(chapter.body, fallback.body),
         imageUrl: asText(chapter.imageUrl, fallback.imageUrl),
         imageAlt: asText(chapter.imageAlt, fallback.imageAlt),
+        imageAltEn: asText(chapter.imageAltEn, asText(chapter.imageAlt, fallback.imageAltEn || fallback.imageAlt)),
+        imageAltAr: asText(chapter.imageAltAr, ''),
+        eyebrowEn: asText(chapter.eyebrowEn, asText(chapter.eyebrow, fallback.eyebrow)),
+        eyebrowAr: asText(chapter.eyebrowAr, ''),
+        titleEn: asText(chapter.titleEn, asText(chapter.title, fallback.title)),
+        titleAr: asText(chapter.titleAr, ''),
+        bodyEn: asText(chapter.bodyEn, asText(chapter.body, fallback.body)),
+        bodyAr: asText(chapter.bodyAr, ''),
       };
     });
   const missing = defaults.filter((fallback) => !ordered.some((chapter) => chapter.id === fallback.id));
-  return [...ordered, ...missing.map(clone)];
+  return [...ordered, ...missing.map((fallback) => ({
+    ...clone(fallback),
+    eyebrowEn: fallback.eyebrow,
+    eyebrowAr: '',
+    titleEn: fallback.title,
+    titleAr: '',
+    bodyEn: fallback.body,
+    bodyAr: '',
+    imageAltEn: fallback.imageAltEn || fallback.imageAlt,
+    imageAltAr: fallback.imageAltAr || '',
+  }))];
 }
 
 function normalizeAtelierItems(items = []) {
@@ -458,6 +838,10 @@ function normalizeAtelierItems(items = []) {
       id: fallback.id,
       title: asText(item.title, fallback.title),
       meta: asText(item.meta, fallback.meta),
+      titleEn: asText(item.titleEn, asText(item.title, fallback.title)),
+      titleAr: asText(item.titleAr, ''),
+      metaEn: asText(item.metaEn, asText(item.meta, fallback.meta)),
+      metaAr: asText(item.metaAr, ''),
     };
   });
 }
@@ -469,6 +853,8 @@ function normalizeHeroFacts(facts = []) {
   return incoming.filter((f) => f && f.id).map((f) => ({
     id:    f.id,
     label: asText(f.label, ''),
+    labelEn: asText(f.labelEn, asText(f.label, '')),
+    labelAr: asText(f.labelAr, ''),
   }));
 }
 
@@ -488,6 +874,14 @@ function normalizeStory(story = {}) {
           body:     asText(c.body,     fb.body      || ''),
           imageUrl: asText(c.imageUrl, fb.imageUrl  || ''),
           imageAlt: asText(c.imageAlt, fb.imageAlt  || ''),
+          imageAltEn: asText(c.imageAltEn, asText(c.imageAlt, fb.imageAltEn || fb.imageAlt || '')),
+          imageAltAr: asText(c.imageAltAr, ''),
+          eyebrowEn: asText(c.eyebrowEn, asText(c.eyebrow, fb.eyebrow || '')),
+          eyebrowAr: asText(c.eyebrowAr, ''),
+          titleEn: asText(c.titleEn, asText(c.title, fb.title || '')),
+          titleAr: asText(c.titleAr, ''),
+          bodyEn: asText(c.bodyEn, asText(c.body, fb.body || '')),
+          bodyAr: asText(c.bodyAr, ''),
         };
       })
     : normalizeStoryChapters(story.chapters);
@@ -503,6 +897,10 @@ function normalizeStory(story = {}) {
           id:    it.id,
           title: asText(it.title, fb.title || ''),
           meta:  asText(it.meta,  fb.meta  || ''),
+          titleEn: asText(it.titleEn, asText(it.title, fb.title || '')),
+          titleAr: asText(it.titleAr, ''),
+          metaEn: asText(it.metaEn, asText(it.meta, fb.meta || '')),
+          metaAr: asText(it.metaAr, ''),
         };
       })
     : normalizeAtelierItems(story.atelier?.items);
@@ -514,19 +912,92 @@ function normalizeStory(story = {}) {
       kicker:   asText(story.intro?.kicker,   fallback.intro.kicker),
       headline: asText(story.intro?.headline, fallback.intro.headline),
       body:     asText(story.intro?.body,     fallback.intro.body),
+      kickerEn: asText(story.intro?.kickerEn, asText(story.intro?.kicker, fallback.intro.kicker)),
+      kickerAr: asText(story.intro?.kickerAr, ''),
+      headlineEn: asText(story.intro?.headlineEn, asText(story.intro?.headline, fallback.intro.headline)),
+      headlineAr: asText(story.intro?.headlineAr, ''),
+      bodyEn: asText(story.intro?.bodyEn, asText(story.intro?.body, fallback.intro.body)),
+      bodyAr: asText(story.intro?.bodyAr, ''),
     },
     chapters,
     quote: {
       text:   asText(story.quote?.text,   fallback.quote.text),
       accent: asText(story.quote?.accent, fallback.quote.accent),
       author: asText(story.quote?.author, fallback.quote.author),
+      textEn: asText(story.quote?.textEn, asText(story.quote?.text, fallback.quote.text)),
+      textAr: asText(story.quote?.textAr, ''),
+      accentEn: asText(story.quote?.accentEn, asText(story.quote?.accent, fallback.quote.accent)),
+      accentAr: asText(story.quote?.accentAr, ''),
+      authorEn: asText(story.quote?.authorEn, asText(story.quote?.author, fallback.quote.author)),
+      authorAr: asText(story.quote?.authorAr, ''),
     },
     atelier: {
       kicker: asText(story.atelier?.kicker, fallback.atelier.kicker),
       title:  asText(story.atelier?.title,  fallback.atelier.title),
       body:   asText(story.atelier?.body,   fallback.atelier.body),
+      kickerEn: asText(story.atelier?.kickerEn, asText(story.atelier?.kicker, fallback.atelier.kicker)),
+      kickerAr: asText(story.atelier?.kickerAr, ''),
+      titleEn: asText(story.atelier?.titleEn, asText(story.atelier?.title, fallback.atelier.title)),
+      titleAr: asText(story.atelier?.titleAr, ''),
+      bodyEn: asText(story.atelier?.bodyEn, asText(story.atelier?.body, fallback.atelier.body)),
+      bodyAr: asText(story.atelier?.bodyAr, ''),
       items:  atelierItems,
     },
+  };
+}
+
+const HERO_MAX_COLORS = 4;
+
+/** Mirrors colorSlug() in client-web utils/color-slug.ts. */
+function colorSlug(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+/**
+ * Featured colourways for one slide. Colours carry no hex: the storefront
+ * resolves that from ref_colors at render time. `imageUrl` is the hero shot for
+ * that colourway and is owned by the slide, separate from the product gallery
+ * images used on the product detail page. Entries without a usable label are
+ * dropped, duplicates collapse, and the list is capped at HERO_MAX_COLORS.
+ */
+function normalizeHeroColors(colors) {
+  if (!Array.isArray(colors)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const entry of colors) {
+    const label = asText(typeof entry === 'string' ? entry : entry?.label, '');
+    if (!label) continue;
+    const slug = colorSlug(label);
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+    out.push({
+      label,
+      slug,
+      imageUrl: asText(typeof entry === 'string' ? '' : entry?.imageUrl, ''),
+    });
+    if (out.length >= HERO_MAX_COLORS) break;
+  }
+  return out;
+}
+
+/**
+ * Work out which colourway a slide opens on and what image that means.
+ *
+ * The slide image is no longer edited directly: it is the default colour's hero
+ * shot, so the hero always opens on a real colourway. `storedImage` keeps slides
+ * saved before this change (and slides with no colours yet) rendering.
+ */
+function resolveHeroSlideImage(colors, requestedSlug, storedImage) {
+  if (!colors.length) {
+    return { imageUrl: storedImage, colors, defaultColorSlug: '' };
+  }
+
+  const match = colors.find((c) => c.slug === requestedSlug);
+  const chosen = match || colors[0];
+  return {
+    imageUrl: chosen.imageUrl || storedImage,
+    colors,
+    defaultColorSlug: chosen.slug,
   };
 }
 
@@ -540,30 +1011,31 @@ function normalizeHeroSlider(heroSlider = {}) {
     .filter((item) => item && item.id)
     .map((item) => {
       const fallback = fb.items.find((f) => f.id === item.id) || {};
-      const inCallouts = Array.isArray(item.callouts) ? item.callouts : (fallback.callouts || []);
       return {
         id:       item.id,
         name:     asText(item.name,     fallback.name     || ''),
         subtitle: asText(item.subtitle, fallback.subtitle || ''),
-        imageUrl: asText(item.imageUrl, fallback.imageUrl || ''),
+        nameEn: asText(item.nameEn, asText(item.name, fallback.name || '')),
+        nameAr: asText(item.nameAr, ''),
+        subtitleEn: asText(item.subtitleEn, asText(item.subtitle, fallback.subtitle || '')),
+        subtitleAr: asText(item.subtitleAr, ''),
+        descriptionEn: asText(item.descriptionEn, fallback.descriptionEn || ''),
+        descriptionAr: asText(item.descriptionAr, fallback.descriptionAr || ''),
+        ...resolveHeroSlideImage(
+          normalizeHeroColors(item.colors ?? fallback.colors),
+          asText(item.defaultColorSlug, fallback.defaultColorSlug || ''),
+          asText(item.imageUrl, fallback.imageUrl || ''),
+        ),
         alt:      asText(item.alt,      fallback.alt      || ''),
-        callouts: inCallouts
-          .filter((c) => c && c.id)
-          .map((c) => ({
-            id:         c.id,
-            titleEn:    asText(c.titleEn,    fallback.titleEn || asText(c.subtitleEn, '')),
-            titleAr:    asText(c.titleAr,    fallback.titleAr || ''),
-            subtitleEn: asText(c.subtitleEn, fallback.subtitleEn || ''),
-            subtitleAr: asText(c.subtitleAr, fallback.subtitleAr || ''),
-            thumbnail:  asText(c.thumbnail,  ''),
-            alt:        asText(c.alt,        ''),
-          })),
+        productId: asText(item.productId, fallback.productId || ''),
       };
     });
 
   return {
     ctaEn: asText(heroSlider.ctaEn, fb.ctaEn),
     ctaAr: asText(heroSlider.ctaAr, fb.ctaAr),
+    productCtaEn: asText(heroSlider.productCtaEn, fb.productCtaEn),
+    productCtaAr: asText(heroSlider.productCtaAr, fb.productCtaAr),
     items,
   };
 }
@@ -582,7 +1054,13 @@ function normalizePromise(promise = {}) {
       subAr:   asText(c.subAr,   fallback.subAr),
     };
   });
-  return { cards };
+  return {
+    kickerEn: asText(promise.kickerEn, fb.kickerEn),
+    kickerAr: asText(promise.kickerAr, fb.kickerAr),
+    titleEn: asText(promise.titleEn, fb.titleEn),
+    titleAr: asText(promise.titleAr, fb.titleAr),
+    cards,
+  };
 }
 
 function normalizeStats(stats = []) {
@@ -599,22 +1077,95 @@ function normalizeStats(stats = []) {
   });
 }
 
+/**
+ * Opening hours as whole hours on a 24h clock.
+ *
+ * Stored as numbers, not a display string, so the storefront can decide
+ * whether a shop is open right now and so the same values can be emitted as
+ * `openingHoursSpecification`. A shop that closes past midnight is out of
+ * scope here; both Elite shops close at 22:00.
+ */
+/** A finite number, or the fallback. Used for branch coordinates. */
+function asNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : (Number.isFinite(fallback) ? fallback : null);
+}
+
+/**
+ * Accept a Google Maps embed URL, or nothing.
+ *
+ * The storefront binds this straight into an `iframe src`. Without a host
+ * check, anyone who can edit storefront content could frame an arbitrary
+ * third-party page inside the contact page.
+ */
+function safeMapEmbed(value, fallback) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw) return typeof value === 'string' ? '' : fallback;
+  try {
+    const u = new URL(raw);
+    const ok = u.protocol === 'https:'
+      && (u.hostname === 'www.google.com' || u.hostname === 'google.com')
+      && u.pathname.startsWith('/maps/embed');
+    return ok ? raw : '';
+  } catch {
+    return '';
+  }
+}
+
+function normalizeHourPair(b, fallback) {
+  const hour = (value, fb) => {
+    const n = Number(value);
+    return Number.isInteger(n) && n >= 0 && n <= 24 ? n : fb;
+  };
+  return {
+    weekdayOpen:  hour(b.weekdayOpen,  fallback.weekdayOpen  ?? 10),
+    weekdayClose: hour(b.weekdayClose, fallback.weekdayClose ?? 22),
+    weekendOpen:  hour(b.weekendOpen,  fallback.weekendOpen  ?? 13),
+    weekendClose: hour(b.weekendClose, fallback.weekendClose ?? 22),
+  };
+}
+
 function normalizeContact(contact = {}) {
   const fb = DEFAULT_HOME_CONTENT.contact;
 
-  // Info blocks: allow any number (add/remove)
-  const inBlocksRaw = Array.isArray(contact.infoBlocks) && contact.infoBlocks.length > 0
-    ? contact.infoBlocks
-    : fb.infoBlocks;
-  const infoBlocks = inBlocksRaw.filter((b) => b && b.id).map((b) => {
-    const fallback = fb.infoBlocks.find((f) => f.id === b.id) || {};
-    const inLines = Array.isArray(b.lines) ? b.lines : (fallback.lines || []);
+  // Branches: any number, added or removed from the admin.
+  const inBranchesRaw = Array.isArray(contact.branches) && contact.branches.length > 0
+    ? contact.branches
+    : fb.branches;
+  const branches = inBranchesRaw.filter((b) => b && b.id).map((b) => {
+    const fallback = fb.branches.find((f) => f.id === b.id) || {};
     return {
-      id:      b.id,
-      icon:    asText(b.icon,    fallback.icon    || '◆'),
-      titleEn: asText(b.titleEn, fallback.titleEn || ''),
-      titleAr: asText(b.titleAr, fallback.titleAr || ''),
-      lines:   inLines.map((l) => asText(l, '')).filter(Boolean),
+      id:        b.id,
+      nameEn:    asText(b.nameEn,    fallback.nameEn    || ''),
+      nameAr:    asText(b.nameAr,    fallback.nameAr    || ''),
+      addressEn: asText(b.addressEn, fallback.addressEn || ''),
+      addressAr: asText(b.addressAr, fallback.addressAr || ''),
+      phone:     asText(b.phone,     fallback.phone     || ''),
+      mapUrl:      asText(b.mapUrl,      fallback.mapUrl      || ''),
+      // Only Google's own embed host is accepted. This value is bound into an
+      // iframe src on the storefront, so anything else here would be an
+      // arbitrary third-party frame injected through the content editor.
+      mapEmbedUrl: safeMapEmbed(b.mapEmbedUrl, fallback.mapEmbedUrl || ''),
+      lat:         asNumber(b.lat, fallback.lat),
+      lng:         asNumber(b.lng, fallback.lng),
+      parking:   b.parking === undefined ? Boolean(fallback.parking) : Boolean(b.parking),
+      ...normalizeHourPair(b, fallback),
+    };
+  });
+
+  // Stockists: shops that carry Elite but are not Elite's own premises.
+  const inStockistsRaw = Array.isArray(contact.stockists) ? contact.stockists : fb.stockists;
+  const stockists = inStockistsRaw.filter((s) => s && s.id).map((s) => {
+    const fallback = fb.stockists.find((f) => f.id === s.id) || {};
+    return {
+      id:          s.id,
+      nameEn:      asText(s.nameEn,      fallback.nameEn      || ''),
+      nameAr:      asText(s.nameAr,      fallback.nameAr      || ''),
+      locationEn:  asText(s.locationEn,  fallback.locationEn  || ''),
+      locationAr:  asText(s.locationAr,  fallback.locationAr  || ''),
+      hoursNoteEn: asText(s.hoursNoteEn, fallback.hoursNoteEn || ''),
+      hoursNoteAr: asText(s.hoursNoteAr, fallback.hoursNoteAr || ''),
+      mapUrl:      asText(s.mapUrl,      fallback.mapUrl      || ''),
     };
   });
 
@@ -639,12 +1190,16 @@ function normalizeContact(contact = {}) {
     headlineAr:       asText(contact.headlineAr,       fb.headlineAr),
     headlineAccentAr: asText(contact.headlineAccentAr, fb.headlineAccentAr),
     subhead:          asText(contact.subhead,          fb.subhead),
+    subheadAr:        asText(contact.subheadAr,        fb.subheadAr),
     email:            asText(contact.email,            fb.email),
     phone:            asText(contact.phone,            fb.phone),
     whatsapp:         asText(contact.whatsapp,         fb.whatsapp),
-    promiseLine:      asText(contact.promiseLine,      fb.promiseLine),
-    promiseSignature: asText(contact.promiseSignature, fb.promiseSignature),
-    infoBlocks,
+    promiseLine:        asText(contact.promiseLine,        fb.promiseLine),
+    promiseLineAr:      asText(contact.promiseLineAr,      fb.promiseLineAr),
+    promiseSignature:   asText(contact.promiseSignature,   fb.promiseSignature),
+    promiseSignatureAr: asText(contact.promiseSignatureAr, fb.promiseSignatureAr),
+    branches,
+    stockists,
     socialLinks,
   };
 }
@@ -653,6 +1208,7 @@ function normalizeContent(input = {}) {
   return {
     hero:        normalizeHero(input.hero),
     collections: normalizeCollections(input.collections),
+    collectionsIntro: normalizeCollectionsIntro(input.collectionsIntro),
     story:       normalizeStory(input.story),
     heroSlider:  normalizeHeroSlider(input.heroSlider),
     promise:     normalizePromise(input.promise),
@@ -706,7 +1262,7 @@ function registerPatch(router) {
   router.post(
     '/reset',
     asyncHandler(async (_req, res) => {
-      const defaults = clone(DEFAULT_HOME_CONTENT);
+      const defaults = normalizeContent(DEFAULT_HOME_CONTENT);
       const client = await db.pool.connect();
       try {
         const tenant = await ensureDefaultTenant(client);
@@ -846,4 +1402,6 @@ module.exports = {
   adminRouter,
   publicRouter,
   DEFAULT_HOME_CONTENT,
+  getContentReferencedBasenames,
+  _test: { collectContentImageUrls },
 };

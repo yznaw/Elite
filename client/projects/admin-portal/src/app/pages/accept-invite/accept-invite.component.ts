@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -9,10 +9,9 @@ import { LocaleService } from '../../services/locale.service';
 import { firstValueFrom } from 'rxjs';
 
 @Component({
-  selector: 'ap-accept-invite',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, SpinnerComponent],
-  template: `
+    selector: 'ap-accept-invite',
+    imports: [CommonModule, FormsModule, RouterLink, SpinnerComponent],
+    template: `
     <div class="login-shell" [attr.dir]="locale.dir()">
       <div class="login-card">
         <div class="login-brand">
@@ -88,7 +87,8 @@ import { firstValueFrom } from 'rxjs';
       </div>
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     :host { display: block; }
     .login-shell {
       min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 24px;
@@ -109,7 +109,7 @@ import { firstValueFrom } from 'rxjs';
     .login-link:hover { border-bottom-color: var(--gold); }
     .success-box { text-align: center; padding: 24px 0; }
     .success-icon { font-size: 40px; color: var(--success, #10b981); margin-bottom: 8px; }
-  `],
+  `]
 })
 export class AcceptInviteComponent implements OnInit {
   private readonly api    = inject(ApiClient);

@@ -9,11 +9,11 @@ All endpoints use PostgreSQL through `server/db/client.js` and scope business da
 | `GET /api/products` | `SELECT` active/hidden products with variant sizes and primary media |
 | `GET /api/products/:id` | `SELECT` one storefront product |
 | `POST /api/contact` | `INSERT` contact form submission |
-| `POST /api/carts` | `INSERT ... ON CONFLICT` active cart by session |
-| `GET /api/carts/:id` | `SELECT` cart and cart items |
-| `POST /api/carts/:id/items` | `INSERT ... ON CONFLICT DO UPDATE` cart item quantity, then `UPDATE` subtotal |
-| `DELETE /api/carts/:id/items/:itemId` | `DELETE` cart item, then `UPDATE` subtotal |
-| `POST /api/carts/:id/checkout` | transaction: `INSERT` order, `INSERT` order items, `UPDATE` cart converted |
+| `POST /api/carts` | Retired; 410 |
+| `GET /api/carts/:id` | Retired; 410 |
+| `POST /api/carts/:id/items` | Retired; 410 |
+| `DELETE /api/carts/:id/items/:itemId` | Retired; 410 |
+| `POST /api/carts/:id/checkout` | Retired; 410 |
 
 ## Admin Portal
 
@@ -59,3 +59,5 @@ All endpoints use PostgreSQL through `server/db/client.js` and scope business da
 | `PATCH /api/admin/sync/logs/:id/complete` | transaction: `UPDATE` log, `UPDATE` source status |
 | `GET /api/admin/analytics/overview` | `SELECT` metric rollups, traffic, funnel, top 3D products |
 | `POST /api/admin/analytics/events` | `INSERT` analytics event |
+
+The supported storefront cart and checkout endpoints and their session-ownership contract are documented in `docs/05-api-server.md`. Contact enquiries can be listed only at authenticated `GET /api/admin/contact`, scoped to the staff tenant and restricted to owner/admin/manager.

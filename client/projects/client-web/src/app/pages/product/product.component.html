@@ -4,7 +4,9 @@
       <nav class="breadcrumb" aria-label="Breadcrumb">
         @if (fromParentCollectionHandle()) {
           <button type="button" (click)="goParentCollection()">
-            {{ fromParentCollectionName() || t("product.breadcrumb.collection") }}
+            {{
+              fromParentCollectionName() || t("product.breadcrumb.collection")
+            }}
           </button>
           <span>/</span>
         }
@@ -17,7 +19,12 @@
 
       <section class="pdp-grid">
         <div class="gallery-panel">
-          <div class="gallery-frame">
+          <div
+            class="gallery-frame"
+            (pointerdown)="onGalleryPointerDown($event)"
+            (pointerup)="onGalleryPointerUp($event)"
+            (pointercancel)="onGalleryPointerCancel($event)"
+          >
             @for (src of gallery(); track src; let i = $index) {
               <img
                 [src]="src"
@@ -25,8 +32,11 @@
                 sizes="(min-width: 980px) 58vw, 100vw"
                 [alt]="productName(p)"
                 [class.is-active]="galleryIdx() === i"
+                [class.is-loaded]="isGalleryImageLoaded(src)"
                 [attr.fetchpriority]="galleryIdx() === i ? 'high' : null"
+                [attr.loading]="galleryImageLoading(i)"
                 decoding="async"
+                (load)="markGalleryImageLoaded(src)"
                 (error)="onImgError($event)"
               />
             }
@@ -48,6 +58,7 @@
             @if (gallery().length > 1) {
               <button
                 type="button"
+                dir="ltr"
                 class="gallery-nav gallery-nav-prev"
                 (click)="navGallery(-1)"
                 [attr.aria-label]="t('product.aria.previousImage')"
@@ -56,12 +67,47 @@
               </button>
               <button
                 type="button"
+                dir="ltr"
                 class="gallery-nav gallery-nav-next"
                 (click)="navGallery(1)"
                 [attr.aria-label]="t('product.aria.nextImage')"
               >
                 ›
               </button>
+            }
+
+            <!-- Bottom bar: the note sits on the photo, where the question it
+                 answers is being asked, and the image counter joins it rather
+                 than floating beside it as a second, competing chip. -->
+            @if (productNote() || selectedSizeNote() || gallery().length > 1) {
+              <div
+                class="gallery-bar"
+                [class.gallery-bar--noted]="
+                  !!(productNote() || selectedSizeNote())
+                "
+              >
+                @if (productNote() || selectedSizeNote()) {
+                  <div class="gallery-note" aria-live="polite">
+                    @if (productNote(); as note) {
+                      <p class="gallery-note-row">{{ note }}</p>
+                    }
+                    @if (selectedSizeNote(); as note) {
+                      <p class="gallery-note-row gallery-note-row--size">
+                        <span class="gallery-note-size">{{
+                          selectedSize()
+                        }}</span>
+                        <span>{{ note }}</span>
+                      </p>
+                    }
+                  </div>
+                }
+
+                @if (gallery().length > 1) {
+                  <span class="gallery-count" aria-live="polite">
+                    {{ galleryIdx() + 1 }} / {{ gallery().length }}
+                  </span>
+                }
+              </div>
             }
           </div>
 
@@ -88,8 +134,10 @@
                       [attr.srcset]="imageSrcset(src, p)"
                       sizes="96px"
                       alt=""
+                      [class.is-loaded]="isGalleryImageLoaded(src)"
                       loading="lazy"
                       decoding="async"
+                      (load)="markGalleryImageLoaded(src)"
                       (error)="onImgError($event)"
                     />
                   </button>
@@ -101,7 +149,7 @@
                   type="button"
                   class="thumb-scroll-cue thumb-scroll-cue--start"
                   (click)="scrollThumbnails('start')"
-                  [attr.aria-label]="t('product.aria.scrollPreviousImages')"
+                  [attr.aria-label]="t('product.aria.previousImage')"
                 >
                   <span aria-hidden="true">‹</span>
                 </button>
@@ -112,42 +160,20 @@
                   type="button"
                   class="thumb-scroll-cue thumb-scroll-cue--end"
                   (click)="scrollThumbnails('end')"
-                  [attr.aria-label]="t('product.aria.scrollImages')"
+                  [attr.aria-label]="t('product.aria.nextImage')"
                 >
                   <span aria-hidden="true">›</span>
                 </button>
               }
             </div>
           }
-        </div>
-
-        <article class="details-panel">
-          <h1>{{ productName(p) }}</h1>
-          <p class="descriptor">{{ productLeather(p.leather) }}</p>
-
-          <div class="price-row">
-            <span>{{ price(p.price) }}</span>
-          </div>
-
-          <p class="description">
-            {{ t("product.descriptionTemplate", { name: productName(p) }) }}
-          </p>
-
-          <!-- <dl class="attribute-grid">
-            @for (a of attributes(); track a.key) {
-              <div>
-                <dt>{{ t(a.key) }}</dt>
-                <dd>{{ a.value }}</dd>
-              </div>
-            }
-          </dl> -->
 
           @if (productColorNames(p).length > 0) {
-            <div class="color-section">
-              <div class="section-label">
+            <div class="color-section gallery-color-section">
+              <div class="section-label section-label--pair">
                 <span>{{ t("product.color.label") }}</span>
-                @if (selectedColor()) {
-                  <strong>{{ selectedColor() }}</strong>
+                @if (selectedColor(); as color) {
+                  <strong>{{ colorLabel(color) }}</strong>
                 }
               </div>
 
@@ -160,29 +186,65 @@
                     type="button"
                     class="color-swatch"
                     [class.is-selected]="colorSelected(color)"
+                    [class.is-sold-out]="colorSoldOut(color)"
                     [class.has-image]="colorSwatchImage(color)"
-                    [style.background]="colorSwatchImage(color) ? null : colorHex(color)"
-                    [attr.title]="color"
-                    [attr.aria-label]="t('product.color.choose', { color })"
+                    [style.background]="
+                      colorSwatchImage(color) ? null : colorHex(color)
+                    "
+                    [attr.title]="colorLabel(color)"
+                    [attr.aria-label]="
+                      colorSoldOut(color)
+                        ? t('stock.colorSoldOut', { color: colorLabel(color) })
+                        : t('product.color.choose', { color: colorLabel(color) })
+                    "
                     [attr.aria-pressed]="colorSelected(color)"
                     (click)="selectProductColor(color)"
                     (keydown)="onProductColorKeydown(color, $event)"
                   >
                     @if (colorSwatchImage(color); as swatchImage) {
-                      <img [src]="swatchImage" [alt]="color" loading="lazy" decoding="async" />
+                      <img
+                        [src]="swatchImage"
+                        [alt]="colorLabel(color)"
+                        loading="lazy"
+                        decoding="async"
+                      />
                     }
-                    <span class="sr-only">{{ color }}</span>
+                    <span class="sr-only">{{ colorLabel(color) }}</span>
                   </button>
                 }
               </div>
             </div>
           }
+        </div>
 
-          @if (p.sizes && p.sizes.length > 0) {
+        <article class="details-panel">
+          <h1>{{ productName(p) }}</h1>
+          <p class="descriptor">{{ productLeather(p.leather) }}</p>
+
+          @if (productTeaser(p); as teaser) {
+            <p class="teaser">{{ teaser }}</p>
+          }
+
+          <div class="price-row">
+            <span>{{ shownPriceLabel() }}</span>
+          </div>
+
+          <!-- <dl class="attribute-grid">
+            @for (a of attributes(); track a.key) {
+              <div>
+                <dt>{{ t(a.key) }}</dt>
+                <dd>{{ a.value }}</dd>
+              </div>
+            }
+          </dl> -->
+
+          @if (hasSizeOptions()) {
             <div id="size-section" class="size-section">
               <div class="section-label">
                 <span>{{ t("product.size.label") }}</span>
-                <button type="button" (click)="openSizeGuide()">{{ t("product.size.guide") }}</button>
+                <button type="button" (click)="openSizeGuide()">
+                  {{ t("product.size.guide") }}
+                </button>
               </div>
 
               <button
@@ -190,9 +252,10 @@
                 class="mobile-size-trigger"
                 (click)="openSizePicker()"
                 [attr.aria-expanded]="sizePickerOpen()"
+                [attr.aria-invalid]="sizeSelectionError()"
               >
                 <span>{{ t("product.size.choose") }}</span>
-                <strong>UK {{ selectedSize() ?? "—" }}</strong>
+                <strong>{{ selectedSize() ?? "—" }}</strong>
               </button>
 
               <div class="size-options">
@@ -207,65 +270,39 @@
                     [attr.aria-pressed]="selectedSize() === s.size"
                     (click)="selectSize(s.size)"
                   >
+                    <!-- The chip shows the number only. Printing "(Sold out)" inside a 46px square
+                         stretched every sold-out chip into a three-line block and pushed the row
+                         into a wall of text; the muted `.out-of-stock` styling carries the meaning.
+                         The words stay for screen readers, which cannot see the styling. -->
                     <span class="size-value">{{ s.size }}</span>
+                    @if (s.available && !s.inStock) {
+                      <span class="sr-only">{{ t("stock.soldOutOption") }}</span>
+                    }
                     <span class="size-state" aria-hidden="true">
                       {{ selectedSize() === s.size ? "✓" : "" }}
                     </span>
                   </button>
                 }
               </div>
+              @if (selectedSizeNote(); as note) {
+                <p class="note-panel note-row" aria-live="polite">{{ note }}</p>
+              }
+
+              @if (sizeSelectionError()) {
+                <p class="size-required-message" role="alert">
+                  {{ t("product.size.required") }}
+                </p>
+              }
             </div>
 
-            @if (sizePickerOpen()) {
-              <div
-                class="size-sheet"
-                role="dialog"
-                aria-modal="true"
-                [attr.aria-label]="t('product.size.label')"
-              >
-                <button
-                  type="button"
-                  class="size-sheet-backdrop"
-                  (click)="closeSizePicker()"
-                  [attr.aria-label]="t('common.close')"
-                ></button>
-                <div class="size-sheet-panel">
-                  <div class="size-sheet-head">
-                    <div>
-                      <span>{{ t("product.size.choose") }}</span>
-                      <strong>{{ t("product.size.label") }}</strong>
-                    </div>
-                    <button
-                      type="button"
-                      class="size-sheet-close"
-                      (click)="closeSizePicker()"
-                      [attr.aria-label]="t('common.close')"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div class="size-list">
-                    @for (s of availableSizes(); track s.size) {
-                      <button
-                        type="button"
-                        class="size-btn"
-                        [class.active]="selectedSize() === s.size"
-                        [class.unavailable]="!s.available"
-                        [class.out-of-stock]="s.available && !s.inStock"
-                        [disabled]="!s.available"
-                        [attr.aria-pressed]="selectedSize() === s.size"
-                        (click)="selectSize(s.size)"
-                      >
-                        <span class="size-value">{{ s.size }}</span>
-                        <span class="size-state" aria-hidden="true">{{
-                          selectedSize() === s.size ? "✓" : ""
-                        }}</span>
-                      </button>
-                    }
-                  </div>
-                </div>
-              </div>
-            }
+            <cw-size-sheet
+              [open]="sizePickerOpen()"
+              [sizes]="availableSizes()"
+              [selected]="selectedSize()"
+              [error]="sizeSelectionError() ? t('product.size.required') : ''"
+              (picked)="selectSize($event)"
+              (closed)="closeSizePicker()"
+            />
           }
 
           <div class="qty-row">
@@ -282,6 +319,7 @@
               <button
                 type="button"
                 (click)="incQty()"
+                [disabled]="qty() >= maxQty()"
                 [attr.aria-label]="t('product.aria.increaseQty')"
               >
                 +
@@ -289,19 +327,35 @@
             </div>
           </div>
 
+          @if (lowStockLeft(); as left) {
+            <p class="stock-left" aria-live="polite">{{ t("cart.stock.onlyLeft", { count: left }) }}</p>
+          }
+          @if (productSoldOut(p)) { <p class="stock-status">{{ t("stock.outOfStock") }}</p> }
           <div class="cta-stack">
-            @if (selectedSizeInStock()) {
-              <button type="button" class="add-cart-btn" (click)="add()" data-track="add-to-cart" [attr.data-track-product]="p.id">
+            @if (canPurchaseProduct()) {
+              <button
+                type="button"
+                class="add-cart-btn"
+                (click)="add()"
+                data-track="add-to-cart"
+                [attr.data-track-product]="p.id"
+              >
                 @if (addedFeedback()) {
                   <span>✓ {{ t("product.cta.added") }}</span>
                 } @else {
                   <span>{{ t("product.cta.addToCart") }}</span>
-                  <small>{{ price(p.price * qty()) }}</small>
+                  <small>{{ lineTotalLabel() }}</small>
                 }
               </button>
-              <button type="button" class="buy-now-btn" (click)="buyNow()" data-track="buy-now" [attr.data-track-product]="p.id">
+              <button
+                type="button"
+                class="buy-now-btn"
+                (click)="buyNow()"
+                data-track="buy-now"
+                [attr.data-track-product]="p.id"
+              >
                 <span>{{ t("product.cta.buyNow") }}</span>
-                <small>{{ price(p.price * qty()) }}</small>
+                <small>{{ lineTotalLabel() }}</small>
               </button>
             } @else {
               <button
@@ -310,15 +364,16 @@
                 (click)="openRestockForm()"
               >
                 <span>{{ t("product.restock.notify") }}</span>
-                <small>{{
-                  t("product.restock.size", { size: selectedSize() ?? "—" })
-                }}</small>
+                @if (selectedSize() !== null) {
+                  <small>{{ t("product.restock.size", { size: selectedSize() ?? "" }) }}</small>
+                }
               </button>
             }
           </div>
 
-          @if (!selectedSizeInStock()) {
+          @if (!selectedSizeInStock() || restockFormOpen() || restockSubmitted()) {
             <div
+              id="restock-panel"
               class="restock-panel"
               [class.is-open]="restockFormOpen() || restockSubmitted()"
             >
@@ -328,6 +383,16 @@
                 </p>
               } @else if (restockFormOpen()) {
                 <form (submit)="submitRestockRequest($event)">
+                  @if (hasSizeOptions()) {
+                    <label for="restock-size">{{ t('product.size.label') }}</label>
+                    <!-- `selected` per option rather than `[value]` on the select: the select
+                         exists before its options do, so the value binding is discarded and the
+                         browser selects the first enabled option instead of the chosen size. -->
+                    <select id="restock-size" (change)="onRestockSizeChange($event)" required>
+                      <option value="" disabled [selected]="restockSize() === null">{{ t('stock.chooseRestockSize') }}</option>
+                      @for (s of restockSizes(); track s.size) { <option [value]="s.size" [selected]="restockSize() === s.size">{{ s.size }} {{ t('stock.soldOutOption') }}</option> }
+                    </select>
+                  }
                   <label for="restock-email">{{
                     t("product.restock.emailLabel")
                   }}</label>
@@ -349,6 +414,7 @@
                       }}
                     </button>
                   </div>
+                  <p class="restock-privacy">{{ t("stock.restockPrivacy") }}</p>
                   @if (restockError()) {
                     <p class="restock-error">{{ restockError() }}</p>
                   }
@@ -393,7 +459,19 @@
                   class="accordion-content"
                   [class.open]="openAccordion() === acc.id"
                 >
-                  <p>{{ t(acc.contentKey) }}</p>
+                  @if (acc.id === "material") {
+                    <!-- Per-product Material & Care copy from the admin editor,
+                         falling back to the generic static text when a product
+                         has none. Angular sanitizes innerHTML. -->
+                    <div
+                      class="description"
+                      [innerHTML]="
+                        productCareInstructions(p) || t(acc.contentKey)
+                      "
+                    ></div>
+                  } @else {
+                    <p>{{ t(acc.contentKey) }}</p>
+                  }
                 </div>
               </section>
             }
@@ -432,14 +510,15 @@
             </div>
 
             @if (sizeGuideLoading()) {
-              <p class="size-guide-state">{{ t("product.size.guideLoading") }}</p>
+              <p class="size-guide-state">
+                {{ t("product.size.guideLoading") }}
+              </p>
             } @else if (sizeGuideError()) {
               <p class="size-guide-state">{{ sizeGuideError() }}</p>
             } @else {
               <div class="size-guide-body">
                 @for (set of sizeSets(); track set.id) {
                   <div class="size-guide-set">
-
                     @if (set.size_chart && set.size_chart.length > 0) {
                       <!-- Conversion table -->
                       <div class="sg-table-wrap">
@@ -473,7 +552,6 @@
                         }
                       </div>
                     }
-
                   </div>
                 }
               </div>
@@ -511,13 +589,23 @@
               <div class="review-success" aria-live="polite">
                 <span class="review-success__mark" aria-hidden="true">✓</span>
                 <p>{{ t("product.review.successKicker") }}</p>
-                <h2 id="review-title">{{ t("product.review.successTitle") }}</h2>
+                <h2 id="review-title">
+                  {{ t("product.review.successTitle") }}
+                </h2>
                 <span>{{ t("product.review.successBody") }}</span>
                 <div class="review-success__actions">
-                  <button type="button" class="review-submit" (click)="closeReview()">
+                  <button
+                    type="button"
+                    class="review-submit"
+                    (click)="closeReview()"
+                  >
                     {{ t("common.close") }}
                   </button>
-                  <button type="button" class="review-secondary" (click)="startAnotherReview()">
+                  <button
+                    type="button"
+                    class="review-secondary"
+                    (click)="startAnotherReview()"
+                  >
                     {{ t("product.review.another") }}
                   </button>
                 </div>
@@ -529,31 +617,61 @@
                 <span>{{ t("product.review.subtitle") }}</span>
               </header>
 
-              <form class="review-form" (submit)="submitReview($event)" novalidate>
+              <form
+                class="review-form"
+                (submit)="submitReview($event)"
+                novalidate
+              >
                 <fieldset class="review-rating">
                   <legend>
                     {{ t("product.review.rating") }}
-                    <span>{{ t("product.review.optional") }}</span>
+                    <span>{{ t("product.review.required") }}</span>
                   </legend>
-                  <div class="review-stars">
+                  <div
+                    class="review-stars"
+                    [attr.aria-invalid]="
+                      reviewFieldErrors().rating ? true : null
+                    "
+                    [attr.aria-describedby]="
+                      reviewFieldErrors().rating ? 'review-rating-error' : null
+                    "
+                  >
                     @for (star of [1, 2, 3, 4, 5]; track star) {
                       <button
+                        [id]="'review-star-' + star"
                         type="button"
                         [class.is-selected]="star <= (reviewRating() || 0)"
                         [attr.aria-pressed]="reviewRating() === star"
-                        [attr.aria-label]="t('product.review.starLabel', { rating: star })"
+                        [attr.aria-label]="
+                          t('product.review.starLabel', { rating: star })
+                        "
                         (click)="selectReviewRating(star)"
                       >
                         ★
                       </button>
                     }
                   </div>
+                  @if (reviewFieldErrors().rating) {
+                    <p id="review-rating-error" class="review-field-error">
+                      {{ reviewFieldErrors().rating }}
+                    </p>
+                  }
                 </fieldset>
 
-                <label class="review-field review-field--message" for="review-description">
+                <label
+                  class="review-field review-field--message"
+                  for="review-description"
+                >
                   <span>
                     {{ t("product.review.description") }}
                     <small>{{ t("product.review.optional") }}</small>
+                    <small class="review-character-count">
+                      {{
+                        t("product.review.charactersRemaining", {
+                          count: 1200 - reviewDescription().length,
+                        })
+                      }}
+                    </small>
                   </span>
                   <textarea
                     id="review-description"
@@ -566,57 +684,109 @@
                   ></textarea>
                 </label>
 
-                <div class="review-contact-grid">
-                  <label class="review-field" for="review-name">
-                    <span>
-                      {{ t("product.review.name") }}
-                      <small>{{ t("product.review.optional") }}</small>
-                    </span>
-                    <input
-                      id="review-name"
-                      type="text"
-                      autocomplete="name"
-                      maxlength="100"
-                      [value]="reviewName()"
-                      (input)="onReviewNameInput($event)"
-                      [placeholder]="t('product.review.namePlaceholder')"
-                    />
-                  </label>
+                <label class="review-field" for="review-name">
+                  <span>
+                    {{ t("product.review.name") }}
+                    <small>{{ t("product.review.optional") }}</small>
+                  </span>
+                  <input
+                    id="review-name"
+                    type="text"
+                    autocomplete="name"
+                    maxlength="100"
+                    [value]="reviewName()"
+                    (input)="onReviewNameInput($event)"
+                    [placeholder]="t('product.review.namePlaceholder')"
+                  />
+                </label>
 
-                  <label class="review-field" for="review-mobile">
-                    <span>
-                      {{ t("product.review.mobile") }}
-                      <small>{{ t("product.review.optional") }}</small>
-                    </span>
+                <div class="review-contact-consent">
+                  <label for="review-contact-consent">
                     <input
-                      id="review-mobile"
-                      type="tel"
-                      inputmode="tel"
-                      autocomplete="tel"
-                      maxlength="40"
-                      [value]="reviewPhone()"
-                      (input)="onReviewPhoneInput($event)"
-                      [placeholder]="t('product.review.mobilePlaceholder')"
+                      id="review-contact-consent"
+                      type="checkbox"
+                      [checked]="reviewContactConsent()"
+                      (change)="onReviewContactConsentChange($event)"
+                      [attr.aria-describedby]="
+                        reviewFieldErrors().contact
+                          ? 'review-contact-error'
+                          : 'review-contact-help'
+                      "
                     />
-                  </label>
-
-                  <label class="review-field review-field--email" for="review-email">
                     <span>
-                      {{ t("product.review.email") }}
-                      <small>{{ t("product.review.optional") }}</small>
+                      <strong>{{ t("product.review.contactConsent") }}</strong>
+                      <small id="review-contact-help">{{
+                        t("product.review.contactHelp")
+                      }}</small>
                     </span>
-                    <input
-                      id="review-email"
-                      type="email"
-                      inputmode="email"
-                      autocomplete="email"
-                      maxlength="254"
-                      [value]="reviewEmail()"
-                      (input)="onReviewEmailInput($event)"
-                      [placeholder]="t('product.review.emailPlaceholder')"
-                    />
                   </label>
+                  @if (reviewFieldErrors().contact) {
+                    <p id="review-contact-error" class="review-field-error">
+                      {{ reviewFieldErrors().contact }}
+                    </p>
+                  }
                 </div>
+
+                @if (reviewContactConsent()) {
+                  <div class="review-contact-fields">
+                    <p>{{ t("product.review.contactDetails") }}</p>
+                    <div class="review-contact-grid">
+                      <label class="review-field" for="review-mobile">
+                        <span>{{ t("product.review.mobile") }}</span>
+                        <input
+                          id="review-mobile"
+                          type="tel"
+                          inputmode="tel"
+                          autocomplete="tel"
+                          maxlength="40"
+                          [value]="reviewPhone()"
+                          (input)="onReviewPhoneInput($event)"
+                          [placeholder]="t('product.review.mobilePlaceholder')"
+                          [attr.aria-invalid]="
+                            reviewFieldErrors().phone ? true : null
+                          "
+                          [attr.aria-describedby]="
+                            reviewFieldErrors().phone
+                              ? 'review-phone-error'
+                              : null
+                          "
+                        />
+                        @if (reviewFieldErrors().phone) {
+                          <p id="review-phone-error" class="review-field-error">
+                            {{ reviewFieldErrors().phone }}
+                          </p>
+                        }
+                      </label>
+
+                      <label class="review-field" for="review-email">
+                        <span>{{ t("product.review.email") }}</span>
+                        <input
+                          id="review-email"
+                          type="email"
+                          inputmode="email"
+                          autocomplete="email"
+                          maxlength="254"
+                          [value]="reviewEmail()"
+                          (input)="onReviewEmailInput($event)"
+                          [placeholder]="t('product.review.emailPlaceholder')"
+                          [attr.aria-invalid]="
+                            reviewFieldErrors().email ? true : null
+                          "
+                          [attr.aria-describedby]="
+                            reviewFieldErrors().email
+                              ? 'review-email-error'
+                              : null
+                          "
+                        />
+                        @if (reviewFieldErrors().email) {
+                          <p id="review-email-error" class="review-field-error">
+                            {{ reviewFieldErrors().email }}
+                          </p>
+                        }
+                      </label>
+                    </div>
+                  </div>
+                }
 
                 <p class="review-privacy">{{ t("product.review.privacy") }}</p>
 
@@ -630,7 +800,11 @@
                   data-testid="submit-review"
                   [disabled]="reviewSubmitting()"
                 >
-                  {{ reviewSubmitting() ? t("product.review.submitting") : t("product.review.submit") }}
+                  {{
+                    reviewSubmitting()
+                      ? t("product.review.submitting")
+                      : t("product.review.submit")
+                  }}
                 </button>
               </form>
             }
@@ -648,10 +822,11 @@
           <div class="related-grid">
             @for (item of recommendedProducts(); track item.id) {
               <article class="related-card">
-                <button
-                  type="button"
+                <a
                   class="related-link"
-                  (click)="goToProduct(item)"
+                  [routerLink]="relatedPath(item)"
+                  queryParamsHandling="preserve"
+                  (click)="onRelatedLinkClick($event, item)"
                 >
                   <span class="related-image">
                     <img
@@ -671,7 +846,7 @@
                     }}</span>
                     <span class="related-price">{{ price(item.price) }}</span>
                   </span>
-                </button>
+                </a>
               </article>
             }
           </div>
@@ -680,15 +855,30 @@
     </div>
 
     <div class="sticky-atc" id="sticky-atc">
-      @if (selectedSizeInStock()) {
-        <button type="button" class="add-cart-btn" (click)="add()" data-track="add-to-cart-sticky" [attr.data-track-product]="p.id">
+      @if (canPurchaseProduct()) {
+        <button
+          type="button"
+          class="add-cart-btn"
+          (click)="add()"
+          data-track="add-to-cart-sticky"
+          [attr.data-track-product]="p.id"
+        >
           @if (addedFeedback()) {
             <ng-container>{{ t("product.sticky.added") }}</ng-container>
           } @else {
             <ng-container>{{ t("product.sticky.addToCart") }}</ng-container>
+            <!-- The bar hid the price while the panel above it showed one; on a phone the
+                 bar is often all that is on screen when the customer decides. -->
+            <small class="sticky-price">{{ lineTotalLabel() }}</small>
           }
         </button>
-        <button type="button" class="buy-now-btn" (click)="buyNow()" data-track="buy-now-sticky" [attr.data-track-product]="p.id">
+        <button
+          type="button"
+          class="buy-now-btn"
+          (click)="buyNow()"
+          data-track="buy-now-sticky"
+          [attr.data-track-product]="p.id"
+        >
           {{ t("product.sticky.buyNow") }}
         </button>
       } @else {

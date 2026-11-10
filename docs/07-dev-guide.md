@@ -9,7 +9,7 @@
 
 | Tool | Version | Check |
 |---|---|---|
-| Node.js | 18+ | `node -v` |
+| Node.js | 22 LTS (pinned in `server/package.json` `engines`) | `node -v` |
 | npm | 9+ | `npm -v` |
 | Angular CLI | 17+ | `npx ng version` |
 | Git | 2.30+ | `git --version` |
@@ -54,6 +54,8 @@ This starts all three processes concurrently:
 | Client Web | http://localhost:4200 | Yes (ng serve) |
 | Admin Portal | http://localhost:4300 | Yes (ng serve, with proxy) |
 
+The storefront's `serve.options.allowedHosts` in `client/angular.json` permits local loopback hostnames for SSR. Angular's development server replaces the build's `security.allowedHosts`, so local hosts must be listed under `serve` too. Restart `npm run dev` after changing these settings. To access the storefront from another device, add your machine's current LAN IP to this development allowlist.
+
 > **Dev proxy** — `client/proxy.conf.json` proxies `/api` and `/uploads` from the Angular dev server (port 4300) to Express (port 3000). This means `<img src="/uploads/...">` in the admin portal correctly resolves to the Express static file server in development. No proxy changes needed in production (same origin).
 
 ### Start Individually
@@ -84,7 +86,10 @@ npm run admin    # admin-portal only
 |---|---|---|
 | `npm run start` | `ng serve client-web` | Storefront on :4200 |
 | `npm run start:admin` | `ng serve admin-portal --port 4300` | Admin on :4300 |
-| `npm run build:web` | Production build (client-web) | → `dist/client-web/` |
+| `npm run build:web` | Production build (client-web) | → `dist/client-web/browser/` (static files, `index.csr.html`) and `dist/client-web/server/server.mjs` |
+| `npm run serve:ssr:client-web` | `node dist/client-web/server/server.mjs` | Run the built render server locally (`PORT`, `HOST`, `API_ORIGIN`, `SITE_URL`) |
+| `node scripts/ssr-smoke.mjs` | Render every route, API down (add `--api <origin>` for real data) | SSR gate; fails on crashes, hangs, wrong status, or a broken transfer cache. Must run on Node 22 (production); on macOS `$(brew --prefix node@22)/bin/node scripts/ssr-smoke.mjs` |
+| `node scripts/url-baseline.mjs` | `capture <out.json> [origin]` / `compare <before> <after>` | Record and diff every public URL's status and redirect around a release |
 | `npm run build:admin` | Production build (admin-portal) | → `dist/admin-portal/` |
 | `npm run build:all` | Build both apps | Full production build |
 | `npm run lint` | `ng lint` | Run linter |
@@ -106,6 +111,7 @@ npm run admin    # admin-portal only
 - **Standalone only** — No `NgModule` declarations. Every component sets `standalone: true`
 - **Lazy-loaded pages** — All page components are loaded via `loadComponent()` in routes
 - **Signals for state** — Use `signal()`, `computed()`, `effect()` instead of `BehaviorSubject`
+- **`OnPush`, and signals are what make it work** — every `client-web` component is `OnPush`, which is also the Angular default from v22, so new components need no `changeDetection` line at all. The v17 to v22 migration wrote `ChangeDetectionStrategy.Eager` (the old `Default`) across the app to preserve prior behaviour; that was an artifact, and it has been removed from the storefront. The consequence for new code: anything a template must react to has to be a signal. A plain field mutated in a `setTimeout` or a promise callback will render once and then go stale, with no error and a passing build. Private plumbing that never reaches a template (timers, subscriptions, observers) can stay a plain field.
 - **Never use raw `localStorage`** — Always use `StorageService` so keys are tenant-scoped (`elite:{tenantId}:{base}`). Raw `localStorage` calls will bleed state across tenants if multiple users share a browser session.
 
 ```typescript
@@ -175,6 +181,183 @@ feature-name/
 
 ## How-To Recipes
 
+### Add or change a page's search metadata
+
+Every route's `<head>` is owned by `SeoService` (`client/projects/client-web/src/app/services/seo.service.ts`). Call `watch()` from a **field initializer**, never from `ngOnInit`, so the effect dies with the component:
+
+```typescript
+private readonly seoTags = this.seo.watch(() => ({
+  title: this.i18n.t('seo.contact.title'),
+  description: this.i18n.t('seo.contact.description'),
+  canonicalPath: '/contact',
+}));
+```
+
+Copy lives in `i18n/strings.ts` under the `seo.*` keys, in **both** locales. `AR` is typed `Record<keyof typeof EN, string>`, so a key added to one locale and not the other is a compile error.
+
+**Three things stay in sync by hand**, because there is no single source for them yet:
+
+| What | Where |
+|---|---|
+| Site-level `og:`/`twitter:` fallback tags | `client/projects/client-web/src/index.html` |
+| `seo.*` copy, both locales | `client/projects/client-web/src/app/i18n/strings.ts` |
+| White-label defaults | `brand.config.json` |
+
+The tags in `index.html` exist because `SeoService` runs after hydration and social crawlers do not run JavaScript. Do not add a `canonical` or `og:url` there: those are per-URL, and a hardcoded value tells non-JS crawlers that every page duplicates the homepage. Both are created at runtime instead.
+
+### Regenerate the link-preview (og:image) card
+
+`assets/brand/og-default.jpg` must stay 1200x630. The source is `docs/seo/og-image-source.html`, a self-contained page with the product shot and logo inlined as data URIs:
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --headless --disable-gpu --hide-scrollbars \
+  --force-device-scale-factor=2 --window-size=1200,630 \
+  --screenshot=/tmp/og.png docs/seo/og-image-source.html
+```
+
+Then downsample the 2400x1260 capture to 1200x630 and save as JPEG (quality ~86) over `client/projects/client-web/src/assets/brand/og-default.jpg`. Keep it under ~300 kB; WhatsApp skips images that are too large.
+
+
+### Run the browser release gate
+
+The POS browser suite is the gate that proves checkout still works end to end — an online sale through the real variant picker, an offline sale that reconnects, and a network failure injected after the server commits.
+
+```bash
+cd client && npm run test:e2e
+```
+
+It starts its own API and admin dev server, seeds a disposable `pos-browser-e2e` tenant (two colours by two sizes, plus a second manager with a PIN for approvals), and tears it down afterwards.
+
+**It needs port 3000 free.** The admin portal resolves its API base to `http://localhost:3000/api` in development, so the suite cannot be pointed elsewhere without changing app code. Stop any running dev server first:
+
+```bash
+lsof -nP -iTCP:3000 -sTCP:LISTEN
+```
+
+Failures upload a Playwright trace and screenshots under `client/test-results`. In CI the same suite runs in `.github/workflows/ci.yml` after the server tests and the admin build.
+
+### Run the storefront hero suite
+
+Separate from the POS gate: it drives the storefront with the API behind it, and replaces the hero payload per test rather than seeding a tenant.
+
+The storefront runs **client-rendered** for this suite, on its own port (`ng serve client-web --configuration csr --port 4210`). The tests swap content by intercepting the browser's `/api/storefront-content` request; with server-side rendering the page arrives already rendered and hydrates from the transfer cache, so that request never happens and the swapped payload would be silently ignored. The `csr` configuration in `angular.json` exists only for this. Server rendering is covered separately by `node scripts/ssr-smoke.mjs`.
+
+```bash
+cd client && npm run test:hero
+```
+
+Two files, deliberately split by what they hold:
+
+- `e2e-hero/hero-resilience.spec.ts` — **layout** against content nobody has authored yet. Ten viewports, hostile copy lengths, an unmapped colour, a slide with no art. Every assertion is a measurement taken once the page is still.
+- `e2e-hero/hero-interaction.spec.ts` — **state** against input nobody has sent yet. Rapid and interleaved taps, images resolving out of order, a stalled decode, a failed load, reduced motion, and hit-testing the arrows across their width.
+
+It reuses an already-running API (`npm run dev`), but always starts its own client-rendered storefront on :4210 rather than reusing a server-rendering `npm start` on :4200.
+
+**What it cannot certify.** Chromium will not reproduce Safari's double-tap zoom. The suite proves the contract that prevents it — the declared `touch-action` on each control and the absence of a scale cap in the viewport meta — but a physical iPhone pass stays mandatory before shipping hero changes.
+
+Two guards are worth knowing about before editing them, because both replaced a test that passed while asserting nothing:
+
+- Reduced motion is applied with `page.emulateMedia()` and then **verified** with an assertion. `test.use({ reducedMotion: 'reduce' })` silently did not take effect under this config, so the reduced-motion tests ran against the normal-motion path.
+- The "no directional cue under reduced motion" test has a normal-motion counterpart that asserts the cue **does** appear. Without it, the first test is satisfied by a hero that never cues at all. It also uses a real pointer click: the component reads `event.detail` to tell a pointer activation from a keyboard one, so a synthetic `element.click()` takes the no-cue branch by itself.
+
+### Investigate an error a user reported
+
+Every request gets one correlation id, shared by the response, the log line, the error record and the audit row. The error toast shows its last 6 characters as a reference code.
+
+1. **Fastest path, no SSH:** admin portal → **Diagnostics** → Errors tab → paste the reference code into the search box. The row shows the message, code, route, stack, register, shift, and how many times it has happened. The Audit tab accepts the same code and shows what that request actually did.
+2. **On the server:** `grep '<full-request-id>' ~/.pm2/logs/elite-api-out.log | jq .`
+3. **In the browser during development:** logs print via `pino-pretty`; the register's own DevTools console still receives everything (the client logger adds a destination, it does not replace the console).
+
+Errors are grouped by fingerprint, so a fault that happened 300 times is one row with a count, not 300 rows.
+
+**Admin "links do nothing" / page refreshed itself:** usually a tab left open across a deploy. It now recovers by itself on the next click (one reload plus an *Updated to the latest version* toast). If the Errors tab shows `Failed to fetch dynamically imported module` repeating for the same page, the chunk really is missing from `dist`, so check the deploy. See [04 › Session expiry & new builds](./04-admin-portal.md#session-expiry--new-builds-2026-09).
+
+### Log something from new code
+
+**Server:**
+```javascript
+const { logger } = require('./lib/logger');   // or req.log inside a route, which carries requestId
+req.log.warn({ variantId }, 'stock fell below reorder point');
+```
+Never `console.log` in new server code — it loses the correlation id and the structure. Secrets are redacted by the logger, but do not rely on that: don't pass PINs, tokens or cookies in the first place.
+
+**Client (admin portal / POS):**
+```typescript
+private readonly clientLogger = inject(ClientLoggerService);
+this.clientLogger.logError('pos-client', error, { code: 'PRINT_FAILED' });
+```
+`log()`/`logError()` are fire-and-forget: never `await` them, and never call them in a way that can affect a sale. Entries buffer in IndexedDB (`elite-logs`, separate from the POS money database) and flush when connectivity returns, so errors that happen offline still arrive.
+
+### Update the user-roles guide (docs/33)
+
+`docs/33-user-roles-guide.html` is the source; the PDF is generated, never
+hand-edited.
+
+```bash
+cd client && node scripts/build-roles-guide-pdf.mjs
+```
+
+The rendered guide is the team's copy and states **policy** — what each role is
+permitted to do. It deliberately says nothing about how far the code enforces
+that policy.
+
+Where the two differ, the detail lives in the HTML comment at the top of the
+source, which never renders. Keep it there: do not add a "known gaps" section
+to the document, and do not hide one with `display:none` either — an internal
+finding one CSS change away from the team's PDF is not contained.
+
+Before changing a table row, probe it rather than reading the mounts: sign in as
+each role and check whether the endpoint returns 403. A 404 or 422 means the
+role gate let the request through and only the handler rejected it; **only 403
+is a block.** Update the comment whenever a gap opens or closes.
+
+### Add a server-side sortable column to an admin list
+
+Sorting a page in the browser while the header arrow implies a full sort is worse
+than offering no arrow at all, so admin lists sort on the server.
+
+1. Add the column to the route's sort whitelist — `ORDER_SORTS` in
+   `server/routes/admin-orders.route.js`, `CUSTOMER_SORTS` in
+   `server/routes/admin-customers.route.js`. **Never interpolate `req.query.sort`
+   into SQL**; an unrecognised key must fall back to the default ordering.
+2. Pass `sort` / `dir` through the service's list params.
+3. On the component's `<ap-sortable-table>`, set `[serverSort]="true"` and handle
+   `(sortChange)`: store the key and direction, reset `page` to 0, reload.
+
+`SortableTableComponent` still sorts locally by default, so pages that load their
+whole dataset at once need no change.
+
+### Print something (invoice, receipt, report) from the admin portal
+
+Render the HTML and print it from a hidden same-page `<iframe>`; see
+`printInvoice()` in `pages/orders/order-drawer.component.ts`.
+
+- **Do not use `window.open`.** Pop-up and ad blockers silently kill it, and the
+  only signal is a toast the user has to act on.
+- **Do not reach for a PDF library.** `pdfkit` / `jsPDF` both need manual Arabic
+  font embedding and neither does RTL shaping properly. The browser's print
+  dialog produces a PDF via "Save as PDF" and lays out Arabic correctly.
+- Set `lang` and `dir` on the printed document from `LocaleService`, and drive
+  `text-align` from the direction rather than hardcoding `left`.
+- Clean the iframe up on `afterprint`, with a timeout as a backstop.
+
+### Run the card terminal bridge locally (no QNB hardware)
+
+The integrated card flow talks to the Elite Card Bridge on `127.0.0.1:8183`. On any OS, run it in simulator mode (needs the .NET 8 SDK):
+
+```bash
+cd tools/elite-card-bridge
+ELITE_CARD_DATA_DIR=/tmp/ecb ELITE_CARD_BRIDGE_KEY=dev-bridge-key-0123456789abcdef \
+  dotnet run --project src/EliteCardBridge -f net8.0 -- --simulator
+```
+
+Enter the same key in POS Settings, set the till to **Integrated** (`PUT /api/admin/pos-security/registers/:id/card`), and pick outcomes with `POST /v1/sim/next {"scenario":"insufficient"}` (list in the bridge README). Tests: `dotnet test tests/EliteCardBridge.Tests` and `node --test test/pos-card-terminal-e2e.test.js` in `server/`. The QNB DLL is never committed; copy it into `tools/elite-card-bridge/lib/` to build the real Windows bridge.
+
+### Show a Notification (Toast)
+
+Read [38 – Notifications](./38-notification-audit.md) first. In short: the HTTP interceptor already reports every failed request (and `ConnectivityService` owns "connection lost"), so in a `catch` around an API call use `toast.errorFrom(err, title, sub)`, which only shows if the global message did not. Toasts dismiss themselves; pass `duration: null` only with an `action` that really does something; give repeated states a `key` and clear it with `dismissKey`. Tests: `npm run test:notifications`.
+
 ### Add a New i18n Key
 
 1. Open the appropriate `i18n/strings.ts` file
@@ -194,6 +377,162 @@ feature-name/
    readonly t = inject(I18nService).t;
    // in template: {{ t('your.new.key') }}
    ```
+
+### Add a Field to a Home Hero Slide
+
+Hero slide fields are defined in four places. Miss one and the value is silently dropped on save. Order matters:
+
+1. `server/routes/storefront-content.route.js` — add the field to the `DEFAULT_HOME_CONTENT.heroSlider.items[]` entries, then read it in `normalizeHeroSlider` via `asText(item.yourField, fallback.yourField || '')`. Anything absent here is stripped from every write.
+2. `client/projects/client-web/src/app/models/home-content.model.ts` — add it to `HeroSliderItem`.
+3. `client/projects/client-web/src/app/services/home-content.service.ts` — default it in the `heroSlider.items` map so it is never `undefined`.
+4. `client/projects/admin-portal/src/app/pages/storefront/storefront.component.ts` — add it to the local `HeroSliderItem` interface, to the `addSliderItem()` literal, and to the slide editor template with `patchSliderItem(i, 'yourField', $event)`. Add its label to both `EN` and `AR` in `admin-portal/src/app/i18n/strings.ts`.
+
+For a bilingual field, use the `fieldEn` / `fieldAr` suffix convention (as with `descriptionEn` / `descriptionAr`) rather than a single `/`-delimited string. The older `subtitle` field still uses the `"العربية / English"` split form; do not copy that pattern for new fields.
+
+When adding a field that existing saved rows will not have, give it a derived fallback in the normalizer so live content does not render an empty element. `calloutSentence()` is the example to follow.
+
+> [!NOTE]
+> The API server does not hot-reload route files in every setup. After editing `server/routes/*.js`, restart it or the storefront will keep serving the old shape and the new field will look like it is being dropped.
+
+### Add a Bilingual Product Field (no migration)
+
+`products.description` is a JSONB column, so a new product-level text field needs no schema change. `noteEn` / `noteAr` (the product note) is the worked example. Four places, and the third is the one that bites:
+
+1. **`upsertProduct()`** in `admin-products.route.js` — add the key to the `description` object literal (write).
+2. **`mapAdminProduct()`** in the same file — read it back as `desc.yourField || ''`, or the admin never sees what it saved.
+3. **The `PATCH /:id` merge object** in the same file — `yourField: req.body.yourField ?? existing.description?.yourField`. This handler does *not* spread `req.body`; it lists every field explicitly so a partial update cannot blank an omitted one. Skip this and the field saves on create and silently drops on every edit.
+4. **`mapProduct()`** in `products.route.js` — expose it on the public payload.
+
+Then the client side: `SaveProductPayload` and `Product` in `admin-portal`, `FormShape` + `makeEmptyForm()` + `makeFormFromProduct()` + the post-save writeback in `product-drawer.component.ts`, the input in the ⑤ Description section, `EN`/`AR` labels in `strings.ts`, and `Product` in `client-web`.
+
+### Add a Whole Admin Page
+
+`expenses` (migration 033) is the worked example. A new page touches more files than it looks, and the two easiest to forget are both navigation:
+
+1. **Migration** — `server/db/migrations/0NN_name.sql` *and* the same statements in `server/db/ensure-migrations.js`. There is no migration runner; `ensure-migrations.js` is what actually runs on boot. Restart twice and confirm the second boot is a clean no-op. POS-table migrations are the exception: append the file to `migrationPaths` in `server/db/pos-schema.js`, which executes the file itself on boot. When such a file swaps a CHECK or UNIQUE constraint, guard the swap on the new constraint name (see `043_pos_sadad_payment.sql`) so a restart does not re-validate the table.
+2. **Route** — `server/routes/admin-<name>.route.js` copying `admin-policies.route.js`, plus three edits in `server/routes/index.js`: the `require`, the mount, and a comment saying why the role scope is what it is. Restrict with `requireAuth({ roles: [...] })` on the mount.
+3. **Service + models** — `services/admin-<name>.service.ts` copying `admin-policies.service.ts`, types in the `models/index.ts` barrel.
+4. **i18n** — both `EN` and `AR` blocks of `i18n/strings.ts` in the same commit. `AR` is typed `Record<keyof typeof EN, string>`, so a missing Arabic key fails the build.
+5. **Page + drawer** — `pages/<name>/`, copying the `pages/policies/` two-file split. There is no shared drawer component.
+6. **Navigation — all four:** `app.routes.ts` (with a `roleGuard` matching the API mount), `shared/sidebar/sidebar.component.ts`, `shared/bottom-nav/bottom-nav.component.ts` (a separate duplicated array — miss it and the page is unreachable on mobile), and `shared/topbar/topbar.component.ts`'s `META` map (miss it and the page's breadcrumb reads "Dashboard").
+
+Verify in the browser in **both languages** — RTL is where a new layout usually breaks first.
+
+### Write Stock From New Code
+
+Any code that changes `product_variants.stock_quantity` must, in the same transaction:
+
+1. Lock the variant rows ordered by id (`ORDER BY id FOR UPDATE`). Lock location rows only after that.
+2. Write an `inventory_movements` row through `recordMovement()` (`server/lib/inventory-ledger.js`).
+3. When `perLocationEnabled()` is true, move the matching location balance through `applyLocationDelta()` (`server/lib/location-stock.js`) and pass its `locationId` to `recordMovement()`. If the code cannot know the location, call `assertTotalOnlyWriteAllowed()` so it refuses instead of drifting.
+
+`server/test/location-stock-e2e.test.js` asserts `findLocationDrift()` is empty after every operation; add your path there.
+
+### Add a Field to a Product Variant
+
+A variant field spans two routes and two apps. Miss one of the SQL selects and the value saves but never comes back, which looks identical to it not saving at all. `note_en` / `note_ar` (migration 031) is the worked example to copy.
+
+1. **Migration** — `server/db/migrations/0NN_your_field.sql` with `ADD COLUMN IF NOT EXISTS`, and add the same `ALTER TABLE` to `server/db/ensure-migrations.js` so deploys that have not run the file self-heal on boot.
+2. **`server/routes/admin-products.route.js`** — three things, all required:
+   - the column in the `INSERT` list, its placeholder in `VALUES`, its line in `ON CONFLICT DO UPDATE SET`, and its value appended to the params array (order must match the placeholder numbers);
+   - the field in **all three** `jsonb_build_object` variant selects (`loadAdminProduct` plus the two list queries) — they are separate copies, not a shared constant;
+   - an `ensureXColumns(client)` guard if the field is new enough that some environment may not have the column yet.
+3. **`server/routes/products.route.js`** — the field in `variantsSelect()` and in the variant `.map()` inside the row mapper. Without the second one the SQL returns it and the mapper drops it.
+4. **Models** — `admin-portal/src/app/models/index.ts` (`ProductVariant`) and `client-web/src/app/models/product.model.ts` (`ProductVariant`). These are two separate declarations.
+5. **Admin editor** — `catalog/product-drawer.component.ts`, in the collapsible `.vc-detail` block, wired with `updateVariant(item.globalIndex, { yourField: $event })`. Labels go in both `EN` and `AR` in `admin-portal/src/app/i18n/strings.ts`.
+6. **Storefront** — read it off the variant matching the selected size *and* colour, the way `selectedSizeNote()` does. Scoping by size alone will leak a value from one colourway into another.
+
+Verify with `node --test test/product-save-e2e.test.js` in `server/`, which round-trips a variant through POST and PATCH; assert both that the value comes back and that clearing it clears it.
+
+### Pick the Right Image URL
+
+Uploads are stored with resized variants alongside the original (`-thumb` 240, `-card` 640, `-grid` 900, `-pdp` 1400, `-zoom` 1800; see `server/lib/storage.js`). The admin media API returns two URLs and they are not interchangeable:
+
+| Field | Points at | Use for |
+|---|---|---|
+| `preview` | The `-card` 640px variant | Picker thumbnails, grids, small previews |
+| `storageUrl` | The full-size original | Anything rendered large: hero art, PDP gallery, zoom |
+
+Saving `preview` into content is a silent quality bug — it renders fine in the editor thumbnail and soft on the storefront. Prefer `storageUrl` and let a `srcset` pick the variant per device, as `heroSrcset()` does on the home hero.
+
+Product saves are now defended against this server-side. `findOrCreateImageAsset`
+in `admin-products.route.js` resolves a URL ending in a variant suffix back to
+the asset it was derived from, checking the asset's own `imageVariants` map
+first and then the filename stem, before it will insert anything. The stem step
+is the one that matters in practice: the derivative is always `.webp` while the
+original may be a `.png`, so the two never match on the full URL.
+
+That guard exists because five assets on production were created this way, each
+carrying `metadata.source = 'admin-product-save'` and a `-card.webp`
+`storage_url`. A plain equality lookup covers a freshly uploaded asset, whose
+own `preview_url` is the card URL, which is why this went unnoticed. It misses
+for anything uploaded before the variant pipeline, where `preview_url` is still
+the original. `test/product-image-preview-url.test.js` reproduces that state and
+fails without the guard.
+
+The guard is a backstop, not a licence. Send `storageUrl`.
+
+### Backfill missing image variants
+
+Handing the browser a `srcset` only helps when the variants exist. When an
+asset's `metadata.imageVariants` is missing or empty, `imageSrcset()` returns
+null, the `src` fallback is the **full-size original**, and the page still looks
+correct while a phone downloads several megabytes per photo. It is invisible in
+review and it is the first thing to check when someone says the shop feels
+heavy on mobile.
+
+Find out whether you have it:
+
+```bash
+psql "$DATABASE_URL" -c "SELECT count(*) FROM media_links ml JOIN media_assets m ON m.id = ml.media_id WHERE ml.role IN ('gallery','primary') AND COALESCE(m.metadata->'imageVariants','{}'::jsonb) = '{}'::jsonb"
+```
+
+Repair:
+
+```bash
+cd server && node scripts/backfill-image-variants.js
+```
+
+The script re-derives all five sizes with `sharp`, writes them next to the
+original, and updates `preview_url`, `width`, `height` and
+`metadata.imageVariants`. It is idempotent — rows that already have variants are
+not selected — so it is safe to re-run, and safe to run against production once
+`sharp` is installed there. Rows it reports as skipped are images with no local
+file to derive from, which on this catalogue means the remote Unsplash seed URLs.
+
+Two things it has to get right, both learned the hard way:
+
+- A row whose `imageVariants` is `{}` is unprocessed, not processed. Selecting on
+  the key's presence leaves those rows permanently unreachable.
+- Older rows have no `metadata.storagePath`. The script rebuilds the path from
+  the filename at the end of `storage_url` instead, and records `storagePath`
+  while it is there. These older rows are not stragglers: they are the ones the
+  live product galleries link to.
+
+### Work With Colour Slugs
+
+Colour names appear in three places that must agree, or a colour deep-link silently resolves to nothing:
+
+| Place | Rule |
+|---|---|
+| `client-web/src/app/utils/color-slug.ts` | Canonical `colorKey()` / `colorSlug()`. Import these; do not re-implement the regex. |
+| `server/routes/storefront-content.route.js` | `colorSlug()` mirrors the client helper for values normalized on save. |
+| `admin-portal/.../storefront.component.ts` | `heroColorSlug()` mirrors it again when the editor writes hero swatches. |
+
+`colorSlug()` lowercases, trims, and strips every non-alphanumeric character: `"Light Beige"` becomes `lightbeige`, `"T.Moro"` becomes `tmoro`. If you change the rule, change all three and re-check any stored `slug` values, since they are persisted rather than derived at read time.
+
+Colour **values** (hex, swatch image) live only in `ref_colors` and are resolved at render time through `ReferenceDataService`. Never copy a hex into content JSON: it will drift the moment someone edits the colour in Reference Data.
+
+Colour **photos** come from two unrelated datasets. Confusing them is the easiest mistake to make here:
+
+| Dataset | Owned by | Stored as | Used by |
+|---|---|---|---|
+| Hero shot per colour | Storefront → Landing Hero | `heroSlider.items[].colors[].imageUrl` in content JSON | Home hero swatches |
+| Product colour gallery | Catalog → product → gallery | `product_color_images` | Product detail page |
+
+They are intentionally separate: hero art is a cutout framed for the hero stage, gallery photos are standard product photography. The home hero does **not** read `product_color_images`, and the product page does not read slide content.
+
+If you do need the product gallery mapping, note the two APIs use opposite key directions: `GET /api/products` returns `colorImages` (colour -> URL, keys lowercased) while `GET /api/admin/products` returns `imageColors` (URL -> colour, original casing). `GET /api/products` also returns `colorGalleries` (colour -> all URLs, cover first) and the admin API returns `colorCovers` (colour -> cover URL); see [05 – API Server](./05-api-server.md).
 
 ### Add a New CSS Design Token
 
@@ -238,37 +577,21 @@ See [06 – White-Label Guide](./06-white-label-guide.md#step-3-update-storefron
 
 ### Run the POS in Development
 
-The POS page runs at `http://localhost:4300/pos`. The standard `npm run dev` command starts everything including the POS route.
-
-For hardware testing (thermal printer, cash drawer), the Express server must be reachable from the POS terminal. Set `PRINTER_HOST` in `server/.env` to your Bixolon printer's IP address:
+The POS page runs at `http://localhost:4300/pos`. From the repository root, start the API and admin portal in separate terminals:
 
 ```bash
-PRINTER_HOST=192.168.1.100
-PRINTER_PORT=9100
+npm run server
 ```
 
-To test USB printing via WebUSB, open the POS in Chrome/Edge (WebUSB is not supported in Firefox or Safari). The browser will prompt for USB device permission on first use.
-
-To simulate a USB barcode scan in dev, focus the search input and type any 6+ character string followed by Enter within 100ms — or use a real USB scanner.
-
-### POS npm Packages
-
-| Package | Location | Purpose |
-|---|---|---|
-| `@zxing/browser` | `client/` | Camera-based barcode/QR scanning |
-| `bwip-js` | `client/` | Barcode image generation for labels (Code 128, EAN-13) |
-| `dexie` | `client/` | IndexedDB wrapper for offline cart queue |
-| `escpos-buffer` | `server/` | ESC/POS byte stream builder for thermal receipts |
-| `bcrypt` | `server/` | Manager PIN hashing |
-
-Install after cloning:
 ```bash
-# client
-cd client && npm install @zxing/browser bwip-js dexie
-
-# server
-cd server && npm install escpos-buffer bcrypt
+npm run admin
 ```
+
+The standard `npm run dev` command also starts the storefront, API, and admin portal together.
+
+Sign in with an owner/admin/manager account, open `/pos`, enroll the browser as a register, and open a shift. Hardware is optional for normal application development; sales remain saved when printing is unavailable.
+
+Printing uses QZ Tray, not direct WebUSB or server TCP printing. For development architecture and tests, see [12 – POS System and Integration](./12-pos-system.md). For QZ Tray, printer, drawer, scanner, and local signer setup, see the [POS Hardware Runbook](./pos-hardware-runbook.md).
 
 ---
 
@@ -316,8 +639,8 @@ Elite/
 │       ├── invitations.route.js               ← Public: validate token + accept invite
 │       ├── products.route.js                  ← Public storefront listing
 │       ├── carts.route.js                     ← Public cart
+│       ├── pos.route.js                       ← Authenticated POS API
 │       └── contact.route.js                   ← Public contact form
-│                                              (admin-pos.route.js — planned, not yet built)
 │
 ├── client/
 │   ├── angular.json                           ← Angular workspace config

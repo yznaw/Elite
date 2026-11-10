@@ -1,7 +1,7 @@
 # Elite — Documentation Hub
 
 > All documentation for the Elite full-stack monorepo.  
-> **Last updated:** May 2026
+> **Last updated:** 1 August 2026
 
 ---
 
@@ -20,6 +20,12 @@
 | 9 | [Nginx HTTPS](./09-nginx-https.md) | DevOps | Production Nginx reverse proxy, HTTPS termination, Certbot, and upload routing |
 | 10 | [NBOX Integration](./10-nbox-integration.md) | Backend/DevOps | Delivery quote, shipment booking, and shipment status webhook flow |
 | 11 | [Storefront Analytics](./11-storefront-analytics.md) | Frontend/Backend Devs | First-party click/session/visitor tracking, ingestion, and the live admin analytics page |
+| 12 | [POS System and Integration](./12-pos-system.md) | Operations/Developers/DevOps | Implemented POS architecture, Elite data integration, offline sync, API, security, deployment, testing, and rollout |
+| 13 | [POS Review & Hardening Roadmap](./13-pos-review-roadmap.md) | Backend/Frontend Devs | Concurrency and offline-resilience audit of the POS core, with a prioritized fix list for locking and offline-queue durability |
+| 24 | [Logging & Observability](./24-logging-observability-plan.md) | Operations/Developers | Structured logs, request IDs, client diagnostics, alerting, retention, and incident workflow |
+| 25 | [POS Readiness Master Plan](./25-pos-readiness-master-plan.md) | Owner/Operations/Developers | Production launch scope, two-shop shared inventory decision, gates, accepted risks, and remaining cutover work |
+| 39 | [QNB Card Terminal Integration](./39-qnb-card-terminal-integration.md) | Owner/Developers/Operations | Integrated QNB terminal (ECR DLL) through the local Elite Card Bridge: architecture, server, POS UX, security, test plan, status |
+| 35 | [Stock Availability & Restock Alerts Plan](./35-stock-availability-and-restock-plan.md) ([العربية](./35-stock-availability-and-restock-plan.ar.md)) | Owner/Developers | Sold-out sizes and colours on collection and product pages, reliable back-in-stock emails for every stock channel, admin restock requests |
 
 ---
 
@@ -28,6 +34,8 @@
 - **Root README** → [`../README.md`](../README.md) — Quick start & project structure
 - **Brand Config** → [`../brand.config.json`](../brand.config.json) — White-label configuration
 - **Server ENV** → [`../server/.env.example`](../server/.env.example) — Environment variables
+- **Staff Guide** → [`../Elite-Admin-Staff-Guide.html`](../Elite-Admin-Staff-Guide.html) — Daily admin/POS instructions for staff and new hires
+- **Production Deployment** → [`./DEPLOYMENT.md`](./DEPLOYMENT.md) — Coordinated code, database, build, smoke-test, and rollback sequence
 
 ## Planning & Tracking
 
@@ -35,6 +43,8 @@
 |---|---|
 | [Master Plan](./master-plan.html) | Full backlog — what's live vs what still needs building, with acceptance criteria per feature. Click items to track progress. |
 | [POS System Plan](./pos-system-plan.html) | POS build — acceptance criteria per phase and sign-off gates for milestone payments (QAR 19,000 total). |
+| [POS Hardware Runbook](./pos-hardware-runbook.md) | Physical terminal, QZ Tray, Bixolon printer, cash drawer, scanner, offline signer, and acceptance procedure. |
+| [On-Site Migration Plan (swiftPOS → Elite POS)](./pos-onsite-migration-plan.html) | Phased field plan for testing hardware compatibility and cutting over a client's live swiftPOS install to Elite POS without risking their running business. |
 | [Production Launch](./production-launch.html) | Pre-launch checklist and go-live readiness tracker. |
 
 ---
@@ -49,3 +59,4 @@
 - **Deploying HTTPS with Nginx?** See [09 – Nginx HTTPS](./09-nginx-https.md).
 - **Connecting NBOX delivery?** See [10 – NBOX Integration](./10-nbox-integration.md).
 - **Tracking storefront visits/clicks?** See [11 – Storefront Analytics](./11-storefront-analytics.md).
+- **Deploying or operating POS?** See [12 – POS System and Integration](./12-pos-system.md) and the [POS Hardware Runbook](./pos-hardware-runbook.md).

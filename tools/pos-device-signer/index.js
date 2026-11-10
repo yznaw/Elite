@@ -1,0 +1,122 @@
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const http = require('node:http');
+
+const port = Number.parseInt(process.env.ELITE_POS_SIGNER_PORT || '8182', 10);
+const certificatePath = process.env.ELITE_POS_QZ_CERT_PATH;
+const privateKeyPath = process.env.ELITE_POS_QZ_KEY_PATH;
+const allowedOrigins = new Set(String(process.env.ELITE_POS_ALLOWED_ORIGINS || 'http://localhost:4300,https://admin.elitecollections.qa')
+  .split(',').map((value) => value.trim()).filter(Boolean));
+const maxBytes = 128 * 1024;
+
+function log(level, event, detail = {}) {
+  const line = JSON.stringify({ timestamp: new Date().toISOString(), level, event, ...detail });
+  if (level === 'error') console.error(line);
+  else if (level === 'warn') console.warn(line);
+  else console.log(line);
+}
+
+function requiredFile(filePath, label) {
+  if (!filePath) throw new Error(`${label} environment variable is required.`);
+  return fs.readFileSync(filePath, 'utf8');
+}
+
+const certificate = requiredFile(certificatePath, 'ELITE_POS_QZ_CERT_PATH');
+const privateKey = requiredFile(privateKeyPath, 'ELITE_POS_QZ_KEY_PATH');
+
+function cors(req, res) {
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+  // Mirror back whatever headers the browser's preflight actually asked for,
+  // instead of a fixed list — QZ Tray's client can send headers beyond just
+  // content-type, and a hardcoded allowlist here silently blocks any of them.
+  const requestedHeaders = req.headers['access-control-request-headers'];
+  res.setHeader('Access-Control-Allow-Headers', requestedHeaders || 'content-type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+}
+
+function send(res, status, body, type = 'text/plain') {
+  res.writeHead(status, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-store' });
+  res.end(body);
+}
+
+// QZ Tray's client only ever sends a SHA-256 hash digest to be signed, never
+// the original { call, params } JSON it hashed (see server/lib/pos/
+// qz-service.js's parseQzRequest for the full explanation) — so this can
+// only bound the request size, not allowlist by call type or printer name.
+function allowedRequest(request) {
+  return Buffer.byteLength(request, 'utf8') <= maxBytes;
+}
+
+const server = http.createServer((req, res) => {
+  cors(req, res);
+  if (req.method === 'OPTIONS') return send(res, 204, '');
+  if (req.headers.origin && !allowedOrigins.has(req.headers.origin)) {
+    log('warn', 'origin_denied', { origin: req.headers.origin, method: req.method, path: req.url });
+    return send(res, 403, 'Origin denied.');
+  }
+  if (req.method === 'GET' && req.url === '/health') return send(res, 200, 'ok');
+  if (req.method === 'GET' && req.url === '/qz/certificate') {
+    log('info', 'certificate_served', { origin: req.headers.origin || null });
+    return send(res, 200, certificate);
+  }
+  if (req.method !== 'POST' || req.url !== '/qz/sign') return send(res, 404, 'Not found.');
+
+  let body = '';
+  let requestTooLarge = false;
+  req.setEncoding('utf8');
+  req.on('data', (chunk) => {
+    body += chunk;
+    if (Buffer.byteLength(body, 'utf8') > maxBytes * 2) {
+      requestTooLarge = true;
+      log('warn', 'request_body_too_large', { origin: req.headers.origin || null });
+      req.destroy();
+    }
+  });
+  req.on('end', () => {
+    if (requestTooLarge) return;
+    try {
+      const request = JSON.parse(body).request;
+      if (typeof request !== 'string' || !allowedRequest(request)) {
+        log('warn', 'sign_request_denied', {
+          origin: req.headers.origin || null,
+          requestBytes: typeof request === 'string' ? Buffer.byteLength(request, 'utf8') : null,
+        });
+        return send(res, 403, 'QZ request denied.');
+      }
+      const signature = crypto.sign('RSA-SHA512', Buffer.from(request, 'utf8'), privateKey).toString('base64');
+      log('info', 'signature_issued', {
+        origin: req.headers.origin || null,
+        requestBytes: Buffer.byteLength(request, 'utf8'),
+      });
+      return send(res, 200, signature);
+    } catch (error) {
+      log('warn', 'invalid_sign_request', {
+        origin: req.headers.origin || null,
+        error: String(error?.message || error).slice(0, 300),
+      });
+      return send(res, 422, 'Invalid signing request.');
+    }
+  });
+  req.on('error', (error) => {
+    log('warn', 'request_stream_error', { error: String(error?.message || error).slice(0, 300) });
+  });
+});
+
+server.listen(port, '127.0.0.1', () => {
+  log('info', 'signer_started', { address: `http://127.0.0.1:${port}`, allowedOrigins: [...allowedOrigins] });
+});
+
+server.on('error', (error) => {
+  log('error', 'signer_server_error', { error: String(error?.message || error).slice(0, 500) });
+});
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    log('info', 'signer_stopping', { signal });
+    server.close(() => process.exit(0));
+  });
+}

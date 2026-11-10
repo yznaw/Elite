@@ -1,0 +1,708 @@
+import { Injectable, inject } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import { ApiClient } from './api-client.service';
+import { PosReceiptBlock, PosRegisterIdentity } from './pos-local-store.service';
+import type { toServerCardResult } from './pos-card-terminal.service';
+
+export interface PosCatalogItem {
+  productId: string;
+  variantId: string;
+  name: string;
+  /** Arabic product name, cached with the catalogue so an offline sale can
+   *  still print the bilingual item line. Empty when untranslated. */
+  nameAr: string;
+  variant: string;
+  size: string;
+  color: string;
+  /** Arabic reference-list name for the colour, snapshotted on a sale. */
+  colorAr: string;
+  material: string;
+  sku: string;
+  barcode: string;
+  priceCents: number;
+  /** What this till can sell. With stock per location on: its branch's
+   *  balance, never more than the sellable total. */
+  stock: number;
+  imageUrl: string;
+  isActive: boolean;
+  /** Stock per location only: the sellable total across all locations. */
+  total?: number;
+  /** Stock per location only: units paid online and awaiting approval. */
+  heldOnline?: number;
+  /** Stock per location only: other locations holding this size. */
+  availability?: PosLocationStock[];
+}
+
+export interface PosLocationStock {
+  locationId: string;
+  name: string;
+  type?: 'store' | 'warehouse';
+  quantity: number;
+}
+
+export interface PosProductSearchResult {
+  products: PosCatalogItem[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface PosProductFilters {
+  sizes: string[];
+  colors: string[];
+}
+
+/** One row of the "which till is this?" picker shown on a fresh browser. */
+export interface PosSelectableRegister {
+  registerId: string;
+  displayName: string;
+  lastSeenAt: string | null;
+  /** The branch whose details print on this till's receipts — its own, or the
+      tenant's default when it has none. Shown in the picker so a name like
+      "Counter 2" is not ambiguous across shops. */
+  branchName: string | null;
+  openShiftId: string | null;
+  openShiftCashier: string | null;
+}
+
+export interface PosCurrentRegister {
+  registerId: string;
+  displayName: string;
+  status: string;
+  /** Same register → default → oldest fallback used for receipt printing,
+      so this always matches the branch identity on a printed receipt. */
+  branchName: string | null;
+  branchId?: string | null;
+  /** Stock per location: the location this till sells from (null while off). */
+  locationId?: string | null;
+  /** 'integrated': this till charges the QNB terminal through the local card
+      bridge (docs/39). 'manual': the cashier types the approval code. */
+  cardMode?: 'manual' | 'integrated';
+  cardManualFallback?: boolean;
+  /** False when no owner/admin/manager has ever set a manager PIN for this
+      tenant — protected actions (void/refund/drawer-open/z-report/
+      sync-conflict) then skip asking for one and auto-approve. */
+  managerPinConfigured: boolean;
+  shift: {
+    id: string;
+    state: 'open' | 'closing';
+    cashierId: string;
+    cashierName: string | null;
+    openingFloatCents: number;
+    openedAt: string;
+  } | null;
+}
+
+export interface PosShift {
+  shiftId: string;
+  registerId: string;
+  cashierId: string;
+  openingFloatCents: number;
+  state: 'open' | 'closing' | 'closed';
+  openedAt: string;
+}
+
+import type { PosPaymentMethod } from './pos-payment';
+export { POS_PAYMENT_LABELS, SADAD_REFERENCE_PATTERN } from './pos-payment';
+export type { PosPaymentMethod } from './pos-payment';
+
+export interface PosSaleResult {
+  transactionId: string;
+  orderId: string;
+  orderNumber: string;
+  receiptNumber: string;
+  status: string;
+  paymentMethod: PosPaymentMethod;
+  terminalReference?: string | null;
+  card?: PosSaleCard | null;
+  subtotalCents: number;
+  taxCents: number;
+  totalCents: number;
+  amountTenderedCents: number;
+  changeGivenCents: number;
+  stockUpdates: Array<{ variantId: string; stock: number }>;
+  receipt: { qrCodeValue: string; receiptData: unknown };
+  items?: PosTransactionItem[];
+  refunds?: PosRefundSummary[];
+  voidReason?: string | null;
+  syncConflicts?: Array<{ conflictId: string; type: string; variantId: string }>;
+}
+
+export interface PosTransactionItem {
+  id: string;
+  variantId: string | null;
+  name: string;
+  nameAr?: string | null;
+  variant: string;
+  color?: string | null;
+  colorAr?: string | null;
+  size?: string | null;
+  sku: string;
+  quantity: number;
+  refundableQty: number;
+  unitPriceCents: number;
+  lineTotalCents: number;
+}
+
+export interface PosRefundSummary {
+  refundId: string;
+  amountCents: number;
+  method: PosPaymentMethod;
+  reason: string;
+  status: string;
+  receiptNumber: string;
+  createdAt: string;
+}
+
+export interface PosManagerOverride {
+  overrideId: string;
+  token: string;
+  managerId: string;
+  action: 'refund' | 'void' | 'z-report' | 'drawer-open' | 'sync-conflict-override' | 'card-resolve';
+  expiresAt: string;
+  /** True when this override was granted without checking a PIN, because
+      no owner/admin/manager has configured one for this tenant. */
+  autoApproved?: boolean;
+}
+
+export interface PosParkedCart {
+  parkedCartId: string;
+  label: string;
+  payload: { items: Array<{ item: PosCatalogItem; quantity: number }> };
+  createdAt: string;
+  updatedAt: string;
+  local?: boolean;
+}
+
+export interface PosSyncConflict {
+  conflictId: string;
+  transactionId: string;
+  receiptNumber: string;
+  productName: string;
+  sku: string;
+  type: 'insufficient_stock' | 'price_changed';
+  expectedValue: number | null;
+  actualValue: number | null;
+  shortageQuantity: number | null;
+  createdAt: string;
+}
+
+export interface PosShiftSummary {
+  shiftId: string;
+  openingFloatCents: number;
+  grossSalesCents: number;
+  cashSalesCents: number;
+  cardSalesCents: number;
+  sadadSalesCents: number;
+  refundTotalCents: number;
+  voidTotalCents: number;
+  netSalesCents: number;
+  cashInCents: number;
+  cashOutCents: number;
+  expectedCashCents: number;
+  transactionCount: number;
+  refundCount: number;
+  voidCount: number;
+  /**
+   * True when this operator opened the shift and the shop allows self-close,
+   * so the close sheet can drop the manager PIN field. The server re-checks
+   * this when the Z report is actually written.
+   */
+  selfCloseAllowed?: boolean;
+}
+
+export type PosCashMovementKind = 'paid_in' | 'paid_out' | 'safe_drop' | 'float_adjust' | 'no_sale_drawer_open';
+
+export interface PosCashMovement {
+  movementId: string;
+  shiftId: string;
+  registerId: string;
+  cashierId: string;
+  managerId: string | null;
+  kind: PosCashMovementKind;
+  amountCents: number;
+  reason: string;
+  createdAt: string;
+}
+
+/**
+ * A customer as the till sees them. The same row the website uses — matching
+ * is on normalized phone or email, so a person who bought online is found here
+ * and their history is one history (see server/lib/customer-identity.js).
+ */
+export interface PosCustomer {
+  customerId: string;
+  name: string;
+  email: string;
+  phone: string;
+  ordersCount: number;
+  ltvCents: number;
+  lastOrderAt?: string | null;
+  /** Set on create: true when an existing customer was matched, not created. */
+  linkedExisting?: boolean;
+  matchedOn?: 'email' | 'phone' | null;
+}
+
+/** One closing's item breakdown (GET .../z-reports/:id/items). */
+export interface PosZReportItems {
+  header: {
+    zReportId: string;
+    zNumber: string | null;
+    businessDate: string | null;
+    branchName: string | null;
+    registerName: string | null;
+    staffNames: string[];
+    closedAt: string;
+    generatedAt: string;
+  };
+  items: Array<{
+    sku: string;
+    description: string;
+    color: string | null;
+    size: string | null;
+    soldQty: number;
+    returnQty: number;
+    netQty: number;
+    unitPriceCents: number;
+    paymentMethod: PosPaymentMethod;
+    totalCents: number;
+  }>;
+  totals: { soldQty: number; returnQty: number; netQty: number; totalCents: number };
+  byMethod: Array<{ method: PosPaymentMethod; totalCents: number }>;
+}
+
+export interface PosZReport {
+  zReportId: string;
+  /** Z-DDMM-YYYY-NNN; null only if the migration has not run yet. */
+  zNumber: string | null;
+  /** Integrated till: the terminal's CloseBatch for this shift. */
+  cardBatchStatus?: 'closed' | 'empty' | 'failed' | 'skipped' | null;
+  cardBatchReceiptText?: string | null;
+  businessDate: string | null;
+  shiftId: string;
+  registerId: string;
+  registerName: string | null;
+  branchId: string | null;
+  branchName: string | null;
+  cashierName: string | null;
+  openingFloatCents: number;
+  grossSalesCents: number;
+  cashSalesCents: number;
+  cardSalesCents: number;
+  sadadSalesCents: number;
+  refundTotalCents: number;
+  voidTotalCents: number;
+  netSalesCents: number;
+  cashInCents: number;
+  cashOutCents: number;
+  expectedCashCents: number;
+  physicalCashCents: number;
+  varianceCents: number;
+  transactionCount: number;
+  refundCount: number;
+  voidCount: number;
+  soldItemQuantity: number;
+  returnedItemQuantity: number;
+  netItemQuantity: number;
+  createdAt: string;
+}
+
+export interface PosSaleInput {
+  idempotencyKey: string;
+  receiptNumber: number;
+  shiftId: string;
+  customerId: string | null;
+  items: Array<{ variantId: string; quantity: number; unitPriceCents: number }>;
+  payment: {
+    method: PosPaymentMethod;
+    cashAmountCents: number;
+    cardAmountCents: number;
+    sadadAmountCents?: number;
+    amountTenderedCents: number;
+    changeGivenCents: number;
+    terminalReference?: string;
+    /** Integrated terminal approval; replaces terminalReference. */
+    cardAttempt?: PosCardAttemptRef;
+    /** Typed card reference on an integrated till (terminal down). */
+    manualOverride?: boolean;
+  };
+  clientCreatedAt: string;
+}
+
+/** A terminal approval attached to a sale, void or refund. `result` lets the
+    server create the attempt row itself when the till was offline. */
+export interface PosCardAttemptRef {
+  utn: string;
+  amountCents: number;
+  shiftId?: string | null;
+  originalUtn?: string;
+  result?: ReturnType<typeof toServerCardResult>;
+}
+
+export interface PosCardAttempt {
+  attemptId: string;
+  utn: string;
+  kind: 'sale' | 'void' | 'refund';
+  amountCents: number;
+  status: 'pending' | 'approved' | 'declined' | 'cancelled' | 'unknown' | 'reversed';
+  authCode: string | null;
+  maskedPan: string | null;
+  issuer: string | null;
+  message: string | null;
+  transactionId: string | null;
+  refundId: string | null;
+  voidId: string | null;
+  createdAt: string;
+  registerName?: string;
+}
+
+/** Card details of an integrated sale (loadSale). */
+export interface PosSaleCard {
+  utn: string;
+  authCode: string | null;
+  maskedPan: string | null;
+  issuer: string | null;
+  seqNo: string | null;
+  invoiceNo: string | null;
+  txnAt: string | null;
+  entryMethod: string | null;
+  receiptText: string | null;
+}
+
+export interface PosBusinessProfile {
+  tradeNameAr: string;
+  tradeNameEn: string;
+  addressAr: string;
+  addressEn: string;
+  phone: string;
+  crLicenseNumber: string | null;
+  returnPolicyAr: string | null;
+  returnPolicyEn: string | null;
+  footerStampAr: string | null;
+  footerStampEn: string | null;
+  updatedAt: string;
+}
+
+@Injectable({ providedIn: 'root' })
+export class PosService {
+  private readonly api = inject(ApiClient);
+
+  get eventUrl(): string {
+    return this.api.url('/pos/events');
+  }
+
+  get certificateUrl(): string {
+    return this.api.url('/pos/print/certificate');
+  }
+
+  get signingUrl(): string {
+    return this.api.url('/pos/print/sign');
+  }
+
+  mediaUrl(path: string): string {
+    return this.api.mediaUrl(path);
+  }
+
+  createEnrollmentToken(displayName: string): Promise<{ token: string }> {
+    return firstValueFrom(this.api.post<{ token: string }>('/pos/registers/enrollment-tokens', { displayName }));
+  }
+
+  listRegisters(): Promise<PosSelectableRegister[]> {
+    return firstValueFrom(this.api.get<{ registers: PosSelectableRegister[] }>('/pos/registers'))
+      .then((response) => response.registers);
+  }
+
+  /**
+   * Pick an existing till, or (owner/admin) name a new one.
+   *
+   * Claiming a till that somebody else has an open shift on re-mints its
+   * credential and signs that terminal out, so the server answers
+   * 409 REGISTER_TAKEOVER_CONFIRM until the caller resends with
+   * `confirmTakeover` and a manager PIN.
+   */
+  claimRegister(body: {
+    registerId?: string;
+    displayName?: string;
+    confirmTakeover?: boolean;
+    managerPin?: string;
+  }): Promise<PosRegisterIdentity> {
+    return firstValueFrom(this.api.post<PosRegisterIdentity>('/pos/registers/claim', body));
+  }
+
+  /**
+   * Forget whatever till this machine is bound to, on the server and in the
+   * cookie, so the next load starts at the picker. The manual way out of a
+   * terminal wedged against a register that was deleted or taken over.
+   */
+  releaseRegister(): Promise<void> {
+    return firstValueFrom(this.api.post('/pos/registers/release', {})).then(() => undefined);
+  }
+
+  enroll(enrollmentToken: string): Promise<PosRegisterIdentity> {
+    return firstValueFrom(this.api.post<PosRegisterIdentity>('/pos/registers/enroll', { enrollmentToken }));
+  }
+
+  checkIn(identity: PosRegisterIdentity): Promise<PosRegisterIdentity> {
+    return firstValueFrom(this.api.post<PosRegisterIdentity>('/pos/registers/check-in', identity));
+  }
+
+  currentRegister(): Promise<PosCurrentRegister> {
+    return firstValueFrom(this.api.get<PosCurrentRegister>('/pos/registers/current'));
+  }
+
+  allocateReceiptBlock(): Promise<PosReceiptBlock> {
+    return firstValueFrom(this.api.post<PosReceiptBlock>('/pos/registers/receipt-number-blocks', {}));
+  }
+
+  /**
+   * The calling register's own branch (falling back to the tenant's default
+   * branch) — server-resolved, see branch-service.js's
+   * getEffectiveBranchProfile. Writing is admin-only now and lives entirely
+   * under AdminSettingsService's branch methods, not here.
+   */
+  businessProfile(): Promise<PosBusinessProfile | null> {
+    return firstValueFrom(this.api.get<PosBusinessProfile | null>('/pos/business-profile'));
+  }
+
+  openShift(openingFloatCents: number): Promise<PosShift> {
+    return firstValueFrom(this.api.post<PosShift>('/pos/shifts/open', { openingFloatCents }));
+  }
+
+  searchProducts(
+    query = '',
+    opts: { page?: number; size?: string | null; color?: string | null; includeOutOfStock?: boolean } = {},
+  ): Promise<PosProductSearchResult> {
+    // Default browse (no search text) hides sold-out variants so the
+    // cashier isn't scrolling past dozens of unsellable sizes/colors; a real
+    // search or barcode scan should still surface a sold-out item so it
+    // doesn't look like it silently vanished from the catalog. limit is a
+    // product count, not a variant-row count — the server expands each
+    // matched product to all of its (filtered) variants.
+    const includeOutOfStock = opts.includeOutOfStock ?? !!query.trim();
+    const params = new URLSearchParams({
+      q: query,
+      limit: '40',
+      page: String(opts.page ?? 0),
+      includeOutOfStock: String(includeOutOfStock),
+    });
+    if (opts.size) params.set('size', opts.size);
+    if (opts.color) params.set('color', opts.color);
+    return firstValueFrom(
+      this.api.get<PosProductSearchResult>(`/pos/products/search?${params.toString()}`),
+    );
+  }
+
+  listProductFilters(): Promise<PosProductFilters> {
+    return firstValueFrom(this.api.get<PosProductFilters>('/pos/products/filters'));
+  }
+
+  findBarcode(barcode: string): Promise<PosCatalogItem> {
+    return firstValueFrom(this.api.get<PosCatalogItem>(`/pos/products/barcode/${encodeURIComponent(barcode)}`));
+  }
+
+  createSale(input: PosSaleInput): Promise<PosSaleResult> {
+    return firstValueFrom(this.api.post<PosSaleResult>('/pos/transactions', input));
+  }
+
+  syncSales(transactions: Array<{
+    idempotencyKey: string;
+    receiptNumber: number;
+    clientCreatedAt: string;
+    payload: PosSaleInput;
+  }>): Promise<{
+    accepted: Array<{ idempotencyKey: string; transactionId: string }>;
+    acceptedWithConflicts: Array<{ idempotencyKey: string; transactionId: string; conflicts: PosSyncConflict[] }>;
+    rejected: Array<{ idempotencyKey: string; reason: string; code: string; message: string }>;
+  }> {
+    return firstValueFrom(this.api.post('/pos/transactions/sync', { transactions }));
+  }
+
+  reportSyncState(shiftId: string, pendingCount: number, rejectedCount: number): Promise<void> {
+    return firstValueFrom(this.api.put('/pos/sync-state', { shiftId, pendingCount, rejectedCount })).then(() => undefined);
+  }
+
+  /** Polled independently of the browser's online/offline events — those
+   *  only reflect the network interface, not whether the API is actually
+   *  reachable (a flaky LAN/router/DNS issue can leave navigator.onLine true
+   *  while the API is unreachable). */
+  healthCheck(): Promise<{ ok: boolean; serverTime: string }> {
+    return firstValueFrom(this.api.get<{ ok: boolean; serverTime: string }>('/pos/health-check'));
+  }
+
+  verifyManagerPin(pin: string, action: PosManagerOverride['action']): Promise<PosManagerOverride> {
+    return firstValueFrom(this.api.post<PosManagerOverride>('/pos/manager/verify-pin', { pin, action }));
+  }
+
+  setManagerPin(pin: string, managerId?: string): Promise<{ managerId: string; configured: boolean }> {
+    return firstValueFrom(this.api.put('/pos/manager-pin', managerId ? { pin, managerId } : { pin }));
+  }
+
+  findTransaction(lookup: string): Promise<PosSaleResult> {
+    return firstValueFrom(this.api.get<PosSaleResult>(`/pos/transactions/lookup/${encodeURIComponent(lookup)}`));
+  }
+
+  voidTransaction(transactionId: string, input: {
+    idempotencyKey: string;
+    voidReason: string;
+    managerOverrideId: string;
+    managerOverrideToken: string;
+    cardAttempt?: PosCardAttemptRef;
+    manualOverride?: boolean;
+  }): Promise<{
+    voidId: string;
+    transactionId: string;
+    amountCents: number;
+    reason: string;
+    voidedAt: string;
+    stockRestored: Array<{ variantId: string; stock: number }>;
+  }> {
+    return firstValueFrom(this.api.post(`/pos/transactions/${transactionId}/void`, input));
+  }
+
+  refund(input: {
+    idempotencyKey: string;
+    receiptNumber: number;
+    shiftId: string;
+    originalTransactionId: string;
+    lines: Array<{ transactionItemId: string; quantity: number; restock: boolean }>;
+    refundMethod: PosPaymentMethod;
+    /** Required by the server when refundMethod is 'card' or 'sadad' — the
+        card terminal and Sadad are standalone, so this is the only proof the
+        refund was actually run there. */
+    terminalReference?: string;
+    cardAttempt?: PosCardAttemptRef;
+    manualOverride?: boolean;
+    reason: string;
+    managerOverrideId: string;
+    managerOverrideToken: string;
+  }): Promise<PosSaleResult & { refundId: string; refundReceiptNumber: string; amountCents: number; method: PosPaymentMethod; terminalReference: string | null }> {
+    return firstValueFrom(this.api.post('/pos/refunds', input));
+  }
+
+  /** Elite-side checks for a void, without writing — run before the
+      terminal reverses the card. */
+  checkVoid(transactionId: string, voidReason: string): Promise<{ ok: true; amountCents: number; cardUtn: string | null }> {
+    return firstValueFrom(this.api.post(`/pos/transactions/${transactionId}/void/check`, { idempotencyKey: 'check', voidReason }));
+  }
+
+  checkRefund(input: {
+    shiftId: string;
+    receiptNumber: number;
+    originalTransactionId: string;
+    lines: Array<{ transactionItemId: string; quantity: number; restock: boolean }>;
+    refundMethod: PosPaymentMethod;
+    reason: string;
+  }): Promise<{ ok: true; amountCents: number; cardUtn: string | null }> {
+    return firstValueFrom(this.api.post('/pos/refunds/check', { idempotencyKey: 'check', ...input }));
+  }
+
+  recordCardAttempt(input: { utn: string; kind: 'sale' | 'void' | 'refund'; amountCents: number; shiftId?: string | null; originalUtn?: string }): Promise<PosCardAttempt> {
+    return firstValueFrom(this.api.post<PosCardAttempt>('/pos/card-attempts', input));
+  }
+
+  recordCardResult(utn: string, result: ReturnType<typeof toServerCardResult>): Promise<PosCardAttempt> {
+    return firstValueFrom(this.api.patch<PosCardAttempt>(`/pos/card-attempts/${encodeURIComponent(utn)}`, result));
+  }
+
+  unresolvedCardAttempts(): Promise<PosCardAttempt[]> {
+    return firstValueFrom(this.api.get<PosCardAttempt[]>('/pos/card-attempts/unresolved'));
+  }
+
+  resolveCardAttempt(utn: string, input: { outcome: 'declined' | 'reversed' | 'cancelled'; note: string; managerOverrideId: string; managerOverrideToken: string }): Promise<PosCardAttempt> {
+    return firstValueFrom(this.api.post<PosCardAttempt>(`/pos/card-attempts/${encodeURIComponent(utn)}/resolve`, input));
+  }
+
+  /** Owner/admin: which till is cabled to the QNB terminal. */
+  setRegisterCardMode(registerId: string, cardMode: 'manual' | 'integrated'): Promise<{ registerId: string; cardMode: 'manual' | 'integrated'; cardManualFallback: boolean }> {
+    return firstValueFrom(this.api.put(`/admin/pos-security/registers/${registerId}/card`, { cardMode }));
+  }
+
+  recordCardBatch(zReportId: string, input: { status: 'closed' | 'empty' | 'failed' | 'skipped'; receiptText?: string }): Promise<PosZReport> {
+    return firstValueFrom(this.api.put<PosZReport>(`/pos/shifts/z-reports/${zReportId}/card-batch`, input));
+  }
+
+  listParkedCarts(): Promise<PosParkedCart[]> {
+    return firstValueFrom(this.api.get<PosParkedCart[]>('/pos/parked-carts'));
+  }
+
+  parkCart(label: string, payload: PosParkedCart['payload']): Promise<PosParkedCart> {
+    return firstValueFrom(this.api.post<PosParkedCart>('/pos/parked-carts', { label, payload }));
+  }
+
+  deleteParkedCart(id: string): Promise<void> {
+    return firstValueFrom(this.api.delete(`/pos/parked-carts/${id}`)).then(() => undefined);
+  }
+
+  listConflicts(): Promise<PosSyncConflict[]> {
+    return firstValueFrom(this.api.get<PosSyncConflict[]>('/pos/sync-conflicts'));
+  }
+
+  resolveConflict(conflictId: string, resolution: string, override: PosManagerOverride): Promise<void> {
+    return firstValueFrom(this.api.post(`/pos/sync-conflicts/${conflictId}/resolve`, {
+      resolution,
+      managerOverrideId: override.overrideId,
+      managerOverrideToken: override.token,
+    })).then(() => undefined);
+  }
+
+  shiftSummary(): Promise<PosShiftSummary> {
+    return firstValueFrom(this.api.get<PosShiftSummary>('/pos/shifts/current'));
+  }
+
+  closeShift(input: {
+    shiftId: string;
+    physicalCashCents: number;
+    idempotencyKey: string;
+    // Omitted on a self-close: the operator who opened the shift closes it
+    // without a second manager's PIN when the shop allows that.
+    managerOverrideId?: string;
+    managerOverrideToken?: string;
+    /** Integrated till: result of the terminal's CloseBatch run just before. */
+    cardBatch?: { status: 'closed' | 'empty' | 'failed' | 'skipped'; receiptText?: string };
+  }): Promise<PosZReport> {
+    return firstValueFrom(this.api.post<PosZReport>('/pos/shifts/z-report', input));
+  }
+
+  recordCashMovement(input: {
+    shiftId: string;
+    kind: PosCashMovementKind;
+    amountCents: number;
+    reason: string;
+    idempotencyKey: string;
+    managerOverrideId?: string;
+    managerOverrideToken?: string;
+  }): Promise<PosCashMovement> {
+    return firstValueFrom(this.api.post<PosCashMovement>('/pos/cash-movements', input));
+  }
+
+  listCashMovements(shiftId: string): Promise<PosCashMovement[]> {
+    return firstValueFrom(this.api.get<PosCashMovement[]>(`/pos/cash-movements?shiftId=${encodeURIComponent(shiftId)}`));
+  }
+
+  listZReports(limit = 30): Promise<PosZReport[]> {
+    return firstValueFrom(this.api.get<PosZReport[]>(`/pos/shifts/z-reports?limit=${limit}`));
+  }
+
+  getZReport(zReportId: string): Promise<PosZReport> {
+    return firstValueFrom(this.api.get<PosZReport>(`/pos/shifts/z-reports/${zReportId}`));
+  }
+
+  getZReportItems(zReportId: string): Promise<PosZReportItems> {
+    return firstValueFrom(this.api.get<PosZReportItems>(`/pos/shifts/z-reports/${encodeURIComponent(zReportId)}/items`));
+  }
+
+  /** Phone-first lookup, but a name or an email also matches. */
+  searchCustomers(query: string): Promise<PosCustomer[]> {
+    return firstValueFrom(this.api.get<PosCustomer[]>(`/pos/customers/search?q=${encodeURIComponent(query)}`));
+  }
+
+  /**
+   * Online only — see the route's own note. Entering a phone that already
+   * belongs to a website customer links to that person instead of creating a
+   * second record of them, and the response says which happened.
+   */
+  createCustomer(input: { fullName: string; phone?: string; email?: string }): Promise<PosCustomer> {
+    return firstValueFrom(this.api.post<PosCustomer>('/pos/customers', input));
+  }
+}

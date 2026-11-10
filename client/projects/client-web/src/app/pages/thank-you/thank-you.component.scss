@@ -2,6 +2,23 @@
   display: block;
 }
 
+.customer-deliveries { text-align: start; margin-top: 32px; font-family: var(--ff-sans); }
+.deliveries-title { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; font-weight: 500; color: var(--muted); margin-bottom: 16px; }
+.customer-shipment { border: 1px solid var(--border); border-radius: 10px; margin-top: 12px; padding: 20px; }
+.customer-shipment header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.customer-shipment h3 { font-family: var(--ff-serif); font-size: 22px; font-weight: 400; color: var(--cream); margin: 0; }
+.shipment-status { display: inline-flex; align-items: center; gap: 7px; font-size: 10px; color: var(--gold); padding: 6px 10px; border: 1px solid var(--border); border-radius: 20px; line-height: 1.5; }
+.shipment-status::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.shipment-status.is-delivered { color: var(--cream); }
+.customer-shipment ul { list-style: none; margin: 14px 0 0; padding: 0; }
+.customer-shipment li { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; line-height: 1.8; color: var(--muted); padding: 5px 0; }
+.shipment-quantity { color: var(--cream-dim); flex-shrink: 0; }
+.customer-shipment footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px; }
+.tracking-reference { font-size: 10px; color: var(--muted); overflow-wrap: anywhere; min-width: 0; }
+.customer-shipment a { display: inline-flex; align-items: center; gap: 8px; color: var(--gold); font-size: 11px; text-underline-offset: 4px; padding: 5px 0; }
+.customer-shipment a:focus-visible { outline: 1px solid var(--gold); outline-offset: 4px; }
+.tracking-notice { font-family: var(--ff-sans); color: var(--muted); font-size: 12px; line-height: 1.8; border: 1px solid var(--border); padding: 14px; margin-top: 20px; }
+
 .thank-page {
   min-height: 100vh;
   padding: 120px 24px 80px;

@@ -1,0 +1,55 @@
+:host { display: block; }
+.deliveries { margin-bottom: 28px; }
+.deliveries-header, .deliveries-header h3, .shipment-header, .shipment-fee, .shipment-tracking { display: flex; align-items: center; gap: 12px; }
+.deliveries-header { justify-content: space-between; margin-bottom: 16px; }
+.deliveries-header h3 { color: var(--green); font-size: 14px; font-weight: 600; gap: 8px; }
+.carrier-label { color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: .12em; }
+.delivery-progress { padding: 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 16px; }
+.delivery-progress > div { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 12px; }
+.delivery-progress strong { color: var(--green); font-weight: 600; }
+.delivery-progress span { color: var(--muted); }
+progress { appearance: none; display: block; width: 100%; height: 5px; border: 0; border-radius: 10px; overflow: hidden; margin-top: 12px; background: var(--bg-2); accent-color: var(--green); }
+progress::-webkit-progress-bar { background: var(--bg-2); }
+progress::-webkit-progress-value { background: var(--green); border-radius: 10px; }
+progress::-moz-progress-bar { background: var(--green); }
+.shipment-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); margin-top: 12px; }
+.shipment-header { padding: 18px; border-bottom: 1px solid var(--border); }
+.shipment-icon { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; background: var(--bg); border-radius: 10px; color: var(--green); }
+.shipment-origin { flex: 1; min-width: 0; }
+.shipment-origin h4 { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 5px; }
+.shipment-origin > span { display: inline-block; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.shipment-items { list-style: none; padding: 4px 18px; }
+.shipment-items li { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; line-height: 1.6; font-size: 12px; }
+.shipment-items li + li { border-top: 1px solid var(--border); }
+.shipment-items small { color: var(--muted); margin-inline-start: 6px; }
+.item-quantity { flex-shrink: 0; align-self: flex-start; color: var(--green); font-weight: 600; }
+.shipment-fee { justify-content: space-between; padding: 12px 18px; background: var(--bg); font-size: 12px; color: var(--muted); }
+.shipment-fee strong { color: var(--ink); font-weight: 600; }
+.shipment-fee small { color: var(--muted); font-size: 10px; }
+.shipment-tracking { justify-content: space-between; flex-wrap: wrap; padding: 14px 18px; }
+.shipment-tracking > span { font-size: 12px; overflow-wrap: anywhere; min-width: 0; }
+.shipment-tracking a { text-decoration: none; }
+.delivery-notice { display: flex; align-items: flex-start; gap: 9px; padding: 12px; border-radius: 8px; color: #85570b; background: var(--warning-bg); line-height: 1.65; font-size: 12px; overflow-wrap: anywhere; }
+.delivery-notice ap-icon { flex: 0 0 15px; margin-top: 2px; }
+.booking-error { margin: 14px 18px 0; }
+.shipment-actions { padding: 14px 18px; }
+.reconciliation { padding: 18px; display: grid; gap: 14px; border-top: 1px solid var(--border); }
+.reconciliation h5 { color: var(--green); font-size: 13px; }
+.reconciliation p { color: var(--muted); line-height: 1.65; font-size: 12px; }
+.reconciliation .lbl { margin-bottom: 7px; }
+.reconciliation textarea { resize: vertical; }
+.confirmation { display: flex; align-items: flex-start; gap: 9px; color: var(--ink-2); font-size: 12px; line-height: 1.65; cursor: pointer; }
+.confirmation input { accent-color: var(--green); width: 16px; height: 16px; margin-top: 2px; flex-shrink: 0; }
+.action-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { white-space: normal; text-align: center; }
+.shipment-management { border-top: 1px solid var(--border); padding: 14px 18px; }
+.shipment-management summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.shipment-management .confirmation { margin: 16px 0 12px; }
+.cancel-delivery { color: #b42318; }
+.error { color: #b42318; background: var(--danger-bg); margin-top: 14px; }
+@media(max-width: 480px) {
+  .shipment-header { flex-wrap: wrap; padding: 14px; }
+  .shipment-origin { flex-basis: 60%; }
+  .action-buttons { flex-direction: column; }
+  .action-buttons .btn { width: 100%; }
+}

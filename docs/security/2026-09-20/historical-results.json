@@ -1,0 +1,54 @@
+{
+  "revision": "6f56ffe",
+  "scope": "Actual route source, mocked DB and external services; no production execution or database integration",
+  "results": [
+    {
+      "name": "Historical: browser marks checkout paid",
+      "result": "Assertion verified in isolated route harness"
+    },
+    {
+      "name": "Historical: browser sets item and shipping prices",
+      "result": "Assertion verified in isolated route harness"
+    },
+    {
+      "name": "Historical: missing variant skips validation",
+      "result": "Assertion verified in isolated route harness"
+    },
+    {
+      "name": "Duplicate variant lines exceed available stock without rejection",
+      "result": "Assertion verified in isolated route harness"
+    },
+    {
+      "name": "Guest session reads another cart by UUID, including session identifier",
+      "result": "Assertion verified in isolated route harness"
+    },
+    {
+      "name": "Unauthenticated payment initiation discloses another order contact fields",
+      "result": "Assertion verified in isolated route harness"
+    },
+    {
+      "name": "New guest checkout cancellation is scoped only by supplied email",
+      "result": "Assertion verified in isolated route harness"
+    },
+    {
+      "name": "Callback lacks amount reconciliation after successful checksum verification",
+      "result": "Assertion verified in isolated route harness"
+    },
+    {
+      "name": "Public contact route returns synthetic private enquiries with no session",
+      "result": "Assertion verified in isolated route harness"
+    },
+    {
+      "name": "Image MIME declaration permits unchanged HTML file storage",
+      "result": "Assertion verified in isolated route harness"
+    },
+    {
+      "name": "Money conversion rounds QAR 10.50 to QAR 11",
+      "result": "CONFIRMED by actual shared helper"
+    },
+    {
+      "name": "Legacy cart checkout still uses client-priced cart rows for gateway amount",
+      "result": "Assertion verified in isolated route harness"
+    }
+  ]
+}

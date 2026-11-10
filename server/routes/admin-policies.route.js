@@ -31,7 +31,9 @@ function mapPolicy(row) {
     id:         row.id,
     handle:     row.handle,
     title:      row.title,
+    titleAr:    row.title_ar || '',
     content:    row.content || '',
+    contentAr:  row.content_ar || '',
     policyType: row.policy_type,
     status:     row.status,
     sortOrder:  row.sort_order ?? 0,
@@ -78,10 +80,16 @@ router.post('/', asyncHandler(async (req, res) => {
     const sortOrder = Number(count.rows[0].count);
 
     const result = await client.query(
-      `INSERT INTO policies (tenant_id, handle, title, content, policy_type, status, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO policies (tenant_id, handle, title, title_ar, content, content_ar, policy_type, status, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [tenant.id, handle, title, req.body.content || '', policyType, status, sortOrder],
+      [
+        tenant.id, handle, title,
+        String(req.body.titleAr || '').trim() || null,
+        req.body.content || '',
+        req.body.contentAr || null,
+        policyType, status, sortOrder,
+      ],
     );
     await client.query('COMMIT');
     created(res, mapPolicy(result.rows[0]), 'Policy saved.');
@@ -112,19 +120,21 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 
     const row = current.rows[0];
     const title      = String(req.body.title ?? row.title).trim() || row.title;
+    const titleAr    = req.body.titleAr   !== undefined ? (String(req.body.titleAr).trim() || null) : row.title_ar;
     const handle     = slugify(req.body.handle ?? row.handle) || row.handle;
     const policyType = VALID_TYPES.has(req.body.policyType)   ? req.body.policyType : row.policy_type;
     const status     = VALID_STATUSES.has(req.body.status)    ? req.body.status     : row.status;
     const content    = req.body.content   ?? row.content;
+    const contentAr  = req.body.contentAr !== undefined ? req.body.contentAr : row.content_ar;
     const sortOrder  = req.body.sortOrder ?? row.sort_order;
 
     const result = await client.query(
       `UPDATE policies
-          SET title = $3, handle = $4, content = $5, policy_type = $6,
-              status = $7, sort_order = $8, updated_at = NOW()
+          SET title = $3, title_ar = $4, handle = $5, content = $6, content_ar = $7,
+              policy_type = $8, status = $9, sort_order = $10, updated_at = NOW()
         WHERE tenant_id = $1 AND id = $2
         RETURNING *`,
-      [tenant.id, req.params.id, title, handle, content, policyType, status, sortOrder],
+      [tenant.id, req.params.id, title, titleAr, handle, content, contentAr, policyType, status, sortOrder],
     );
     await client.query('COMMIT');
     ok(res, mapPolicy(result.rows[0]), 'Policy updated.');

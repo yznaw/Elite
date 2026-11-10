@@ -6,11 +6,12 @@ Nginx should terminate public HTTPS for Elite. The Node/Express API stays on pla
 
 | Public URL | Nginx behavior | Upstream |
 |---|---|---|
-| `https://elitecollections.qa/` | Serves storefront Angular build | `/var/www/elite/client/dist/client-web/browser` |
+| `https://elitecollections.qa/` (built files) | Serves storefront Angular build | `/var/www/elite/client/dist/client-web/browser` |
+| `https://elitecollections.qa/` (pages) | Proxies to the render server; falls back to `index.csr.html` | `http://127.0.0.1:4000` (PM2 `elite-web`) |
 | `https://admin.elitecollections.qa/` | Serves admin Angular build | `/var/www/elite/client/dist/admin-portal/browser` |
 | `https://elitecollections.qa/api/*` | Proxies API requests | `http://127.0.0.1:3000` |
 | `https://admin.elitecollections.qa/api/*` | Proxies API requests | `http://127.0.0.1:3000` |
-| `https://*/uploads/*` | Serves uploaded media | `/var/www/elite/server/uploads` |
+| `https://*/api/uploads/*`, `https://*/uploads/*` | Serves uploaded media | `UPLOADS_DIR` (`server/.env`) — a path outside `/var/www/elite`, since every deploy replaces that directory. `/var/www/elite-uploads` on this host, confirmed 2026-09-18. |
 
 ## App Environment
 
@@ -42,70 +43,82 @@ sudo ufw allow 'Nginx Full'
 
 ## Create The Nginx Site
 
-Create `/etc/nginx/sites-available/elite`:
+The site config lives in the repo at [`deploy/nginx/elite.conf`](../deploy/nginx/elite.conf).
+Copy it to `/etc/nginx/sites-available/elite` rather than retyping it, so the
+served config and the repo cannot drift.
 
-```nginx
-# Express stays private. Nginx is the public HTTPS edge.
-upstream elite_api {
-    server 127.0.0.1:3000;
-}
-
-server {
-    listen 80;
-    server_name elitecollections.qa www.elitecollections.qa;
-
-    root /var/www/elite/client/dist/client-web/browser;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    location /api/ {
-        proxy_pass http://elite_api;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 300s;
-    }
-
-    location /uploads/ {
-        alias /var/www/elite/server/uploads/;
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-    }
-}
-
-server {
-    listen 80;
-    server_name admin.elitecollections.qa;
-
-    root /var/www/elite/client/dist/admin-portal/browser;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    location /api/ {
-        proxy_pass http://elite_api;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 300s;
-    }
-
-    location /uploads/ {
-        alias /var/www/elite/server/uploads/;
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-    }
-}
+```bash
+sudo cp /var/www/elite/deploy/nginx/elite.conf        /etc/nginx/sites-available/elite
+sudo cp /var/www/elite/deploy/nginx/compression.conf  /etc/nginx/conf.d/compression.conf
 ```
+
+Two files, deliberately. Compression is http-context configuration; `sites-enabled/*` is included *inside* the http block, so keeping those directives in the site file put them in http context as well and collided with the `gzip on;` that Ubuntu's stock `nginx.conf` already sets — `nginx -t` fails outright with *"gzip directive is duplicate"*. A second site file would have hit the same wall.
+
+It carries six things beyond a plain SPA host:
+
+1. **Compression** (in `compression.conf`). Ubuntu's stock `nginx.conf` has
+   `gzip on;` active but leaves `gzip_types` commented out, so nginx falls back
+   to `text/html` alone: the HTML was compressed while `main.js` — about 500 kB
+   raw against roughly 120 kB gzipped — went out whole. Compressed HTML is
+   exactly what hid the problem. **Never add `gzip on;` to this file**; the one
+   in `nginx.conf` is already in the same context.
+2. **A canonical host.** `www.elitecollections.qa` previously answered 200 and
+   served the entire site. Since the storefront derives its canonical URL from
+   `location.origin`, the www copy declared *itself* canonical, so the two
+   hostnames competed as separate sites. www now only issues a 301.
+3. **Caching** (in `elite.conf`). The shell `index.csr.html` is `no-store` because it names the current build's
+   hashed files; server-rendered pages send their own `no-store` from
+   `server.ts`. Hashed `.js`/`.css` are immutable for a year. `/assets/` is
+   deliberately only 7 days, because those filenames are *not* hashed and a
+   longer TTL would mean a replaced image takes a year to reach return visitors.
+   Never add an nginx cache for pages: the rendered HTML depends on the
+   visitor's `elite_locale` cookie.
+4. **Server-side rendering with a fallback** (in `elite.conf`). A request that
+   matches a built file is answered from disk. Everything else is a page and goes
+   to `location @ssr`, the `elite-web` PM2 process on `127.0.0.1:4000`
+   (`deploy/pm2/elite-web.config.cjs`). If that answers `500`, `502`, `503` or
+   `504` (crashed render, process down, or no answer within 10 s), nginx serves
+   `index.csr.html` from `location @csr` instead, which is how the storefront
+   worked before SSR. A `404` from the renderer is a real answer and passes
+   through. The build no longer contains `index.html`, so the old
+   `try_files $uri $uri/ /index.html` must not come back. First-time rollout
+   steps are in `docs/DEPLOYMENT.md` section 7c.
+5. **HTTP/2** (in `elite.conf`). The storefront pulls roughly twenty images
+   from one origin and HTTP/1.1 only allows six connections to it, so they
+   queued: a Lighthouse run measured every request as `http/1.1` and put the
+   cost at about a second of LCP.
+   The clean way to enable it is a standalone `http2 on;` directive (nginx
+   1.25.1+), which needs no change to `listen`. This host runs Ubuntu's stock
+   nginx 1.24, below that floor — `http2 on;` there is an unknown directive and
+   `nginx -t` refuses to start — so as of 2026-09-18 the token is instead on
+   the `listen` line itself: `listen 443 ssl http2;`. That line carries
+   `# managed by Certbot`, which is a real exception to the warning below, made
+   deliberately rather than by accident. It is safe because `nginx -t` gates
+   the reload either way, and because a future `certbot --nginx` run only
+   rewrites the tokens it manages on that line (the port, `ssl`, the
+   certificate paths) — it does not replace the line wholesale, so it will not
+   silently drop `http2`. Check after any certbot run that touches this file
+   regardless: `grep 'listen 443' /etc/nginx/sites-available/elite`.
+   If this host's nginx is ever upgraded past 1.25.1, switch to the standalone
+   `http2 on;` form and drop the token back off the `listen` line — it is the
+   less surprising spelling and doesn't need this exception.
+6. **Uploaded images served from disk** (in `elite.conf`). The storefront builds
+   media URLs as `<apiBase>/uploads/…` with `apiBase` of `/api`, so every image
+   — the LCP one included — used to match `location /api/` and be proxied
+   through node. `location /api/uploads/` now aliases the same directory that
+   `/uploads/` does; longest matching prefix wins, so it takes precedence over
+   `/api/` wherever it sits in the file. The API side is a plain
+   `express.static` with no auth or per-request work (`server/index.js`), so
+   nothing is bypassed. Both server blocks need it, because the admin portal
+   resolves media through `/api` too. If `grep avif /etc/nginx/mime.types` comes
+   up empty, add `types { image/avif avif; }` inside the new location — Express
+   was setting that content type by hand.
+
+> **If certbot has already run on this server, do not overwrite the live file blind.**
+> `certbot --nginx` rewrites it in place, adding `listen 443 ssl`, the
+> certificate paths and its own port-80 redirects. Back it up and `diff` it
+> against the repo file first; copy only when the differences are the blocks
+> above, otherwise merge them into the existing file by hand.
 
 Enable and reload it:
 
@@ -137,6 +150,7 @@ Choose the redirect option when prompted. After that, Nginx owns HTTPS and forwa
 ## Verify
 
 ```bash
+nginx -v
 sudo nginx -t
 sudo systemctl reload nginx
 sudo certbot renew --dry-run
@@ -145,6 +159,13 @@ curl -I http://elitecollections.qa
 curl -I https://elitecollections.qa
 curl -I https://admin.elitecollections.qa
 curl https://admin.elitecollections.qa/api/health
+
+curl -sI --http2 https://elitecollections.qa/ | head -1
+
+grep UPLOADS_DIR /var/www/elite/server/.env
+grep -n "alias" /etc/nginx/sites-available/elite
+FILE=$(ls "$(grep UPLOADS_DIR /var/www/elite/server/.env | cut -d= -f2)" | head -1)
+curl -sI "https://elitecollections.qa/api/uploads/$FILE" | head -1
 ```
 
 Expected results:
@@ -153,3 +174,15 @@ Expected results:
 - HTTPS returns `200`.
 - `/api/health` returns the Express health response.
 - The browser shows a valid lock icon for both domains.
+- The last command prints `HTTP/2 200`. `HTTP/1.1 200` means the `http2` token
+  on the `listen` line (or `http2 on;`, on a host upgraded past 1.25.1) is not
+  in effect — see item 5 above.
+- The `grep alias` lines match `UPLOADS_DIR` exactly. A mismatch here does not
+  fail `nginx -t` — it is a valid config that serves 404 for every image, which
+  looks identical to a genuinely deleted upload. This is what went wrong on
+  first deploy of this change (2026-09-18): the alias assumed the package
+  default path under `server/uploads`, not knowing this host points
+  `UPLOADS_DIR` outside it so uploads survive a deploy replacing `server/`.
+- The final `curl` on a real filename returns `200` and leaves no new line in
+  the API log (`pm2 logs elite-api`), confirming nginx answered from disk
+  rather than proxying to node.

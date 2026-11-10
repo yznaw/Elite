@@ -1,0 +1,850 @@
+const crypto = require('node:crypto');
+const bcrypt = require('bcryptjs');
+const db = require('../../db/client');
+const { audit, inTransaction, requireRegister } = require('./db');
+const { assertPos, nonEmpty, uuid } = require('./errors');
+const { registerLocationId } = require('../location-stock');
+
+const ENROLLMENT_TTL_MS = 15 * 60 * 1000;
+const RECEIPT_BLOCK_SIZE = 100;
+
+function secret() {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+function hash(value) {
+  return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function credentialMatches(storedHash, credential) {
+  if (!storedHash) return false;
+  const expected = Buffer.from(String(storedHash));
+  const actual = Buffer.from(hash(credential));
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+
+async function createEnrollmentToken(context, body) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can enroll POS terminals.');
+  const displayName = nonEmpty(body?.displayName, 'displayName', 80);
+  const rawToken = secret();
+  const expiresAt = new Date(Date.now() + ENROLLMENT_TTL_MS);
+
+  return inTransaction(async (client) => {
+    // `pos_registers` has UNIQUE (tenant_id, display_name), and the collision
+    // only surfaced later — at enrolment — as a bare 409 that told the operator
+    // nothing actionable ("Request failed 409 — Conflict"). Checked up front so
+    // the message names the real problem while the name is still on screen.
+    const nameTaken = await client.query(
+      'SELECT 1 FROM pos_registers WHERE tenant_id = $1 AND lower(display_name) = lower($2)',
+      [context.tenantId, displayName],
+    );
+    assertPos(
+      nameTaken.rowCount === 0,
+      409,
+      'REGISTER_NAME_TAKEN',
+      `A register named "${displayName}" already exists. Pick that register, or use Replace / re-pair from Registered Devices.`,
+    );
+
+    const result = await client.query(
+      `INSERT INTO pos_register_enrollment_tokens
+        (tenant_id, token_hash, display_name, created_by_user_id, expires_at)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, display_name, expires_at`,
+      [context.tenantId, hash(rawToken), displayName, context.userId, expiresAt],
+    );
+    await audit(client, context, 'pos.register.enrollment-created', 'pos_register_enrollment_token', result.rows[0].id, {
+      displayName,
+      expiresAt,
+    });
+    return { token: rawToken, displayName, expiresAt };
+  });
+}
+
+async function enrollRegister(context, body) {
+  const enrollmentToken = nonEmpty(body?.enrollmentToken, 'enrollmentToken', 200);
+
+  return inTransaction(async (client) => {
+    const tokenResult = await client.query(
+      `SELECT * FROM pos_register_enrollment_tokens
+       WHERE tenant_id = $1 AND token_hash = $2
+       FOR UPDATE`,
+      [context.tenantId, hash(enrollmentToken)],
+    );
+    const token = tokenResult.rows[0];
+    assertPos(token, 401, 'ENROLLMENT_TOKEN_INVALID', 'Enrollment token is invalid.');
+    assertPos(!token.consumed_at, 409, 'ENROLLMENT_TOKEN_USED', 'Enrollment token has already been used.');
+    assertPos(new Date(token.expires_at).getTime() > Date.now(), 410, 'ENROLLMENT_TOKEN_EXPIRED', 'Enrollment token has expired.');
+
+    const rawCredential = secret();
+    let registerResult;
+    if (token.replacement_register_id) {
+      await assertRegisterSafeToRetire(client, context.tenantId, token.replacement_register_id, { lock: true });
+      registerResult = await client.query(
+        `UPDATE pos_registers
+            SET status = 'active',
+                credential_hash = $3,
+                device_lease_id = gen_random_uuid(),
+                device_lease_claimed_at = now(),
+                device_lease_claimed_by_user_id = $4,
+                last_seen_at = now()
+          WHERE tenant_id = $1 AND id = $2
+          RETURNING id, display_name, status, device_lease_id`,
+        [context.tenantId, token.replacement_register_id, hash(rawCredential), context.userId],
+      );
+      assertPos(registerResult.rowCount === 1, 404, 'REGISTER_NOT_FOUND', 'Replacement register no longer exists.');
+    } else {
+      registerResult = await client.query(
+        `INSERT INTO pos_registers
+          (tenant_id, display_name, credential_hash, created_by_user_id)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, display_name, status, device_lease_id`,
+        [context.tenantId, token.display_name, hash(rawCredential), context.userId],
+      );
+    }
+    const register = registerResult.rows[0];
+    await assertBranchAllowed(client, context, register);
+
+    await client.query(
+      `UPDATE pos_register_enrollment_tokens
+       SET consumed_at = now(), register_id = $1
+       WHERE id = $2`,
+      [register.id, token.id],
+    );
+    await client.query(
+      `UPDATE pos_registers
+          SET device_lease_claimed_at = now(), device_lease_claimed_by_user_id = $2
+        WHERE id = $1`,
+      [register.id, context.userId],
+    );
+    await audit(client, context, 'pos.register.enrolled', 'pos_register', register.id, { displayName: register.display_name });
+    return {
+      registerId: register.id,
+      displayName: register.display_name,
+      registerCredential: rawCredential,
+      deviceLeaseId: register.device_lease_id,
+    };
+  });
+}
+
+/** A register can only be retired, moved or replaced after its money state is settled. */
+async function assertRegisterSafeToRetire(client, tenantId, registerId, { lock = false } = {}) {
+  const register = await client.query(
+    `SELECT id, display_name, status FROM pos_registers
+      WHERE tenant_id = $1 AND id = $2
+      ${lock ? 'FOR UPDATE' : ''}`,
+    [tenantId, registerId],
+  );
+  assertPos(register.rowCount === 1, 404, 'REGISTER_NOT_FOUND', 'Register not found.');
+  const shift = await client.query(
+    `SELECT id, state FROM pos_shifts
+      WHERE tenant_id = $1 AND register_id = $2 AND state IN ('open', 'closing')
+      LIMIT 1`,
+    [tenantId, registerId],
+  );
+  assertPos(
+    shift.rowCount === 0,
+    409,
+    'REGISTER_HAS_ACTIVE_SHIFT',
+    'Close and reconcile this register\'s active shift before changing or revoking the device.',
+    { shiftId: shift.rows[0]?.id || null, shiftState: shift.rows[0]?.state || null },
+  );
+  const sync = await client.query(
+    `SELECT COALESCE(sum(pending_count), 0)::integer AS pending_count,
+            COALESCE(sum(rejected_count), 0)::integer AS rejected_count
+       FROM pos_sync_states
+      WHERE tenant_id = $1 AND register_id = $2`,
+    [tenantId, registerId],
+  );
+  const pendingCount = Number(sync.rows[0]?.pending_count || 0);
+  const rejectedCount = Number(sync.rows[0]?.rejected_count || 0);
+  assertPos(
+    pendingCount === 0 && rejectedCount === 0,
+    409,
+    'REGISTER_SYNC_INCOMPLETE',
+    'Resolve all pending and rejected offline sales before changing or revoking this device.',
+    { pendingCount, rejectedCount },
+  );
+  return register.rows[0];
+}
+
+async function createReplacementToken(context, registerId) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can replace POS devices.');
+  uuid(registerId, 'registerId');
+  const rawToken = secret();
+  const expiresAt = new Date(Date.now() + ENROLLMENT_TTL_MS);
+  return inTransaction(async (client) => {
+    // Token rows are locked before the register, matching enrollRegister's
+    // token-then-register order and avoiding a replacement/consumption
+    // deadlock under concurrent admin actions.
+    await client.query(
+      `UPDATE pos_register_enrollment_tokens
+          SET consumed_at = now()
+        WHERE tenant_id = $1 AND replacement_register_id = $2
+          AND consumed_at IS NULL AND expires_at > now()`,
+      [context.tenantId, registerId],
+    );
+    const register = await assertRegisterSafeToRetire(client, context.tenantId, registerId, { lock: true });
+    const result = await client.query(
+      `INSERT INTO pos_register_enrollment_tokens
+        (tenant_id, token_hash, display_name, created_by_user_id, expires_at, replacement_register_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id`,
+      [context.tenantId, hash(rawToken), register.display_name, context.userId, expiresAt, registerId],
+    );
+    await audit(client, context, 'pos.register.replacement-created', 'pos_register', registerId, {
+      tokenId: result.rows[0].id,
+      displayName: register.display_name,
+      expiresAt,
+    });
+    return { token: rawToken, displayName: register.display_name, expiresAt, registerId };
+  });
+}
+
+/**
+ * The registers a cashier can pick from when this browser has no stored
+ * identity. Deliberately readable by every POS role: choosing which till you
+ * are standing at is not a privileged act, and gating it behind owner/admin
+ * (as `listAllRegisters` does for the Settings device table) is what used to
+ * strand a cashier mid-shift after an IndexedDB wipe.
+ *
+ * Scoped to the caller's branch when they have one (`admin_users.pos_branch_id`,
+ * migration 035). Without it the list was every register in the tenant, so a
+ * cashier in one shop could bind their browser to a till standing in another,
+ * rotate its credential, and sign that terminal out from across town. Shopify
+ * POS scopes the same picker by the retail locations assigned to the staff
+ * member; this is that, with one branch per person.
+ *
+ * A staff member with no branch assigned sees everything, which is both the
+ * pre-migration behaviour and the right default for owners and admins who move
+ * between counters. Registers with no branch of their own belong to the
+ * tenant's default branch (branch-service.js's getEffectiveBranchProfile), so
+ * they are matched against it rather than silently disappearing from the list
+ * of the branch that actually prints on their receipts.
+ */
+async function listSelectableRegisters(context) {
+  const client = await db.pool.connect();
+  try {
+    const result = await client.query(
+      `WITH scope AS (
+         SELECT u.pos_branch_id AS branch_id
+           FROM admin_users u
+          WHERE u.tenant_id = $1 AND u.id = $2
+       ), fallback AS (
+         SELECT COALESCE(
+           (SELECT b.id FROM pos_branches b WHERE b.tenant_id = $1 AND b.is_default = true),
+           (SELECT b.id FROM pos_branches b WHERE b.tenant_id = $1 ORDER BY b.created_at ASC LIMIT 1)
+         ) AS branch_id
+       )
+       SELECT r.id, r.display_name, r.last_seen_at,
+              COALESCE(r.branch_id, (SELECT branch_id FROM fallback)) AS branch_id,
+              b.name AS branch_name,
+              s.id AS open_shift_id, u.full_name AS open_shift_cashier
+       FROM pos_registers r
+       LEFT JOIN pos_branches b
+         ON b.id = COALESCE(r.branch_id, (SELECT branch_id FROM fallback)) AND b.tenant_id = r.tenant_id
+       LEFT JOIN LATERAL (
+         SELECT id, cashier_id FROM pos_shifts
+         WHERE tenant_id = r.tenant_id AND register_id = r.id AND state IN ('open', 'closing')
+         ORDER BY opened_at DESC LIMIT 1
+       ) s ON true
+       LEFT JOIN admin_users u ON u.id = s.cashier_id
+       WHERE r.tenant_id = $1 AND r.status = 'active'
+         AND (
+           (SELECT branch_id FROM scope) IS NULL
+           OR COALESCE(r.branch_id, (SELECT branch_id FROM fallback)) = (SELECT branch_id FROM scope)
+         )
+       ORDER BY r.last_seen_at DESC NULLS LAST, r.display_name ASC`,
+      [context.tenantId, context.userId],
+    );
+    return result.rows.map((row) => ({
+      registerId: row.id,
+      displayName: row.display_name,
+      lastSeenAt: row.last_seen_at,
+      branchName: row.branch_name,
+      openShiftId: row.open_shift_id,
+      openShiftCashier: row.open_shift_cashier,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Bind this browser to a till without the enrollment-token ceremony.
+ *
+ * Pass `registerId` to take over an existing till, or `displayName` (owner/
+ * admin only) to create a new one. Either way a fresh credential is minted and
+ * the old one stops working, so a register stays one physical terminal: if the
+ * counter machine is re-imaged, or IndexedDB is cleared, or someone opens the
+ * till in a new browser profile, they pick the same register again and carry
+ * on. The previous device is bounced back to this picker on its next check-in.
+ *
+ * `createEnrollmentToken`/`enrollRegister` remain for the case this cannot
+ * cover: handing setup to someone at a counter you are not standing at.
+ */
+/**
+ * The guard on taking over a till that somebody else is currently selling on.
+ *
+ * Claiming re-mints the credential, so the machine physically standing at that
+ * counter is bounced to the picker on its next check-in — and whoever claimed
+ * inherits the open shift, its float and its drawer. Doing that silently is not
+ * something any mainstream POS allows: Odoo refuses a second session on the
+ * same point of sale outright, Lightspeed warns against selling on one register
+ * from two devices, and Square never exposes the pairing to a cashier at all.
+ *
+ * The cashier who *owns* the open shift is let straight through: "my browser
+ * storage was wiped mid-shift, let me back onto my own till" is the everyday
+ * case the picker exists for, and adding friction there would just push staff
+ * back to hunting for an owner mid-queue. Everyone else has to say so
+ * explicitly and clear a manager PIN.
+ */
+/**
+ * The branch scope, enforced on the write and not only on the list.
+ *
+ * Hiding an out-of-branch till from the picker is presentation; refusing to
+ * bind to one is the actual rule. `registerId` is a plain body field, so a
+ * cashier scoped to one branch could otherwise post a register id belonging to
+ * another and claim it anyway — rotating its credential and signing that
+ * counter's terminal out. See migration 035 and listSelectableRegisters().
+ */
+async function assertBranchAllowed(client, context, register) {
+  const scope = await client.query(
+    'SELECT pos_branch_id FROM admin_users WHERE tenant_id = $1 AND id = $2',
+    [context.tenantId, context.userId],
+  );
+  const scopedBranchId = scope.rows[0]?.pos_branch_id || null;
+  if (!scopedBranchId) return;
+
+  // A register with no branch of its own prints the tenant's default branch on
+  // its receipts, so that is the branch it belongs to for this check too.
+  const fallback = await client.query(
+    `SELECT COALESCE(
+       (SELECT id FROM pos_branches WHERE tenant_id = $1 AND is_default = true),
+       (SELECT id FROM pos_branches WHERE tenant_id = $1 ORDER BY created_at ASC LIMIT 1)
+     ) AS branch_id`,
+    [context.tenantId],
+  );
+  const effectiveBranchId = register.branch_id || fallback.rows[0]?.branch_id || null;
+  assertPos(
+    effectiveBranchId === scopedBranchId,
+    403,
+    'REGISTER_OUT_OF_BRANCH',
+    'That till belongs to another branch. Pick one from your own branch, or ask an owner to move you.',
+  );
+}
+
+async function assertTakeoverAllowed(client, context, register, body) {
+  const openShift = await client.query(
+    `SELECT s.id, s.cashier_id, u.full_name AS cashier_name
+       FROM pos_shifts s
+       LEFT JOIN admin_users u ON u.id = s.cashier_id AND u.tenant_id = s.tenant_id
+      WHERE s.tenant_id = $1 AND s.register_id = $2 AND s.state IN ('open', 'closing')
+      ORDER BY s.opened_at DESC LIMIT 1`,
+    [context.tenantId, register.id],
+  );
+  const shift = openShift.rows[0];
+  const ownsCurrentLease = context.registerId === register.id
+    && context.registerLeaseId === register.device_lease_id;
+  if (ownsCurrentLease) return null;
+
+  // Even when the same account owns the open shift, a different device is a
+  // takeover. Shared credentials must never make that displacement silent.
+  if (!register.device_lease_claimed_at && !shift) return null;
+
+  const holder = shift?.cashier_name || register.lease_holder_name || 'another device';
+  assertPos(
+    body?.confirmTakeover === true,
+    409,
+    'REGISTER_TAKEOVER_CONFIRM',
+    shift
+      ? `${register.display_name} has an open shift belonging to ${holder}. Taking it over will disconnect the other terminal and hand you their shift.`
+      : `${register.display_name} is paired with another device. Re-pairing it will disconnect that device.`,
+  );
+
+  // Same rule verifyManagerPin() applies: a shop that has never configured a
+  // manager PIN has nothing to check a typed one against, so requiring one
+  // would only lock the counter over a setup gap. The audit event still names
+  // who took the till and from whom.
+  const managers = await client.query(
+    `SELECT id, pos_pin_hash FROM admin_users
+      WHERE tenant_id = $1 AND status = 'active'
+        AND role IN ('owner', 'admin', 'manager') AND pos_pin_hash IS NOT NULL`,
+    [context.tenantId],
+  );
+  if (managers.rowCount === 0) return { shift, holder, managerId: null };
+
+  // 403, not 401 — see the check-in comment above: a 401 from any POS route is
+  // read by the client as an expired login. Brute force is already capped by
+  // posPinLimiter on this route (8 attempts per 5 minutes per IP).
+  // Unlike verifyManagerPin(), self-approval is not blocked here. That rule
+  // exists so a manager-role cashier cannot rubber-stamp their own void or
+  // refund; a takeover is the opposite shape — the person claiming the till is
+  // standing at it, and requiring a *second* manager to be present just to move
+  // a register between counters would strand the shop.
+  const pin = String(body?.managerPin || '');
+  assertPos(pin, 403, 'MANAGER_PIN_REQUIRED', 'A manager PIN is needed to take over a till that is in use.');
+  let managerId = null;
+  for (const manager of managers.rows) {
+    if (await bcrypt.compare(pin, manager.pos_pin_hash)) {
+      managerId = manager.id;
+      break;
+    }
+  }
+  assertPos(managerId, 403, 'MANAGER_PIN_INVALID', 'Manager PIN is incorrect.');
+  return { shift, holder, managerId };
+}
+
+async function claimRegister(context, body) {
+  const registerId = body?.registerId ? nonEmpty(body.registerId, 'registerId', 50) : null;
+  const displayName = body?.displayName ? nonEmpty(body.displayName, 'displayName', 80) : null;
+  assertPos(registerId || displayName, 400, 'REGISTER_CLAIM_INVALID', 'Choose a register or name a new one.');
+
+  return inTransaction(async (client) => {
+    const rawCredential = secret();
+
+    if (registerId) {
+      const existing = await client.query(
+        `SELECT r.id, r.display_name, r.status, r.branch_id, r.device_lease_id,
+                r.device_lease_claimed_at, u.full_name AS lease_holder_name
+           FROM pos_registers r
+           LEFT JOIN admin_users u ON u.id = r.device_lease_claimed_by_user_id AND u.tenant_id = r.tenant_id
+          WHERE r.tenant_id = $1 AND r.id = $2 FOR UPDATE OF r`,
+        [context.tenantId, registerId],
+      );
+      const register = existing.rows[0];
+      assertPos(register, 404, 'REGISTER_NOT_FOUND', 'That register no longer exists. Pick another one.');
+      assertPos(register.status === 'active', 403, 'REGISTER_DISABLED', 'This POS register is disabled or revoked.');
+      await assertBranchAllowed(client, context, register);
+      const takeover = await assertTakeoverAllowed(client, context, register, body);
+
+      const lease = await client.query(
+        `UPDATE pos_registers
+            SET credential_hash = $1,
+                device_lease_id = gen_random_uuid(),
+                device_lease_claimed_at = now(),
+                device_lease_claimed_by_user_id = $3,
+                last_seen_at = now()
+          WHERE id = $2
+          RETURNING device_lease_id`,
+        [hash(rawCredential), register.id, context.userId],
+      );
+      await audit(client, context, 'pos.register.claimed', 'pos_register', register.id, {
+        displayName: register.display_name,
+        ...(takeover ? {
+          takeover: true,
+          takenFromCashierId: takeover.shift?.cashier_id || null,
+          takenFromCashierName: takeover.holder,
+          shiftId: takeover.shift?.id || null,
+          approvedByManagerId: takeover.managerId,
+        } : {}),
+      });
+      return {
+        registerId: register.id,
+        displayName: register.display_name,
+        registerCredential: rawCredential,
+        deviceLeaseId: lease.rows[0].device_lease_id,
+      };
+    }
+
+    assertPos(
+      ['owner', 'admin'].includes(context.role),
+      403,
+      'INSUFFICIENT_PERMISSIONS',
+      'Only owners and admins can add a new register. Pick an existing one from the list.',
+    );
+    const nameTaken = await client.query(
+      'SELECT 1 FROM pos_registers WHERE tenant_id = $1 AND lower(display_name) = lower($2)',
+      [context.tenantId, displayName],
+    );
+    assertPos(
+      nameTaken.rowCount === 0,
+      409,
+      'REGISTER_NAME_TAKEN',
+      `A register named "${displayName}" already exists. Pick it from the list, or choose a different name.`,
+    );
+
+    const created = await client.query(
+      `INSERT INTO pos_registers
+        (tenant_id, display_name, credential_hash, created_by_user_id)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, display_name, device_lease_id`,
+      [context.tenantId, displayName, hash(rawCredential), context.userId],
+    );
+    const register = created.rows[0];
+    await audit(client, context, 'pos.register.claimed', 'pos_register', register.id, {
+      displayName: register.display_name,
+      created: true,
+    });
+    await client.query(
+      `UPDATE pos_registers
+          SET device_lease_claimed_at = now(), device_lease_claimed_by_user_id = $2
+        WHERE id = $1`,
+      [register.id, context.userId],
+    );
+    return {
+      registerId: register.id,
+      displayName: register.display_name,
+      registerCredential: rawCredential,
+      deviceLeaseId: register.device_lease_id,
+    };
+  });
+}
+
+async function checkInRegister(context, body) {
+  const registerId = nonEmpty(body?.registerId, 'registerId', 50);
+  const credential = nonEmpty(body?.registerCredential, 'registerCredential', 200);
+  const replacementCredential = secret();
+
+  return inTransaction(async (client) => {
+    const result = await client.query(
+      `SELECT * FROM pos_registers WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+      [context.tenantId, registerId],
+    );
+    const register = result.rows[0];
+    // 409, deliberately not 401. A stale register credential is not an expired
+    // login: the admin-portal interceptor turns every 401 into "Session
+    // expired" plus a redirect to /login, and /login bounces straight back to
+    // /pos whenever the session is in fact valid — so a till whose register had
+    // been deleted ping-ponged between the two forever, and only clearing the
+    // cookies broke the loop. The client already classifies this code as
+    // "register rejected" and sends the cashier to the picker, which is the
+    // correct destination.
+    assertPos(register && credentialMatches(register.credential_hash, credential), 409, 'REGISTER_CREDENTIAL_INVALID', 'Register credentials are invalid.');
+    assertPos(register.status === 'active', 403, 'REGISTER_DISABLED', 'This POS register is disabled or revoked.');
+    await assertBranchAllowed(client, context, register);
+
+    const lease = await client.query(
+      `UPDATE pos_registers
+          SET credential_hash = $3,
+              device_lease_id = gen_random_uuid(),
+              device_lease_claimed_at = now(),
+              device_lease_claimed_by_user_id = $2,
+              last_seen_at = now()
+        WHERE id = $1
+        RETURNING device_lease_id`,
+      [register.id, context.userId, hash(replacementCredential)],
+    );
+    const shiftResult = await client.query(
+      `SELECT id, state FROM pos_shifts
+       WHERE tenant_id = $1 AND register_id = $2 AND state IN ('open', 'closing')
+       ORDER BY opened_at DESC LIMIT 1`,
+      [context.tenantId, register.id],
+    );
+    const receiptResult = await client.query(
+      `SELECT (
+         COALESCE((
+           SELECT sum(range_end - range_start + 1)
+           FROM pos_receipt_number_blocks
+           WHERE tenant_id = $1 AND register_id = $2
+         ), 0)
+         - COALESCE((
+           SELECT count(*)
+           FROM pos_receipts r
+           JOIN pos_receipt_number_blocks b ON b.id = r.block_id
+           WHERE b.tenant_id = $1 AND b.register_id = $2
+         ), 0)
+       )::bigint AS remaining`,
+      [context.tenantId, register.id],
+    );
+
+    return {
+      registerId: register.id,
+      displayName: register.display_name,
+      registerCredential: replacementCredential,
+      currentShiftId: shiftResult.rows[0]?.id || null,
+      currentShiftState: shiftResult.rows[0]?.state || null,
+      receiptNumbersRemaining: Number(receiptResult.rows[0]?.remaining || 0),
+      deviceLeaseId: lease.rows[0].device_lease_id,
+    };
+  });
+}
+
+async function currentRegister(context) {
+  return inTransaction(async (client) => {
+    const register = await requireRegister(client, context);
+    // Same register → default → oldest fallback as branch-service.js's
+    // getEffectiveBranchProfile, so the name shown on the till always
+    // matches whichever branch actually prints on the receipt.
+    const branchResult = await client.query(
+      `SELECT b.id, b.name
+         FROM pos_branches b
+        WHERE b.tenant_id = $1
+          AND b.id = COALESCE(
+            $2::uuid,
+            (SELECT bb.id FROM pos_branches bb WHERE bb.tenant_id = $1 AND bb.is_default = true),
+            (SELECT bb.id FROM pos_branches bb WHERE bb.tenant_id = $1 ORDER BY bb.created_at ASC LIMIT 1)
+          )`,
+      [context.tenantId, register.branch_id],
+    );
+    const shiftResult = await client.query(
+      `SELECT s.id, s.state, s.cashier_id, s.opening_float_cents, s.opened_at,
+              u.full_name AS cashier_name
+       FROM pos_shifts s
+       LEFT JOIN admin_users u ON u.id = s.cashier_id AND u.tenant_id = s.tenant_id
+       WHERE s.tenant_id = $1 AND s.register_id = $2 AND s.state IN ('open', 'closing')
+       ORDER BY opened_at DESC LIMIT 1`,
+      [context.tenantId, register.id],
+    );
+    // Lets the client skip showing a Manager PIN field at all for void,
+    // refund, drawer-open, z-report and sync-conflict approvals when no
+    // owner/admin/manager has ever configured one (see manager-service.js,
+    // verifyManagerPin) — checked once per POS session instead of on every
+    // protected action.
+    const pinResult = await client.query(
+      `SELECT EXISTS (
+         SELECT 1 FROM admin_users
+         WHERE tenant_id = $1 AND status = 'active'
+           AND role IN ('owner', 'admin', 'manager') AND pos_pin_hash IS NOT NULL
+       ) AS configured`,
+      [context.tenantId],
+    );
+    return {
+      registerId: register.id,
+      displayName: register.display_name,
+      status: register.status,
+      // 'integrated' = this till drives the QNB terminal through the local
+      // card bridge (migration 047); 'manual' keeps the typed-reference flow.
+      cardMode: register.card_mode || 'manual',
+      cardManualFallback: register.card_manual_fallback !== false,
+      branchName: branchResult.rows[0]?.name || null,
+      branchId: branchResult.rows[0]?.id || null,
+      // Stock per location: which location this till sells from (null while
+      // the switch is off). The POS reads its own branch's number from each
+      // stock.updated event with it.
+      locationId: await registerLocationId(client, context.tenantId, register.id),
+      managerPinConfigured: Boolean(pinResult.rows[0]?.configured),
+      shift: shiftResult.rowCount
+        ? {
+            id: shiftResult.rows[0].id,
+            state: shiftResult.rows[0].state,
+            cashierId: shiftResult.rows[0].cashier_id,
+            cashierName: shiftResult.rows[0].cashier_name || null,
+            openingFloatCents: Number(shiftResult.rows[0].opening_float_cents),
+            openedAt: shiftResult.rows[0].opened_at,
+          }
+        : null,
+    };
+  });
+}
+
+async function listAllRegisters(context) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can view registered devices.');
+  const client = await db.pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT r.id, r.display_name, r.status, r.last_seen_at, r.created_at,
+              r.branch_id, b.name AS branch_name, r.device_lease_claimed_at,
+              r.card_mode, r.card_manual_fallback,
+              holder.full_name AS device_lease_claimed_by,
+              s.id AS active_shift_id, s.state AS active_shift_state,
+              cashier.full_name AS active_shift_cashier,
+              COALESCE(sync.pending_count, 0)::integer AS pending_count,
+              COALESCE(sync.rejected_count, 0)::integer AS rejected_count
+       FROM pos_registers r
+       LEFT JOIN pos_branches b ON b.id = r.branch_id AND b.tenant_id = r.tenant_id
+       LEFT JOIN admin_users holder ON holder.id = r.device_lease_claimed_by_user_id AND holder.tenant_id = r.tenant_id
+       LEFT JOIN LATERAL (
+         SELECT id, state, cashier_id FROM pos_shifts
+          WHERE tenant_id = r.tenant_id AND register_id = r.id AND state IN ('open', 'closing')
+          ORDER BY opened_at DESC LIMIT 1
+       ) s ON true
+       LEFT JOIN admin_users cashier ON cashier.id = s.cashier_id AND cashier.tenant_id = r.tenant_id
+       LEFT JOIN LATERAL (
+         SELECT sum(pending_count)::integer AS pending_count, sum(rejected_count)::integer AS rejected_count
+           FROM pos_sync_states WHERE tenant_id = r.tenant_id AND register_id = r.id
+       ) sync ON true
+       WHERE r.tenant_id = $1
+       ORDER BY r.display_name ASC`,
+      [context.tenantId],
+    );
+    return result.rows.map((row) => ({
+      registerId: row.id,
+      displayName: row.display_name,
+      status: row.status,
+      lastSeenAt: row.last_seen_at,
+      createdAt: row.created_at,
+      // null means "not explicitly assigned" — the till still resolves to
+      // the tenant's default branch (branch-service.js's
+      // getEffectiveBranchProfile), the admin UI just labels this "Default".
+      branchId: row.branch_id,
+      branchName: row.branch_name,
+      deviceLeaseClaimedAt: row.device_lease_claimed_at,
+      deviceLeaseClaimedBy: row.device_lease_claimed_by,
+      activeShiftId: row.active_shift_id,
+      activeShiftState: row.active_shift_state,
+      activeShiftCashier: row.active_shift_cashier,
+      pendingCount: Number(row.pending_count || 0),
+      rejectedCount: Number(row.rejected_count || 0),
+      cardMode: row.card_mode || 'manual',
+      cardManualFallback: row.card_manual_fallback !== false,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+async function revokeRegister(context, registerId) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can revoke registers.');
+  uuid(registerId, 'registerId');
+
+  return inTransaction(async (client) => {
+    const register = await assertRegisterSafeToRetire(client, context.tenantId, registerId, { lock: true });
+    assertPos(register.status !== 'revoked', 404, 'REGISTER_NOT_FOUND', 'Register not found or already revoked.');
+    const result = await client.query(
+      `UPDATE pos_registers
+       SET status = 'revoked', device_lease_id = gen_random_uuid()
+       WHERE tenant_id = $1 AND id = $2 AND status != 'revoked'
+       RETURNING id, display_name`,
+      [context.tenantId, registerId],
+    );
+    assertPos(result.rowCount === 1, 404, 'REGISTER_NOT_FOUND', 'Register not found or already revoked.');
+    await audit(client, context, 'pos.register.revoked', 'pos_register', registerId, { displayName: result.rows[0].display_name });
+    return { registerId, status: 'revoked' };
+  });
+}
+
+/**
+ * `branchId` is nullable — unassigning a register (setting it back to null)
+ * is a normal, supported action, not an error path: it makes the register
+ * fall back to whatever the tenant's default branch is.
+ *
+ * When a branchId is given, it's verified to belong to this tenant with an
+ * explicit lookup rather than relying on the FK constraint alone — a bad id
+ * would otherwise surface as the FK's generic 422 `POS_DATA_INVALID` instead
+ * of a clean, actionable 404.
+ */
+async function setRegisterBranch(context, registerId, branchId) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can assign a register to a branch.');
+  uuid(registerId, 'registerId');
+  if (branchId !== null && branchId !== undefined) uuid(branchId, 'branchId');
+  const targetBranchId = branchId || null;
+
+  return inTransaction(async (client) => {
+    await assertRegisterSafeToRetire(client, context.tenantId, registerId, { lock: true });
+    if (targetBranchId) {
+      const branchExists = await client.query(
+        'SELECT 1 FROM pos_branches WHERE tenant_id = $1 AND id = $2',
+        [context.tenantId, targetBranchId],
+      );
+      assertPos(branchExists.rowCount === 1, 404, 'BRANCH_NOT_FOUND', 'Branch not found.');
+    }
+
+    const result = await client.query(
+      `UPDATE pos_registers
+       SET branch_id = $3
+       WHERE tenant_id = $1 AND id = $2
+       RETURNING id, display_name`,
+      [context.tenantId, registerId, targetBranchId],
+    );
+    assertPos(result.rowCount === 1, 404, 'REGISTER_NOT_FOUND', 'Register not found.');
+    await audit(client, context, 'pos.register.branch-assigned', 'pos_register', registerId, { branchId: targetBranchId });
+    return { registerId, branchId: targetBranchId };
+  });
+}
+
+async function listEnrollmentTokens(context) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can view enrollment tokens.');
+  const client = await db.pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT t.id, t.display_name, t.created_by_user_id, t.expires_at, t.consumed_at, t.register_id, t.created_at,
+              u.full_name AS created_by_name
+       FROM pos_register_enrollment_tokens t
+       LEFT JOIN admin_users u ON u.id = t.created_by_user_id
+       WHERE t.tenant_id = $1
+       ORDER BY t.created_at DESC`,
+      [context.tenantId],
+    );
+    return result.rows.map((row) => ({
+      tokenId: row.id,
+      displayName: row.display_name,
+      createdByName: row.created_by_name || null,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at,
+      status: tokenStatus(row),
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+function tokenStatus(row) {
+  if (row.register_id) return 'used';
+  if (row.consumed_at) return 'revoked';
+  if (new Date(row.expires_at).getTime() <= Date.now()) return 'expired';
+  return 'active';
+}
+
+async function revokeEnrollmentToken(context, tokenId) {
+  assertPos(['owner', 'admin'].includes(context.role), 403, 'INSUFFICIENT_PERMISSIONS', 'Only owners and admins can revoke enrollment tokens.');
+  uuid(tokenId, 'tokenId');
+
+  return inTransaction(async (client) => {
+    const result = await client.query(
+      `UPDATE pos_register_enrollment_tokens
+       SET consumed_at = now()
+       WHERE tenant_id = $1 AND id = $2 AND consumed_at IS NULL
+       RETURNING id, display_name`,
+      [context.tenantId, tokenId],
+    );
+    assertPos(result.rowCount === 1, 404, 'ENROLLMENT_TOKEN_NOT_FOUND', 'Token not found, already used, or already revoked.');
+    await audit(client, context, 'pos.register.enrollment-revoked', 'pos_register_enrollment_token', tokenId, { displayName: result.rows[0].display_name });
+    return { tokenId, status: 'revoked' };
+  });
+}
+
+async function allocateReceiptBlock(context) {
+  return inTransaction(async (client) => {
+    const register = await requireRegister(client, context, { lock: true });
+    await client.query(
+      `INSERT INTO pos_receipt_sequences (tenant_id, next_value)
+       VALUES ($1, 1)
+       ON CONFLICT (tenant_id) DO NOTHING`,
+      [context.tenantId],
+    );
+    const sequence = await client.query(
+      `UPDATE pos_receipt_sequences
+       SET next_value = next_value + $2, updated_at = now()
+       WHERE tenant_id = $1
+       RETURNING next_value - $2 AS range_start, next_value - 1 AS range_end`,
+      [context.tenantId, RECEIPT_BLOCK_SIZE],
+    );
+    const { range_start: rangeStart, range_end: rangeEnd } = sequence.rows[0];
+    const result = await client.query(
+      `INSERT INTO pos_receipt_number_blocks (tenant_id, register_id, range_start, range_end)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, range_start, range_end, allocated_at`,
+      [context.tenantId, register.id, rangeStart, rangeEnd],
+    );
+    const block = result.rows[0];
+    await audit(client, context, 'pos.receipts.allocated', 'pos_receipt_number_block', block.id, {
+      rangeStart: Number(block.range_start),
+      rangeEnd: Number(block.range_end),
+    });
+    return {
+      blockId: block.id,
+      registerId: register.id,
+      start: Number(block.range_start),
+      end: Number(block.range_end),
+      next: Number(block.range_start),
+      allocatedAt: block.allocated_at,
+    };
+  });
+}
+
+module.exports = {
+  allocateReceiptBlock,
+  checkInRegister,
+  claimRegister,
+  createEnrollmentToken,
+  createReplacementToken,
+  currentRegister,
+  enrollRegister,
+  hash,
+  listAllRegisters,
+  listEnrollmentTokens,
+  listSelectableRegisters,
+  revokeEnrollmentToken,
+  revokeRegister,
+  setRegisterBranch,
+};

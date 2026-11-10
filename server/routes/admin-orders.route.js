@@ -1,12 +1,23 @@
 const { Router } = require('express');
 const db = require('../db/client');
 const { bookNboxForPaidOrder } = require('../lib/order-delivery');
-const { ensureDefaultTenant } = require('../db/tenant');
+const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
+const { notifyNewWebOrder } = require('../lib/staff-notify');
+const { getAllocation, approveOrder, orderAwaitsApproval } = require('../lib/order-approval');
+const { sendOrderConfirmedEmail } = require('../lib/order-confirmation');
+const { perLocationEnabled } = require('../lib/location-stock');
+const { ensurePaidOrderStock, reversePaidOrderStock } = require('../lib/order-stock');
+
+const { insertWithRetry } = require('../lib/order-number');
 const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
 const router = Router();
 
-function mapOrder(row) {
+// `detailed` distinguishes the single-order endpoint (which loads timeline and
+// notes and shipments) from the list endpoint (which does not). The list must leave them
+// undefined rather than empty so the client can tell "not loaded yet" from
+// "genuinely has none" and render a loading state instead of a blank history.
+function mapOrder(row, detailed = false) {
   const shippingAddress = row.shipping_address || {};
   return {
     id: row.public_number,
@@ -24,13 +35,40 @@ function mapOrder(row) {
     shippingAddress,
     billingAddress: row.billing_address || {},
     paymentGateway: row.metadata?.paymentGateway || undefined,
-    trackingNumber: row.tracking_number || undefined,
+    trackingNumber: row.fulfillment_version ? undefined : row.tracking_number || undefined,
     nboxBookingFailed: Boolean(
       row.metadata?.nbox?.bookingFailedAt && !row.metadata?.nbox?.bookedAt,
     ),
     nboxBookingError: row.metadata?.nbox?.bookingError || undefined,
-    timeline: row.timeline || [],
-    notes: row.notes || [],
+    delivery: row.fulfillment_version ? undefined : mapDelivery(row),
+    automaticFulfillment: row.fulfillment_version === 1,
+    allocationState: row.allocation_state,
+    deliveryProgress: row.metadata?.deliveryProgress,
+    // Stock per location: paid website order waiting for staff to choose
+    // where it ships from; then the chosen location (staff-only).
+    needsApproval: Boolean(row.needs_approval),
+    pickupLocation: row.pickup_location_name || undefined,
+    ...(detailed ? { deliveries: row.deliveries || [], timeline: row.timeline || [], notes: row.notes || [] } : {}),
+  };
+}
+
+/** Shipment + carrier details, or undefined when nothing has been booked yet.
+    Drives the invoice's delivery block, so it must stay absent rather than
+    empty when there is no shipment. */
+function mapDelivery(row) {
+  const quote = row.metadata?.nbox?.quote || null;
+  const hasShipment = Boolean(row.carrier || row.tracking_number || row.shipped_at);
+  if (!hasShipment && !quote) return undefined;
+
+  const iso = (value) => (value ? new Date(value).toISOString() : undefined);
+  return {
+    carrier: row.carrier || (quote ? 'nbox' : undefined),
+    service: row.service || quote?.serviceName || undefined,
+    trackingNumber: row.tracking_number || undefined,
+    trackingUrl: row.tracking_url || undefined,
+    shippedAt: iso(row.shipped_at),
+    deliveredAt: iso(row.delivered_at),
+    eta: quote?.eta || undefined,
   };
 }
 
@@ -41,6 +79,22 @@ function formatAddress(address) {
     address.region,
     address.country,
   ].filter(Boolean).join(', ');
+}
+
+// Mirrors the Postgres enums in 001_initial_schema.sql. Without these an
+// unexpected body value reached the UPDATE as a raw cast failure and surfaced
+// as a 500 instead of a 422 naming the bad field.
+const PAYMENT_STATUSES     = new Set(['pending', 'authorized', 'paid', 'failed', 'refunded', 'partially_refunded']);
+const FULFILLMENT_STATUSES = new Set(['awaiting', 'processing', 'shipped', 'delivered', 'cancelled', 'returned']);
+const ORDER_STATUSES       = new Set(['placed', 'confirmed', 'processing', 'completed', 'cancelled', 'refunded', 'returned']);
+const TIMELINE_KINDS       = new Set(['placed', 'paid', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded', 'returned', 'note']);
+
+/** Returns an error string when `value` is present but not a member of `allowed`. */
+function invalidEnum(field, value, allowed) {
+  if (value === undefined || value === null || value === '') return null;
+  return allowed.has(String(value))
+    ? null
+    : `${field} must be one of: ${[...allowed].join(', ')}.`;
 }
 
 function mapPayment(status) {
@@ -54,24 +108,54 @@ async function loadAdminOrder(client, tenantId, id) {
     `
       SELECT o.*,
         (SELECT COUNT(*)::integer FROM order_items oi WHERE oi.order_id = o.id) AS items_count,
-        s.tracking_number,
+        EXISTS (SELECT 1 FROM order_stock_holds h WHERE h.order_id = o.id AND h.status = 'held') AS needs_approval,
+        (SELECT sl.name FROM stocktake_locations sl WHERE sl.id = o.fulfillment_location_id) AS pickup_location_name,
+        s.carrier, s.service, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('n', oi2.product_name, 's', COALESCE(oi2.size, ''), 'q', oi2.quantity, 'p', round(oi2.unit_price_cents / 100.0), 'img', oi2.media_url) ORDER BY oi2.id) FROM order_items oi2 WHERE oi2.order_id = o.id), '[]'::jsonb) AS items,
-        COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'ts', to_char(t.occurred_at, 'YYYY-MM-DD HH24:MI'), 'kind', t.kind, 'detail', t.detail) ORDER BY t.occurred_at) FROM order_timeline_entries t WHERE t.order_id = o.id), '[]'::jsonb) AS timeline,
-        COALESCE((SELECT jsonb_agg(jsonb_build_object('id', n.id, 'ts', to_char(n.created_at, 'YYYY-MM-DD HH24:MI'), 'author', 'Admin', 'initials', 'AD', 'body', n.body) ORDER BY n.created_at DESC) FROM order_notes n WHERE n.order_id = o.id), '[]'::jsonb) AS notes
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'ts', to_char(t.occurred_at, 'YYYY-MM-DD HH24:MI'), 'kind', t.kind, 'detail', t.detail, 'actor', tu.full_name) ORDER BY t.occurred_at) FROM order_timeline_entries t LEFT JOIN admin_users tu ON tu.id = t.actor_user_id WHERE t.order_id = o.id), '[]'::jsonb) AS timeline,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('id', n.id, 'ts', to_char(n.created_at, 'YYYY-MM-DD HH24:MI'), 'author', COALESCE(nu.full_name, 'Admin'), 'initials', COALESCE(nu.initials, 'AD'), 'body', n.body) ORDER BY n.created_at DESC) FROM order_notes n LEFT JOIN admin_users nu ON nu.id = n.author_user_id WHERE n.order_id = o.id), '[]'::jsonb) AS notes
       FROM orders o
-      LEFT JOIN shipments s ON s.order_id = o.id
+      LEFT JOIN LATERAL (
+        SELECT sh.carrier, sh.service, sh.tracking_number, sh.tracking_url,
+               sh.shipped_at, sh.delivered_at
+          FROM shipments sh
+         WHERE sh.order_id = o.id
+         ORDER BY (sh.tracking_number IS NOT NULL) DESC, sh.created_at DESC
+         LIMIT 1
+      ) s ON TRUE
       WHERE o.tenant_id = $1 AND (o.id::text = $2 OR o.public_number = $2)
-      GROUP BY o.id, s.tracking_number
     `,
     [tenantId, id],
   );
-  return result.rowCount === 0 ? null : mapOrder(result.rows[0]);
+  if (result.rows[0]?.fulfillment_version) result.rows[0].deliveries = await require('../lib/automatic-fulfillment').deliveryList(client, tenantId, result.rows[0].id, true);
+  return result.rowCount === 0 ? null : mapOrder(result.rows[0], true);
+}
+
+// Whitelist of sortable columns. The table header offered click-to-sort but the
+// server always ordered by placed_at DESC, so the arrow sorted only the rows
+// that happened to be on the current page.
+const ORDER_SORTS = {
+  id:          'o.public_number',
+  date:        'o.placed_at',
+  customer:    'o.customer_name',
+  total:       'o.total_cents',
+  itemsCount:  'items_count',
+  payment:     'o.payment_status',
+  fulfillment: 'o.fulfillment_status',
+};
+
+function orderOrderBy(sort, dir) {
+  const column = ORDER_SORTS[sort];
+  if (!column) return 'o.placed_at DESC';
+  const direction = String(dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  // Tie-break on placed_at so paging is stable across equal values.
+  return `${column} ${direction} NULLS LAST, o.placed_at DESC`;
 }
 
 router.get('/', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
 
     const page    = Math.max(0, parseInt(req.query.page  ?? '0', 10)  || 0);
     const limit   = Math.min(200, Math.max(1, parseInt(req.query.limit ?? '50', 10) || 50));
@@ -99,12 +183,16 @@ router.get('/', asyncHandler(async (req, res) => {
       params.push(req.query.to);
       where.push(`o.placed_at < ($${params.length}::date + INTERVAL '1 day')`);
     }
+    if (req.query.needsApproval === 'true') {
+      where.push(`EXISTS (SELECT 1 FROM order_stock_holds h WHERE h.order_id = o.id AND h.status = 'held')`);
+    }
     if (req.query.q) {
       params.push(`%${req.query.q}%`);
       where.push(`(o.customer_name ILIKE $${params.length} OR o.public_number ILIKE $${params.length} OR o.customer_email ILIKE $${params.length})`);
     }
 
     const whereClause = where.join(' AND ');
+    const orderBy = orderOrderBy(req.query.sort, req.query.dir);
 
     // Total count for pagination metadata
     const countResult = await client.query(
@@ -119,20 +207,34 @@ router.get('/', asyncHandler(async (req, res) => {
         SELECT
           o.*,
           (SELECT COUNT(*)::integer FROM order_items oi WHERE oi.order_id = o.id) AS items_count,
-          s.tracking_number,
+        EXISTS (SELECT 1 FROM order_stock_holds h WHERE h.order_id = o.id AND h.status = 'held') AS needs_approval,
+        (SELECT sl.name FROM stocktake_locations sl WHERE sl.id = o.fulfillment_location_id) AS pickup_location_name,
+          s.carrier, s.service, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
           COALESCE((SELECT jsonb_agg(jsonb_build_object('n', oi2.product_name, 's', COALESCE(oi2.size, ''), 'q', oi2.quantity, 'p', round(oi2.unit_price_cents / 100.0), 'img', oi2.media_url) ORDER BY oi2.id) FROM order_items oi2 WHERE oi2.order_id = o.id), '[]'::jsonb) AS items
         FROM orders o
-        LEFT JOIN shipments s ON s.order_id = o.id
+        LEFT JOIN LATERAL (
+          SELECT sh.carrier, sh.service, sh.tracking_number, sh.tracking_url,
+                 sh.shipped_at, sh.delivered_at
+            FROM shipments sh
+           WHERE sh.order_id = o.id
+           ORDER BY (sh.tracking_number IS NOT NULL) DESC, sh.created_at DESC
+           LIMIT 1
+        ) s ON TRUE
         WHERE ${whereClause}
-        GROUP BY o.id, s.tracking_number
-        ORDER BY o.placed_at DESC
+        ORDER BY ${orderBy}
         LIMIT $${params.length - 1} OFFSET $${params.length}
       `,
       params,
     );
 
+    // For the "Needs approval" chip, independent of the current filters.
+    const approvalCount = await client.query(
+      `SELECT COUNT(DISTINCT h.order_id)::integer AS n FROM order_stock_holds h WHERE h.tenant_id = $1 AND h.status = 'held'`,
+      [tenant.id],
+    );
     ok(res, {
-      orders: result.rows.map(mapOrder),
+      orders: result.rows.map((row) => mapOrder(row)),
+      needsApprovalCount: approvalCount.rows[0].n,
       total,
       page,
       limit,
@@ -146,7 +248,7 @@ router.get('/', asyncHandler(async (req, res) => {
 router.get('/:id', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     const order = await loadAdminOrder(client, tenant.id, req.params.id);
     if (!order) return notFound(res, 'Order not found.');
     ok(res, order);
@@ -165,7 +267,7 @@ router.post('/', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
 
     // ── Idempotency check: return the existing order if key already used ──
     if (idempotencyKey) {
@@ -192,14 +294,8 @@ router.post('/', asyncHandler(async (req, res) => {
     }
 
     const subtotal = items.reduce((sum, item) => sum + toCents(item.price || item.p || 0) * (Number(item.quantity || item.q) || 1), 0);
-    // Use a date-seeded public number: EC-YY-MMDD-{ms-suffix} reduces collision window
-    const now = new Date();
-    const yy = now.getFullYear().toString().slice(2);
-    const mmdd = `${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    const suffix = Date.now().toString().slice(-6);
-    const publicNumber = req.body.publicNumber || `EC-${yy}-${mmdd}-${suffix}`;
 
-    const order = await client.query(
+    const order = await insertWithRetry(client, (publicNumber) => client.query(
       `
         INSERT INTO orders (
           tenant_id, public_number, idempotency_key,
@@ -228,15 +324,23 @@ router.post('/', asyncHandler(async (req, res) => {
         JSON.stringify(req.body.shippingAddress || { line1: req.body.address || '' }),
         JSON.stringify(req.body.billingAddress || req.body.shippingAddress || {}),
       ],
-    );
+    ));
 
     for (const item of items) {
       const qty = Number(item.quantity || item.q) || 1;
       const unit = toCents(item.price || item.p || 0);
       await client.query(
         `
-          INSERT INTO order_items (tenant_id, order_id, product_id, variant_id, sku, product_name, size, quantity, unit_price_cents, total_cents)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          INSERT INTO order_items (
+            tenant_id, order_id, product_id, variant_id, sku, product_name, size,
+            quantity, unit_price_cents, total_cents,
+            unit_cost_cents, shipping_cost_cents, total_cost_cents, cost_snapshot_source
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+            (SELECT cost_price_cents FROM product_variants WHERE id = $4),
+            (SELECT shipping_cost_cents FROM product_variants WHERE id = $4),
+            (SELECT total_cost_cents FROM product_variants WHERE id = $4),
+            CASE WHEN (SELECT total_cost_cents FROM product_variants WHERE id = $4) IS NULL THEN 'missing' ELSE 'captured' END)
         `,
         [tenant.id, order.rows[0].id, item.productId || null, item.variantId || null, item.sku || '', item.name || item.n || '', item.size || item.s || null, qty, unit, unit * qty],
       );
@@ -257,23 +361,98 @@ router.post('/', asyncHandler(async (req, res) => {
   }
 }));
 
+// ── Approval (stock per location) ──────────────────────────────────────────
+function orderContext(req) {
+  return {
+    tenantId: req.user.tenantId,
+    userId: req.user.id,
+    role: req.user.role,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'] || null,
+    requestId: req.requestId || null,
+  };
+}
+
+router.get('/:id/allocation', asyncHandler(async (req, res) => {
+  ok(res, await getAllocation(orderContext(req), req.params.id));
+}));
+
+router.post('/:id/approve', asyncHandler(async (req, res) => {
+  const approved = await approveOrder(orderContext(req), req.params.id, req.body);
+  const client = await db.pool.connect();
+  try {
+    // After commit: the courier is booked from the chosen location, then the
+    // customer is told the order is confirmed. Neither can undo the approval.
+    try {
+      const delivery = await bookNboxForPaidOrder(client, req.user.tenantId, approved.orderId);
+      if (delivery.failed) console.warn('NBOX booking failed after approval.', delivery);
+    } catch (err) {
+      console.warn('NBOX booking failed after approval.', err.message);
+    }
+    await sendOrderConfirmedEmail(client, req.user.tenantId, approved.orderId);
+    ok(res, await loadAdminOrder(client, req.user.tenantId, approved.orderId), `Order approved. Pickup: ${approved.location.name}.`);
+  } finally {
+    client.release();
+  }
+}));
+
 router.patch('/:id/status', asyncHandler(async (req, res) => {
+  const errors = [
+    invalidEnum('payment', req.body.payment, PAYMENT_STATUSES),
+    invalidEnum('fulfillment', req.body.fulfillment, FULFILLMENT_STATUSES),
+    invalidEnum('status', req.body.status, ORDER_STATUSES),
+    invalidEnum('timelineKind', req.body.timelineKind, TIMELINE_KINDS),
+  ].filter(Boolean);
+  if (errors.length > 0) return validationError(res, errors);
+
   const client = await db.pool.connect();
   let shouldBookNbox = false;
+  let markedPaid = false;
   let updatedOrderId = null;
   let tenantId = null;
+  // Everything after COMMIT (NBOX booking, receipt email, stock helpers) runs
+  // outside the transaction; rolling back there would target a non-transaction.
+  let committed = false;
   try {
     await client.query('BEGIN');
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     tenantId = tenant.id;
     const trackingNumber = String(req.body.trackingNumber || '').trim();
+    // Read the prior state so the stock effect can be driven by the actual
+    // transition, not by the requested value. Marking an already-paid order
+    // paid again, or re-cancelling a cancelled order, must not move stock.
+    const previous = await client.query(
+      'SELECT id, payment_status, status, fulfillment_version FROM orders WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2) FOR UPDATE',
+      [tenant.id, req.params.id],
+    );
+    if (previous.rows[0]?.fulfillment_version && (req.body.fulfillment || req.body.trackingNumber || req.body.status)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, message: 'Use the individual delivery actions for this automatically allocated order.' });
+    }
+    const previousPaymentStatus = previous.rows[0]?.payment_status || null;
+    if (previous.rows[0]?.fulfillment_version && req.body.payment && req.body.payment !== previousPaymentStatus
+      && !(['refunded', 'partially_refunded'].includes(req.body.payment) && ['paid', 'partially_refunded'].includes(previousPaymentStatus))) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, code: 'VERIFIED_PAYMENT_REQUIRED', message: 'Automatic orders require a verified payment-provider confirmation.' });
+    }
+    const previousStatus = previous.rows[0]?.status || null;
+    // Stock per location: a paid website order ships only after approval,
+    // which is also where it picks the location stock leaves from.
+    if (previous.rowCount && ['processing', 'shipped', 'delivered'].includes(String(req.body.fulfillment || ''))
+      && await orderAwaitsApproval(client, tenant.id, previous.rows[0].id)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, code: 'NEEDS_APPROVAL', message: 'Approve this order and choose where it ships from first.' });
+    }
     const order = await client.query(
       `
         UPDATE orders
         SET payment_status = COALESCE($3, payment_status),
             paid_at = CASE WHEN $3 = 'paid' THEN COALESCE(paid_at, now()) ELSE paid_at END,
             fulfillment_status = COALESCE($4, fulfillment_status),
-            status = COALESCE($5, status)
+            status = COALESCE($5, status),
+            cancelled_at = CASE WHEN $5 = 'cancelled' OR $4 = 'cancelled'
+                                THEN COALESCE(cancelled_at, now()) ELSE cancelled_at END,
+            updated_at = now()
         WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2)
         RETURNING *
       `,
@@ -284,15 +463,21 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
       return notFound(res, 'Order not found.');
     }
     updatedOrderId = order.rows[0].id;
-    shouldBookNbox = String(req.body.payment || '').trim().toLowerCase() === 'paid';
+    markedPaid = String(req.body.payment || '').trim().toLowerCase() === 'paid';
+    // With stock per location on, the courier is booked at approval instead,
+    // from the chosen location, once stock is confirmed there.
+    shouldBookNbox = markedPaid && !(await perLocationEnabled(client, tenant.id));
 
     if (trackingNumber) {
       const shipment = await client.query(
         `
           UPDATE shipments
           SET tracking_number = $3,
-              status = COALESCE($4, status),
-              shipped_at = CASE WHEN $4 = 'shipped' THEN COALESCE(shipped_at, now()) ELSE shipped_at END,
+              -- Explicit casts: $4 is compared to a text literal below, so
+              -- Postgres typed it as text and refused to store it in the enum
+              -- column (every "mark shipped with tracking" failed with a 500).
+              status = COALESCE($4::order_fulfillment_status, status),
+              shipped_at = CASE WHEN $4::order_fulfillment_status = 'shipped' THEN COALESCE(shipped_at, now()) ELSE shipped_at END,
               updated_at = now()
           WHERE tenant_id = $1 AND order_id = $2
           RETURNING id
@@ -303,7 +488,8 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
         await client.query(
           `
             INSERT INTO shipments (tenant_id, order_id, tracking_number, status, shipped_at, address)
-            VALUES ($1, $2, $3, COALESCE($4, 'awaiting'), CASE WHEN $4 = 'shipped' THEN now() ELSE NULL END, $5::jsonb)
+            VALUES ($1, $2, $3, COALESCE($4::order_fulfillment_status, 'awaiting'),
+                    CASE WHEN $4::order_fulfillment_status = 'shipped' THEN now() ELSE NULL END, $5::jsonb)
           `,
         [
           tenant.id,
@@ -317,10 +503,19 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
     }
 
     await client.query(
-      'INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail) VALUES ($1, $2, $3, $4)',
-      [tenant.id, order.rows[0].id, req.body.timelineKind || 'note', req.body.detail || 'Status updated'],
+      `INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail, actor_user_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        tenant.id,
+        order.rows[0].id,
+        req.body.timelineKind || 'note',
+        req.body.detail || 'Status updated',
+        // Without this you cannot tell who refunded or cancelled an order.
+        req.user?.id || null,
+      ],
     );
     await client.query('COMMIT');
+    committed = true;
     if (shouldBookNbox) {
       try {
         const deliveryResult = await bookNboxForPaidOrder(client, tenantId, updatedOrderId);
@@ -341,19 +536,59 @@ router.patch('/:id/status', asyncHandler(async (req, res) => {
         );
       }
     }
+    if (markedPaid) {
+      await sendReceiptForPaidOrder(client, tenantId, updatedOrderId).catch((err) => {
+        console.warn('[admin-orders] Receipt email failed:', err.message);
+      });
+      // Only website checkout orders notify; a manual admin order does not.
+      await notifyNewWebOrder(client, tenantId, updatedOrderId);
+    }
+
+    // Stock follows the transition, not the requested value (docs/25 Phase 1).
+    // Both helpers are idempotent and open their own transaction, so they are
+    // called after COMMIT and cannot poison this one.
+    const newPaymentStatus = order.rows[0].payment_status;
+    const newStatus = order.rows[0].status;
+    const becamePaid = previousPaymentStatus !== 'paid' && newPaymentStatus === 'paid';
+    const becameReversed =
+      (previousPaymentStatus !== 'refunded' && newPaymentStatus === 'refunded')
+      || (previousStatus !== 'cancelled' && newStatus === 'cancelled');
+
+    if (becamePaid) {
+      await ensurePaidOrderStock(tenantId, updatedOrderId, {
+        actorUserId: req.user?.id || null,
+        source: 'admin-mark-paid',
+      });
+    } else if (becameReversed) {
+      // Without this, every cancellation or refund is permanent phantom
+      // shrinkage: the units come back to the shelf but never to the system.
+      await reversePaidOrderStock(tenantId, updatedOrderId, {
+        actorUserId: req.user?.id || null,
+        reason: newStatus === 'cancelled' ? 'cancelled' : 'refunded',
+      });
+    }
+
     ok(res, await loadAdminOrder(client, tenant.id, req.params.id), 'Order status updated.');
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (!committed) await client.query('ROLLBACK').catch(() => {});
     throw err;
   } finally {
     client.release();
   }
 }));
 
+router.post('/:id/deliveries/:shipmentId/action', require('../middleware/require-auth').requireAuth({ roles: ['owner','admin'] }), asyncHandler(async(req,res) => {
+  const client=await db.pool.connect();
+  try {
+    await require('../lib/fulfillment-actions').act(client,{tenantId:req.user.tenantId,userId:req.user.id},req.params.id,req.params.shipmentId,req.body);
+    ok(res,await loadAdminOrder(client,req.user.tenantId,req.params.id));
+  } finally { client.release(); }
+}));
+
 router.post('/:id/rebook-delivery', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     const order = await client.query(
       'SELECT id, payment_status FROM orders WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2)',
       [tenant.id, req.params.id],
@@ -393,16 +628,23 @@ router.post('/:id/notes', asyncHandler(async (req, res) => {
 
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     const order = await client.query('SELECT id FROM orders WHERE tenant_id = $1 AND (id::text = $2 OR public_number = $2)', [tenant.id, req.params.id]);
     if (order.rowCount === 0) return notFound(res, 'Order not found.');
     const note = await client.query(
-      'INSERT INTO order_notes (tenant_id, order_id, body) VALUES ($1, $2, $3) RETURNING *',
-      [tenant.id, order.rows[0].id, body],
+      'INSERT INTO order_notes (tenant_id, order_id, body, author_user_id) VALUES ($1, $2, $3, $4) RETURNING *',
+      [tenant.id, order.rows[0].id, body, req.user?.id || null],
     );
     await client.query(
-      'INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail) VALUES ($1, $2, $3, $4)',
-      [tenant.id, order.rows[0].id, 'note', body.length > 80 ? `${body.slice(0, 77)}...` : body],
+      `INSERT INTO order_timeline_entries (tenant_id, order_id, kind, detail, actor_user_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        tenant.id,
+        order.rows[0].id,
+        'note',
+        body.length > 80 ? `${body.slice(0, 77)}...` : body,
+        req.user?.id || null,
+      ],
     );
     created(res, note.rows[0], 'Order note added.');
   } finally {

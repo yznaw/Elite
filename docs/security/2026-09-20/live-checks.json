@@ -1,0 +1,190 @@
+[
+  {
+    "url": "https://elitecollections.qa/",
+    "final_url": "https://elitecollections.qa/",
+    "status": 200,
+    "headers": {
+      "Server": "nginx/1.24.0 (Ubuntu)",
+      "Date": "Sat, 19 Sep 2026 21:18:38 GMT",
+      "Content-Type": "text/html;charset=UTF-8",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close",
+      "Vary": "Accept-Encoding",
+      "Cache-Control": "no-store"
+    },
+    "cookie_attributes": [],
+    "body_sample": "[HTML omitted]"
+  },
+  {
+    "url": "http://elitecollections.qa/",
+    "final_url": "https://elitecollections.qa/",
+    "status": 200,
+    "headers": {
+      "Server": "nginx/1.24.0 (Ubuntu)",
+      "Date": "Sat, 19 Sep 2026 21:18:40 GMT",
+      "Content-Type": "text/html;charset=UTF-8",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close",
+      "Vary": "Accept-Encoding",
+      "Cache-Control": "no-store"
+    },
+    "cookie_attributes": [],
+    "body_sample": "[HTML omitted]"
+  },
+  {
+    "url": "https://elitecollections.qa/checkout",
+    "final_url": "https://elitecollections.qa/checkout",
+    "status": 200,
+    "headers": {
+      "Server": "nginx/1.24.0 (Ubuntu)",
+      "Date": "Sat, 19 Sep 2026 21:18:41 GMT",
+      "Content-Type": "text/html;charset=UTF-8",
+      "Transfer-Encoding": "chunked",
+      "Connection": "close",
+      "Vary": "Accept-Encoding",
+      "Cache-Control": "no-store"
+    },
+    "cookie_attributes": [],
+    "body_sample": "[HTML omitted]"
+  },
+  {
+    "url": "https://admin.elitecollections.qa/",
+    "final_url": "https://admin.elitecollections.qa/",
+    "status": 200,
+    "headers": {
+      "Server": "nginx/1.24.0 (Ubuntu)",
+      "Date": "Sat, 19 Sep 2026 21:18:43 GMT",
+      "Content-Type": "text/html",
+      "Content-Length": "15190",
+      "Last-Modified": "Sat, 19 Sep 2026 12:46:00 GMT",
+      "Connection": "close",
+      "Vary": "Accept-Encoding",
+      "ETag": "\"6aae8408-3b56\"",
+      "Cache-Control": "no-store, must-revalidate",
+      "X-Robots-Tag": "noindex, nofollow",
+      "Accept-Ranges": "bytes"
+    },
+    "cookie_attributes": [],
+    "body_sample": "[HTML omitted]"
+  },
+  {
+    "url": "https://elitecollections.qa/api/health",
+    "final_url": "https://elitecollections.qa/api/health",
+    "status": 200,
+    "headers": {
+      "Server": "nginx/1.24.0 (Ubuntu)",
+      "Date": "Sat, 19 Sep 2026 21:18:43 GMT",
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Length": "124",
+      "Connection": "close",
+      "X-Request-Id": "e1e3fd80f7b1",
+      "Content-Security-Policy-Report-Only": "default-src 'self';base-uri 'self';font-src 'self';form-action 'self';frame-ancestors 'self';img-src 'self' data: blob:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' 'unsafe-inline';upgrade-insecure-requests;connect-src 'self';report-uri /api/client-logs/csp",
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Resource-Policy": "cross-origin",
+      "Origin-Agent-Cluster": "?1",
+      "Referrer-Policy": "no-referrer",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+      "X-Content-Type-Options": "nosniff",
+      "X-DNS-Prefetch-Control": "off",
+      "X-Download-Options": "noopen",
+      "X-Frame-Options": "SAMEORIGIN",
+      "X-Permitted-Cross-Domain-Policies": "none",
+      "X-XSS-Protection": "0",
+      "Vary": "Origin",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Expose-Headers": "X-Request-Id",
+      "ETag": "W/\"7c-N7LGxJqxLIWS9z7KYALYAv0zt1Q\""
+    },
+    "cookie_attributes": [
+      " Max-Age=43200; Path=/; Expires=Sun, 20 Sep 2026 09:18:43 GMT; Secure; SameSite=Lax"
+    ],
+    "body_sample": "{\"success\":true,\"status\":\"ok\",\"timestamp\":\"2026-09-19T21:18:43.933Z\",\"uptime\":\"30757s\",\"database\":{\"ok\":true,\"latencyMs\":0}}"
+  },
+  {
+    "url": "https://elitecollections.qa/api/admin/orders",
+    "status": 401,
+    "headers": {
+      "Server": "nginx/1.24.0 (Ubuntu)",
+      "Date": "Sat, 19 Sep 2026 21:18:44 GMT",
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Length": "54",
+      "Connection": "close",
+      "X-Request-Id": "388602479dd0",
+      "Content-Security-Policy-Report-Only": "default-src 'self';base-uri 'self';font-src 'self';form-action 'self';frame-ancestors 'self';img-src 'self' data: blob:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' 'unsafe-inline';upgrade-insecure-requests;connect-src 'self';report-uri /api/client-logs/csp",
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Resource-Policy": "cross-origin",
+      "Origin-Agent-Cluster": "?1",
+      "Referrer-Policy": "no-referrer",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+      "X-Content-Type-Options": "nosniff",
+      "X-DNS-Prefetch-Control": "off",
+      "X-Download-Options": "noopen",
+      "X-Frame-Options": "SAMEORIGIN",
+      "X-Permitted-Cross-Domain-Policies": "none",
+      "X-XSS-Protection": "0",
+      "Vary": "Origin",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Expose-Headers": "X-Request-Id",
+      "ETag": "W/\"36-xCAI44L2YWIxt4+UwSQbEzMYICg\""
+    },
+    "body_sample": "{\"success\":false,\"message\":\"Authentication required.\"}"
+  },
+  {
+    "url": "https://elitecollections.qa/api/admin/customers",
+    "status": 401,
+    "headers": {
+      "Server": "nginx/1.24.0 (Ubuntu)",
+      "Date": "Sat, 19 Sep 2026 21:18:44 GMT",
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Length": "54",
+      "Connection": "close",
+      "X-Request-Id": "4170b3402405",
+      "Content-Security-Policy-Report-Only": "default-src 'self';base-uri 'self';font-src 'self';form-action 'self';frame-ancestors 'self';img-src 'self' data: blob:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' 'unsafe-inline';upgrade-insecure-requests;connect-src 'self';report-uri /api/client-logs/csp",
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Resource-Policy": "cross-origin",
+      "Origin-Agent-Cluster": "?1",
+      "Referrer-Policy": "no-referrer",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+      "X-Content-Type-Options": "nosniff",
+      "X-DNS-Prefetch-Control": "off",
+      "X-Download-Options": "noopen",
+      "X-Frame-Options": "SAMEORIGIN",
+      "X-Permitted-Cross-Domain-Policies": "none",
+      "X-XSS-Protection": "0",
+      "Vary": "Origin",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Expose-Headers": "X-Request-Id",
+      "ETag": "W/\"36-xCAI44L2YWIxt4+UwSQbEzMYICg\""
+    },
+    "body_sample": "{\"success\":false,\"message\":\"Authentication required.\"}"
+  },
+  {
+    "url": "https://elitecollections.qa/api/auth/me",
+    "status": 401,
+    "headers": {
+      "Server": "nginx/1.24.0 (Ubuntu)",
+      "Date": "Sat, 19 Sep 2026 21:18:44 GMT",
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Length": "54",
+      "Connection": "close",
+      "X-Request-Id": "f39daa2aa7cf",
+      "Content-Security-Policy-Report-Only": "default-src 'self';base-uri 'self';font-src 'self';form-action 'self';frame-ancestors 'self';img-src 'self' data: blob:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' 'unsafe-inline';upgrade-insecure-requests;connect-src 'self';report-uri /api/client-logs/csp",
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Resource-Policy": "cross-origin",
+      "Origin-Agent-Cluster": "?1",
+      "Referrer-Policy": "no-referrer",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+      "X-Content-Type-Options": "nosniff",
+      "X-DNS-Prefetch-Control": "off",
+      "X-Download-Options": "noopen",
+      "X-Frame-Options": "SAMEORIGIN",
+      "X-Permitted-Cross-Domain-Policies": "none",
+      "X-XSS-Protection": "0",
+      "Vary": "Origin",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Expose-Headers": "X-Request-Id",
+      "ETag": "W/\"36-xCAI44L2YWIxt4+UwSQbEzMYICg\""
+    },
+    "body_sample": "{\"success\":false,\"message\":\"Authentication required.\"}"
+  }
+]

@@ -1,6 +1,7 @@
 import {
-  Component, EventEmitter, Input, OnDestroy, OnInit, Output,
+  Component, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output,
   computed, inject, signal,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -28,12 +29,12 @@ interface FormShape {
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
 
 @Component({
-  selector: 'ap-customer-drawer',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, AvatarComponent, PillComponent, SpinnerComponent, SaveBarComponent],
-  template: `
+    selector: 'ap-customer-drawer',
+    imports: [CommonModule, FormsModule, IconComponent, AvatarComponent, PillComponent, SpinnerComponent, SaveBarComponent],
+    template: `
     <div class="overlay" (click)="handleClose()"></div>
-    <div class="drawer drawer-wide customer-drawer" [class.is-dirty]="dirty()">
+    <div class="drawer drawer-wide customer-drawer" [class.is-dirty]="dirty()"
+         role="dialog" aria-modal="true" [attr.aria-label]="form().name || t('customers.add')">
 
       <!-- Head -->
       <div class="drawer-head">
@@ -108,7 +109,7 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
             <div>
               <label class="lbl">{{ t('customerDrawer.field.phone') }}</label>
               <input class="inp" type="tel"
-                     placeholder="+966 5x xxx xxxx"
+                     [placeholder]="t('customerDrawer.field.phone.placeholder')"
                      [ngModel]="form().phone" (ngModelChange)="set('phone', $event)"/>
             </div>
           </div>
@@ -231,7 +232,8 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
       </div>
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .drawer-wide { width: min(640px, 100vw); }
     @media (max-width: 720px) { .drawer-wide { width: 100vw; } }
 
@@ -339,7 +341,7 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
     @media (max-width: 720px) {
       .drawer-body { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important; }
     }
-  `],
+  `]
 })
 export class CustomerDrawerComponent implements OnInit, OnDestroy {
   @Input({ required: true }) customer!: Customer;
@@ -495,6 +497,13 @@ export class CustomerDrawerComponent implements OnInit, OnDestroy {
     this.closed.emit();
   }
 
+  /** Escape closes the drawer, but never silently discards unsaved edits —
+      handleClose() shakes the save bar instead when the form is dirty. */
+  @HostListener('window:keydown.escape')
+  onEscape(): void {
+    if (this.saveState() !== 'saving' && !this.deleting()) this.handleClose();
+  }
+
   triggerShake(): void {
     this.shakeSaveBar.set(false);
     setTimeout(() => this.shakeSaveBar.set(true), 10);
@@ -516,7 +525,7 @@ export class CustomerDrawerComponent implements OnInit, OnDestroy {
     if (this.deleting()) return;
     const ok = await this.confirm.ask({
       title: this.t('customerDrawer.deleteConfirm.title'),
-      message: `${this.t('customerDrawer.deleteConfirm.message')} "${this.customer.name}". Their order history will be preserved.`,
+      message: `${this.t('customerDrawer.deleteConfirm.message')} "${this.customer.name}". ${this.t('customerDrawer.deleteConfirm.historyPreserved')}`,
       confirmLabel: this.t('customerDrawer.deleteConfirm.confirm'),
       cancelLabel: this.t('common.cancel'),
       variant: 'danger',
@@ -524,7 +533,8 @@ export class CustomerDrawerComponent implements OnInit, OnDestroy {
     if (!ok) return;
     this.deleting.set(true);
     try {
-      this.toast.success(this.t('customerDrawer.toast.deleted'), this.customer.name);
+      // The parent owns the DELETE request and raises the toast only once the
+      // server has confirmed it. Reporting success from here would lie on failure.
       this.deleted.emit(this.customer);
     } finally {
       this.deleting.set(false);

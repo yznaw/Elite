@@ -152,6 +152,10 @@ async function ensureAllMigrations(client) {
   await client.query(`
     ALTER TABLE product_reviews ADD COLUMN IF NOT EXISTS source text DEFAULT 'storefront'
   `);
+  await client.query(`
+    ALTER TABLE product_reviews
+      ADD COLUMN IF NOT EXISTS contact_consent boolean NOT NULL DEFAULT false
+  `);
 
   // ── Migration 011: allow general (non-product) feedback ───────────────────
   await client.query(`ALTER TABLE product_reviews ALTER COLUMN product_id DROP NOT NULL`);
@@ -261,7 +265,8 @@ async function ensureAllMigrations(client) {
 
   // ── Migration 015: size_chart column on ref_size_sets ──────────────────────
   // Store UK/EU/US conversion rows. Each row: { uk: string, eu: string, us: string }
-  // sizes array is kept for backward compat (variants match by EU size value).
+  // sizes array is kept for backward compat (variants match by UK size value —
+  // UK is the convention actually used on stored variants and shown to customers).
   // tip: optional text shown below the chart (e.g. "If between sizes, select larger").
   // Guarded: ref_size_sets is created in reference-schema.js (runs after this).
   // If it does not exist yet, reference-schema.js adds these columns itself —
@@ -278,6 +283,165 @@ async function ensureAllMigrations(client) {
     }
   }
 
+  // ── Backfill: product_variants.barcode defaults to SKU ──────────────────
+  // The barcode column existed since migration 001 but nothing ever wrote to
+  // it before POS barcode label printing shipped. Give every existing row
+  // without one a barcode matching its own SKU (already unique per tenant),
+  // so the whole catalog becomes scannable without re-saving every product.
+  try {
+    await client.query(`
+      UPDATE product_variants
+      SET barcode = sku, updated_at = now()
+      WHERE barcode IS NULL OR btrim(barcode) = ''
+    `);
+  } catch (err) {
+    console.warn('[migrations] barcode backfill skipped:', err.message);
+  }
+
+  // ── Migration 031: bilingual per-variant note ────────────────────────────
+  // Carries a construction detail that applies to some sizes only (a back
+  // zipper on 2-4 but not on 6-10), so the storefront can state the difference
+  // next to the selected size instead of needing a separate photo shoot.
+  await client.query(`
+    ALTER TABLE product_variants
+      ADD COLUMN IF NOT EXISTS note_en TEXT,
+      ADD COLUMN IF NOT EXISTS note_ar TEXT
+  `);
+
+  // ── Migration 032: bilingual policy title and content ────────────────────
+  // policies had no Arabic column at all, so the storefront's Arabic locale
+  // silently fell back to English legal copy. Matches the descriptionEn/Ar
+  // split already used on products.
+  await client.query(`
+    ALTER TABLE policies
+      ADD COLUMN IF NOT EXISTS title_ar   TEXT,
+      ADD COLUMN IF NOT EXISTS content_ar TEXT
+  `);
+
+  // ── Migration 033: business expense ledger ───────────────────────────────
+  // The only cost the system tracked was cost of goods (cost_price_cents +
+  // shipping_cost_cents), so Analytics could show gross margin but never real
+  // profitability. This is the operating-expense side: rent, salaries,
+  // utilities, marketing. Lets Analytics compute revenue - COGS - expenses.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS expenses (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      expense_date date NOT NULL,
+      category text NOT NULL CHECK (category IN (
+        'rent', 'salaries', 'utilities', 'marketing', 'logistics',
+        'supplies', 'software', 'fees', 'maintenance', 'other'
+      )),
+      amount_cents bigint NOT NULL CHECK (amount_cents >= 0),
+      vendor text,
+      payment_method text NOT NULL DEFAULT 'cash' CHECK (payment_method IN (
+        'cash', 'card', 'bank_transfer', 'cheque', 'other'
+      )),
+      note text,
+      receipt_media_id uuid REFERENCES media_assets(id) ON DELETE SET NULL,
+      recurrence text NOT NULL DEFAULT 'none' CHECK (recurrence IN ('none', 'monthly', 'yearly')),
+      recurrence_parent_id uuid REFERENCES expenses(id) ON DELETE SET NULL,
+      source text NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'pos_cash_out')),
+      source_ref_id uuid,
+      created_by_user_id uuid REFERENCES admin_users(id) ON DELETE SET NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      CHECK (
+        (source = 'pos_cash_out' AND source_ref_id IS NOT NULL)
+        OR (source = 'manual' AND source_ref_id IS NULL)
+      )
+    )
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS expenses_tenant_date_idx
+      ON expenses (tenant_id, expense_date DESC)
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS expenses_tenant_category_idx
+      ON expenses (tenant_id, category, expense_date DESC)
+  `);
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS expenses_pos_source_idx
+      ON expenses (tenant_id, source_ref_id)
+      WHERE source = 'pos_cash_out'
+  `);
+
+  // ── Migration 034: catalog/import reliability ───────────────────────────
+  await client.query(`
+    ALTER TABLE products
+      ADD COLUMN IF NOT EXISTS pos_status text NOT NULL DEFAULT 'active'
+  `);
+  await client.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_pos_status_chk') THEN
+        ALTER TABLE products ADD CONSTRAINT products_pos_status_chk
+          CHECK (pos_status IN ('active', 'hidden'));
+      END IF;
+    END $$
+  `);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS catalog_import_jobs (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      created_by_user_id uuid REFERENCES admin_users(id) ON DELETE SET NULL,
+      kind text NOT NULL DEFAULT 'products' CHECK (kind IN ('products', 'stock')),
+      filename text NOT NULL,
+      file_sha256 text,
+      image_mode text NOT NULL DEFAULT 'ignore' CHECK (image_mode IN ('ignore', 'append', 'replace')),
+      status text NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'review_ready', 'completed', 'failed')),
+      source_rows jsonb NOT NULL DEFAULT '[]'::jsonb,
+      summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+      error text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      started_at timestamptz,
+      completed_at timestamptz
+    )
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS catalog_import_jobs_tenant_created_idx
+      ON catalog_import_jobs (tenant_id, created_at DESC)
+  `);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS catalog_import_items (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      job_id uuid NOT NULL REFERENCES catalog_import_jobs(id) ON DELETE CASCADE,
+      item_key text NOT NULL,
+      original_rows jsonb NOT NULL DEFAULT '[]'::jsonb,
+      status text NOT NULL CHECK (status IN ('created', 'updated', 'skipped', 'error')),
+      product_id uuid REFERENCES products(id) ON DELETE SET NULL,
+      result jsonb NOT NULL DEFAULT '{}'::jsonb,
+      error text,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS catalog_import_items_job_idx
+      ON catalog_import_items (job_id, created_at)
+  `);
+  // ── Migration 035: staff branch scope ──────────────────────────────────
+  // Which branch a staff member works at, and so which tills the POS picker
+  // offers them. NULL means "not scoped" and keeps the previous behaviour
+  // (every active register in the tenant), which is the right default for
+  // owners and admins.
+  await client.query(`
+    ALTER TABLE admin_users
+      ADD COLUMN IF NOT EXISTS pos_branch_id uuid REFERENCES pos_branches(id) ON DELETE SET NULL
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS admin_users_pos_branch_idx
+      ON admin_users (tenant_id, pos_branch_id)
+      WHERE pos_branch_id IS NOT NULL
+  `);
+
+  await client.query('DROP TRIGGER IF EXISTS products_require_variant ON products');
+  await client.query('DROP TRIGGER IF EXISTS variants_keep_product_nonempty ON product_variants');
+  await client.query('DROP FUNCTION IF EXISTS enforce_product_has_variant()');
+  await client.query(require('node:fs').readFileSync(require('node:path').join(__dirname, 'migrations/039_restock_dispatch.sql'), 'utf8'));
+  await client.query(require('node:fs').readFileSync(require('node:path').join(__dirname, 'migrations/041_catalog_cost_identity_lifecycle.sql'), 'utf8'));
+  await client.query(require('node:fs').readFileSync(require('node:path').join(__dirname, 'migrations/042_base_price_from_variants.sql'), 'utf8'));
+  await client.query(require('node:fs').readFileSync(require('node:path').join(__dirname, 'migrations/045_staff_notifications.sql'), 'utf8'));
+  await client.query(require('node:fs').readFileSync(require('node:path').join(__dirname, 'migrations/048_color_image_primary.sql'), 'utf8'));
   _done = true;
 }
 

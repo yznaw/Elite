@@ -1,6 +1,12 @@
 const { Router } = require('express');
+const { checkoutOwnerHash } = require('../lib/checkout-ownership');
+const isUuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 const db = require('../db/client');
 const { bookNboxForPaidOrder } = require('../lib/order-delivery');
+const { sendReceiptForPaidOrder } = require('../lib/order-receipt');
+const { notifyNewWebOrder } = require('../lib/staff-notify');
+const { perLocationEnabled } = require('../lib/location-stock');
+const { ensurePaidOrderStock } = require('../lib/order-stock');
 const sadad = require('../lib/sadad');
 
 const router = Router();
@@ -31,18 +37,20 @@ function storefrontBase(req) {
 router.post('/sadad/initiate', asyncHandler(async (req, res) => {
   const { orderId } = req.body;
 
-  if (!orderId) {
+  res.set('Cache-Control', 'no-store');
+  if (!isUuid(orderId)) {
     return res.status(400).json({ success: false, message: 'orderId is required' });
   }
 
   const client = await db.pool.connect();
   try {
     const { rows } = await client.query(
-      `SELECT id, total_cents, currency, payment_status,
+      `SELECT id, total_cents, currency, payment_status, fulfillment_version, allocation_state, reservation_expires_at, status,
               customer_email, customer_name, customer_phone
          FROM orders
-        WHERE id = $1`,
-      [orderId],
+        WHERE id = $1 AND metadata->>'checkoutOwnerHash' = $2
+          AND metadata->>'source' = 'client-web-checkout'`,
+      [orderId, checkoutOwnerHash(req)],
     );
 
     if (rows.length === 0) {
@@ -51,8 +59,12 @@ router.post('/sadad/initiate', asyncHandler(async (req, res) => {
 
     const order = rows[0];
 
-    if (order.payment_status === 'paid') {
-      return res.status(409).json({ success: false, message: 'Order is already paid' });
+    if (!['pending', 'failed'].includes(order.payment_status)) {
+      return res.status(409).json({ success: false, message: 'This order cannot start a payment.' });
+    }
+
+    if (order.status === 'cancelled' || (order.fulfillment_version && (order.allocation_state !== 'reserved' || new Date(order.reservation_expires_at).getTime() <= Date.now()))) {
+      return res.status(409).json({ success: false, code: 'RESERVATION_EXPIRED', message: 'Stock reservation expired. Return to checkout for a new delivery quote.' });
     }
 
     const request = sadad.buildPaymentRequest({
@@ -126,6 +138,9 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
   let publicOrderNumber = '';
   let paymentUpdateSaved = false;
   try {
+    if (paymentStatus === 'paid' && !(await require('../lib/fulfillment-payment').verify(client, orderId, payload, transactionNumber))) {
+      return res.redirect(`${storefrontBase(req)}/checkout/pending?order=${encodeURIComponent(orderId)}&reason=verification_required`);
+    }
     // Guard: never downgrade a paid order. The Sadad webhook and callback can
     // arrive in any order. If the webhook already marked this order 'paid',
     // the WHERE clause prevents the callback from overwriting it.
@@ -155,6 +170,17 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
       }
       const alreadyPaid = existing.rows[0];
       console.log('[sadad-callback] Order already paid — redirecting to thank-you', { orderId });
+      // Also applied on the already-paid path, not only on the branch that
+      // won the paid-flag update. That is what repairs the window where the
+      // webhook set the flag but crashed before stock was applied: whichever
+      // delivery arrives next completes the job (the call is idempotent).
+      if (alreadyPaid.payment_status === 'paid') {
+        const tenant = await client.query('SELECT tenant_id FROM orders WHERE id = $1::uuid', [orderId]);
+        if (tenant.rowCount) {
+          await ensurePaidOrderStock(tenant.rows[0].tenant_id, orderId, { source: 'sadad-callback-repair' });
+          await notifyNewWebOrder(client, tenant.rows[0].tenant_id, orderId);
+        }
+      }
       return res.redirect(`${storefrontBase(req)}/thank-you?order=${encodeURIComponent(alreadyPaid.public_number)}`);
     }
 
@@ -234,7 +260,9 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
         });
       });
 
-      await bookNboxForPaidOrder(client, updatedOrder.tenant_id, orderId)
+      // Stock per location: the courier is booked at approval, from the
+      // chosen location (routes/admin-orders.route.js POST /:id/approve).
+      if (!(await perLocationEnabled(client, updatedOrder.tenant_id))) await bookNboxForPaidOrder(client, updatedOrder.tenant_id, orderId)
         .then((deliveryResult) => {
           if (deliveryResult.failed) {
             console.warn('[sadad-callback] NBOX booking failed after payment confirmation', {
@@ -250,6 +278,18 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
             message: err.message,
           });
         });
+      await sendReceiptForPaidOrder(client, updatedOrder.tenant_id, orderId).catch((err) => {
+        console.warn('[sadad-callback] Receipt email failed:', err.message);
+      });
+      // Idempotent and never throws; the webhook may have notified already.
+      await notifyNewWebOrder(client, updatedOrder.tenant_id, orderId);
+
+      // Inventory. Until docs/25 Phase 1 a paid web order never touched stock
+      // at all, so the shop could sell the same unit online and again at the
+      // till. Idempotent and safe to re-run: it opens its own transaction,
+      // keys on an existing ledger row for this order, and never throws — a
+      // stock failure must not turn a successful payment into an error.
+      await ensurePaidOrderStock(updatedOrder.tenant_id, orderId, { source: 'sadad-callback' });
     }
   } catch (err) {
     console.error('[sadad-callback] Critical order payment update failed', {
@@ -283,18 +323,27 @@ router.post('/sadad/callback', asyncHandler(async (req, res) => {
 // Lets the storefront check if a pending order was paid after the user returns
 // from the Sadad payment page via browser back.
 // ─────────────────────────────────────────────────────────────────────────────
+router.get('/delivery-status/:reference', asyncHandler(async(req,res) => {
+  res.set('Cache-Control','no-store');
+  const order=(await db.query("SELECT id,tenant_id,metadata FROM orders WHERE public_number=$1 AND metadata->>'checkoutOwnerHash'=$2 AND fulfillment_version=1",[String(req.params.reference).slice(0,100),checkoutOwnerHash(req)])).rows[0];
+  if(!order)return res.status(404).json({success:false,message:'Order not found.'});
+  return res.json({success:true,data:{deliveries:await require('../lib/automatic-fulfillment').deliveryList(db.pool,order.tenant_id,order.id),progress:order.metadata?.deliveryProgress}});
+}));
+
 router.get('/order-status/:orderId', asyncHandler(async (req, res) => {
   const { orderId } = req.params;
 
-  if (!orderId) {
+  res.set('Cache-Control', 'no-store');
+  if (!isUuid(orderId)) {
     return res.status(400).json({ success: false, message: 'orderId is required' });
   }
 
   const { rows } = await db.pool.query(
-    `SELECT id, payment_status, public_number
+    `SELECT id, tenant_id, payment_status, public_number, fulfillment_version, metadata
        FROM orders
-      WHERE id = $1::uuid`,
-    [orderId],
+      WHERE id = $1::uuid AND metadata->>'checkoutOwnerHash' = $2
+        AND metadata->>'source' = 'client-web-checkout'`,
+    [orderId, checkoutOwnerHash(req)],
   );
 
   if (rows.length === 0) {
@@ -306,6 +355,8 @@ router.get('/order-status/:orderId', asyncHandler(async (req, res) => {
     data: {
       paymentStatus: rows[0].payment_status,
       publicNumber:  rows[0].public_number,
+      deliveryProgress: rows[0].metadata?.deliveryProgress,
+      deliveries: rows[0].fulfillment_version ? await require('../lib/automatic-fulfillment').deliveryList(db.pool, rows[0].tenant_id, rows[0].id) : [],
     },
   });
 }));

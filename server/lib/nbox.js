@@ -24,19 +24,29 @@ function isConfigured() {
 }
 
 // In-memory cache (fast path for single-process, single-restart scenarios)
-const _token = { value: null, fetchedAt: 0 };
+const _token = { value: null, fetchedAt: 0, scope: null };
 const TOKEN_TTL_MS = 23 * 60 * 60 * 1000;
+
+// A staging login must never reuse a production/account token, including after
+// a restart with the same database. Legacy tokens without a scope require login.
+function tokenScope() {
+  return JSON.stringify([
+    env('NBOX_API_BASE_URL').replace(/\/+$/, ''),
+    env('NBOX_SHOP_DOMAIN'),
+    env('NBOX_LOGIN_EMAIL'),
+  ]);
+}
 
 // ── DB-backed token persistence ───────────────────────────────────────────────
 // Survives server restarts and works across multiple worker processes.
 
-async function readTokenFromDb() {
+async function readTokenFromDb(scope) {
   try {
     const { rows } = await db.query(
       `SELECT config FROM integrations WHERE integration_key = 'nbox' LIMIT 1`,
     );
     const cfg = rows[0]?.config;
-    if (cfg?.nboxToken && cfg?.nboxTokenFetchedAt) {
+    if (cfg?.nboxTokenScope === scope && cfg?.nboxToken && cfg?.nboxTokenFetchedAt) {
       return { token: cfg.nboxToken, fetchedAt: Number(cfg.nboxTokenFetchedAt) };
     }
   } catch {
@@ -45,14 +55,14 @@ async function readTokenFromDb() {
   return null;
 }
 
-async function persistTokenToDb(token, fetchedAt) {
+async function persistTokenToDb(token, fetchedAt, scope) {
   try {
     await db.query(
       `UPDATE integrations
           SET config     = config || $1::jsonb,
               updated_at = NOW()
         WHERE integration_key = 'nbox'`,
-      [JSON.stringify({ nboxToken: token, nboxTokenFetchedAt: fetchedAt })],
+      [JSON.stringify({ nboxToken: token, nboxTokenFetchedAt: fetchedAt, nboxTokenScope: scope })],
     );
   } catch (err) {
     console.warn('[nbox] Could not persist token to DB (non-critical):', err.message);
@@ -63,7 +73,7 @@ async function clearTokenFromDb() {
   try {
     await db.query(
       `UPDATE integrations
-          SET config     = config - 'nboxToken' - 'nboxTokenFetchedAt',
+          SET config     = config - 'nboxToken' - 'nboxTokenFetchedAt' - 'nboxTokenScope',
               updated_at = NOW()
         WHERE integration_key = 'nbox'`,
     );
@@ -75,6 +85,7 @@ async function clearTokenFromDb() {
 async function invalidateToken() {
   _token.value = null;
   _token.fetchedAt = 0;
+  _token.scope = null;
   await clearTokenFromDb();
 }
 
@@ -85,17 +96,19 @@ async function freshToken() {
   if (!email || !password) {
     return env('NBOX_API_TOKEN');
   }
+  const scope = tokenScope();
 
   // 1. In-memory cache (fastest)
-  if (_token.value && (Date.now() - _token.fetchedAt) < TOKEN_TTL_MS) {
+  if (_token.scope === scope && _token.value && (Date.now() - _token.fetchedAt) < TOKEN_TTL_MS) {
     return _token.value;
   }
 
   // 2. DB cache (survives restarts / multiple workers)
-  const cached = await readTokenFromDb();
+  const cached = await readTokenFromDb(scope);
   if (cached && (Date.now() - cached.fetchedAt) < TOKEN_TTL_MS) {
     _token.value = cached.token;
     _token.fetchedAt = cached.fetchedAt;
+    _token.scope = scope;
     console.log('[nbox] Reused token from DB cache.');
     return _token.value;
   }
@@ -107,6 +120,7 @@ async function freshToken() {
     res = await fetch(`${base}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(20000),
       body: JSON.stringify({
         email,
         password,
@@ -130,8 +144,9 @@ async function freshToken() {
 
   _token.value = token;
   _token.fetchedAt = Date.now();
+  _token.scope = scope;
   console.log('[nbox] Obtained fresh token via login — persisting to DB.');
-  await persistTokenToDb(_token.value, _token.fetchedAt);
+  await persistTokenToDb(_token.value, _token.fetchedAt, scope);
   return token;
 }
 
@@ -265,8 +280,8 @@ function addressPayload(address = {}, defaults = {}) {
     countryCode: code,
     country: countryName(country),
     zip: address.zip || address.postalCode || address.postal_code || defaults.zip || '0000',
-    longitude: address.longitude || address.lng || defaults.longitude,
-    latitude: address.latitude || address.lat || defaults.latitude,
+    lng: address.longitude ?? address.lng ?? defaults.longitude,
+    lat: address.latitude ?? address.lat ?? defaults.latitude,
   });
 }
 
@@ -394,8 +409,8 @@ function orderTotals(items = [], shippingQuote = null) {
   };
 }
 
-function buildRatePayload({ shippingAddress, items }) {
-  const origin = originAddress();
+function buildRatePayload({ shippingAddress, items, origin: pickupOrigin }) {
+  const origin = pickupOrigin ? addressPayload(pickupOrigin) : originAddress();
   const destination = destinationAddress(shippingAddress);
   assertAddressComplete(origin, 'NBOX origin');
   assertAddressComplete(destination, 'NBOX destination');
@@ -408,10 +423,10 @@ function buildRatePayload({ shippingAddress, items }) {
   };
 }
 
-function buildOrderPayload({ orderNumber, customer, shippingAddress, items, shippingQuote }) {
+function buildOrderPayload({ orderNumber, customer, shippingAddress, items, shippingQuote, origin: pickupOrigin, externalReference }) {
   const totals = orderTotals(items, shippingQuote);
   const destination = destinationAddress(shippingAddress, customer);
-  const origin = originAddress();
+  const origin = pickupOrigin ? addressPayload(pickupOrigin) : originAddress();
   assertAddressComplete(origin, 'NBOX origin');
   assertAddressComplete(destination, 'NBOX destination');
 
@@ -429,7 +444,7 @@ function buildOrderPayload({ orderNumber, customer, shippingAddress, items, ship
       subTotal: totals.subTotal,
       tax: 0,
       discount: 0,
-      orderNumber: orderNumberValue(orderNumber),
+      orderNumber: externalReference || orderNumberValue(orderNumber),
       orderReference: String(orderNumber || ''),
       total: totals.total,
       currency: totals.currency,
@@ -468,15 +483,7 @@ async function postJson(path, payload, { retried = false } = {}) {
     throw new NboxError('NBOX API credentials are invalid.', { message: err.message });
   }
 
-  // Debug: log outgoing request (token masked to last 6 chars)
-  const debugHeaders = Object.fromEntries(
-    Object.entries(headers).map(([k, v]) =>
-      k.toLowerCase().includes('token') || k.toLowerCase() === 'authorization'
-        ? [k, `***${String(v).slice(-6)}`]
-        : [k, v],
-    ),
-  );
-  console.log('[nbox] outgoing request', { url, headers: debugHeaders });
+  console.log('[nbox] outgoing request', { url });
 
   let response;
   try {
@@ -484,6 +491,7 @@ async function postJson(path, payload, { retried = false } = {}) {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(20000),
     });
   } catch (err) {
     throw new NboxError('NBOX API request failed before a response was received.', {
@@ -498,7 +506,7 @@ async function postJson(path, payload, { retried = false } = {}) {
   } catch {
     data = { raw: text };
   }
-  console.log('[nbox] response', { status: response.status, body: text.slice(0, 500) });
+  console.log('[nbox] response', { status: response.status });
 
   if (response.status === 401 || response.status === 403) {
     if (!retried) {
@@ -537,6 +545,7 @@ async function postJson(path, payload, { retried = false } = {}) {
 
 function firstNumber(...values) {
   for (const value of values) {
+    if (value === null || value === undefined || value === '') continue;
     const n = Number(value);
     if (Number.isFinite(n) && n >= 0) return n;
   }
@@ -608,6 +617,7 @@ function normalizeQuote(response) {
     };
   }
 
+  const validAmount = [rate.amount,rate.price,rate.total,rate.total_price,rate.total_amount,rate.displayRate,rate.actualRate,rate.delivery_fee,rate.shipping_fee,rate.cost].some(v => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v)) && Number(v) >= 0);
   const amount = firstNumber(
     rate.amount,
     rate.price,
@@ -622,7 +632,7 @@ function normalizeQuote(response) {
   );
 
   return {
-    available: amount >= 0,
+    available: validAmount,
     id: firstString(rate.id, rate.rate_id, rate.quote_id, rate.service_id),
     serviceName: firstString(rate.service_name, rate.service, rate.name, rate.carrierName, rate.carrier, 'NBOX Delivery'),
     serviceCode: firstString(rate.service_code, rate.code, rate.carrier),
@@ -658,17 +668,17 @@ function normalizeShipment(response) {
   };
 }
 
-async function getDeliveryQuote({ customer, shippingAddress, items }) {
+async function getDeliveryQuote({ customer, shippingAddress, items, origin }) {
   const endpoint = env('NBOX_RATE_ENDPOINT');
   if (!endpoint) {
     throw new NboxError('NBOX_RATE_ENDPOINT is not configured.', { configured: false });
   }
 
-  const payload = buildRatePayload({ customer, shippingAddress, items });
+  const payload = buildRatePayload({ customer, shippingAddress, items, origin });
   return normalizeQuote(await postJson(endpoint, payload));
 }
 
-async function createShipment({ orderNumber, customer, shippingAddress, items, shippingQuote }) {
+async function createShipment({ orderNumber, customer, shippingAddress, items, shippingQuote, origin, externalReference }) {
   const endpoint = env('NBOX_SHIPMENT_ENDPOINT');
   if (!endpoint) {
     throw new NboxError('NBOX_SHIPMENT_ENDPOINT is not configured.', { configured: false });
@@ -676,6 +686,8 @@ async function createShipment({ orderNumber, customer, shippingAddress, items, s
 
   const payload = buildOrderPayload({
     orderNumber,
+    origin,
+    externalReference,
     customer,
     shippingAddress,
     items,
@@ -686,6 +698,7 @@ async function createShipment({ orderNumber, customer, shippingAddress, items, s
 
 module.exports = {
   NboxError,
+  cancelShipment: (reference) => postJson('/order/cancelled', { orderNumber: reference }),
   createShipment,
   getDeliveryQuote,
   isConfigured,

@@ -4,6 +4,8 @@ const bcrypt = require('bcryptjs');
 const db = require('../db/client');
 const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, ok, validationError } = require('./lib');
+const { authAttemptLimiter } = require('../middleware/rate-limit');
+const { requireAuth } = require('../middleware/require-auth');
 
 const router = Router();
 
@@ -28,6 +30,7 @@ function publicUser(row, tenantSlug) {
 
 router.post(
   '/login',
+  authAttemptLimiter,
   asyncHandler(async (req, res) => {
     const email = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '');
@@ -68,6 +71,12 @@ router.post(
 
       const session = req.session;
       session.user = publicUser(user, tenant.slug);
+      session.sessionMeta = {
+        createdAt: new Date().toISOString(),
+        lastSeenAt: new Date().toISOString(),
+        ip: req.ip || null,
+        userAgent: req.headers['user-agent'] || null,
+      };
       session.save((err) => {
         if (err) {
           return res.status(500).json({ success: false, message: 'Failed to start session.' });
@@ -82,11 +91,9 @@ router.post(
 
 router.get(
   '/me',
+  requireAuth(),
   asyncHandler(async (req, res) => {
-    if (!req.session || !req.session.user) {
-      return res.status(401).json({ success: false, message: 'Not authenticated.' });
-    }
-    ok(res, req.session.user);
+    ok(res, req.user);
   }),
 );
 
@@ -114,6 +121,7 @@ router.post(
  */
 router.post(
   '/forgot',
+  authAttemptLimiter,
   asyncHandler(async (req, res) => {
     const email = String(req.body?.email || '').trim().toLowerCase();
     if (!email) return validationError(res, ['Email is required.']);
@@ -151,7 +159,9 @@ router.post(
 
         // Real deployments would send this via email/SMS. For local dev we
         // log it so the URL is recoverable from the server console.
-        const adminBase = process.env.ADMIN_BASE_URL || 'http://localhost:4300';
+        // Prefer the actual request origin over a hardcoded fallback — see
+        // the matching fix in admin-settings.route.js's invite-link builder.
+        const adminBase = req.get('origin') || process.env.ADMIN_BASE_URL || 'http://localhost:4300';
         const resetUrl = `${adminBase}/reset-password?token=${rawToken}`;
         console.log(`\n[auth] Password reset requested for ${email}`);
         console.log(`[auth] Reset URL (valid 30m): ${resetUrl}\n`);
@@ -173,6 +183,7 @@ router.post(
  */
 router.post(
   '/reset',
+  authAttemptLimiter,
   asyncHandler(async (req, res) => {
     const rawToken = String(req.body?.token || '').trim();
     const password = String(req.body?.password || '');

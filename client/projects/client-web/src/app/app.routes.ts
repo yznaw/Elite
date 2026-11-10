@@ -85,14 +85,23 @@ export const routes: Routes = [
       ),
   },
   {
-    path: 'kiosk',
+    path: 'experience',
     loadComponent: () =>
-      import('./pages/kiosk/kiosk.component').then((m) => m.KioskComponent),
+      import('./pages/experience/experience.component').then((m) => m.ExperienceComponent),
   },
   {
     path: 'policy/:handle',
     loadComponent: () =>
       import('./pages/policy/policy.component').then((m) => m.PolicyComponent),
   },
-  { path: '**', redirectTo: '' },
+  // Renders a dead end rather than redirecting home. A redirect reported every
+  // bad URL to crawlers as a working duplicate of the homepage; NotFound sets
+  // `noindex` instead. See not-found.component.ts.
+  {
+    path: '**',
+    loadComponent: () =>
+      import('./pages/not-found/not-found.component').then(
+        (m) => m.NotFoundComponent,
+      ),
+  },
 ];

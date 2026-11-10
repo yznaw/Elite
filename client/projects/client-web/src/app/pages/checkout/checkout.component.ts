@@ -1,14 +1,16 @@
-import { Component, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, effect, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { Router } from '@angular/router';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { CartService } from '../../services/cart.service';
+import { CartService, stockShortages } from '../../services/cart.service';
+import { CartItem } from '../../models/product.model';
 import { CheckoutService } from '../../services/checkout.service';
 import { DeliveryQuote } from '../../services/checkout.service';
 import { PaymentService } from '../../services/payment.service';
 import { I18nService } from '../../services/i18n.service';
+import { API_BASE } from '../../core/api-base';
 
 // Written just before the browser is sent to Sadad. On Back, ngOnInit reads
 // this and silently resumes the checkout at the Payment step.
@@ -38,11 +40,11 @@ type CustomerField = 'firstName' | 'lastName' | 'email' | 'phone';
 type DeliveryField = 'zone' | 'street' | 'building' | 'city';
 
 @Component({
-  selector: 'cw-checkout',
-  standalone: true,
-  imports: [CommonModule, RouterLink],
-  templateUrl: './checkout.component.html',
-  styleUrl: './checkout.component.scss',
+    selector: 'cw-checkout',
+    imports: [CommonModule, RouterLink],
+    templateUrl: './checkout.component.html',
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    styleUrl: './checkout.component.scss'
 })
 export class CheckoutComponent implements OnInit, OnDestroy {
   readonly cart = inject(CartService);
@@ -51,6 +53,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly http = inject(HttpClient);
   private readonly i18n = inject(I18nService);
+  private readonly apiBase = inject(API_BASE);
 
   readonly termsHandle   = signal<string | null>(null);
   readonly privacyHandle = signal<string | null>(null);
@@ -62,11 +65,6 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   // successful order so the next checkout gets a fresh key.
   private idempotencyKey: string | null = null;
 
-  private get apiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 
   // Bound reference so we can add AND remove the same listener.
   private readonly onPageShow = (event: PageTransitionEvent): void => {
@@ -114,6 +112,9 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
+    // The bag may have been filled days ago. Re-read it so lines that sold out
+    // since are flagged now, not when the customer presses Proceed to Payment.
+    void this.cart.refresh();
     // Covers the normal navigation case (fresh load / SPA route).
     this.silentResume();
     // Covers the bfcache case (browser Back from Sadad restores a frozen page).
@@ -180,6 +181,16 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   readonly deliveryFee = computed(() => this.shippingQuote()?.amount || 0);
   readonly total = computed(() => (this.placed() ? this.placedTotal() : this.subtotal() + this.deliveryFee()));
 
+  /** Explains which bag lines block checkout. Empty when every line is in stock. */
+  readonly stockMessage = computed(() => {
+    const issues = this.cart.stockIssues();
+    if (issues.length === 0) return '';
+    if (issues.length > 1) return this.tp('checkout.stock.many', { count: issues.length });
+    const [item] = issues;
+    const params = { name: this.itemName(item), size: item.size, count: item.available ?? 0 };
+    return item.available ? this.tp('checkout.stock.short', params) : this.tp('checkout.stock.soldOut', params);
+  });
+
   constructor() {
     effect((onCleanup) => {
       const currentStep = this.step();
@@ -205,6 +216,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   }
 
   readonly t = (key: string): string => this.i18n.t(key);
+  readonly tp = (key: string, params: Record<string, string | number>): string => this.i18n.t(key, params);
   readonly price = (value: number): string => this.i18n.price(value);
   readonly itemName = (item: { id: string; name: string }): string => this.i18n.productName(item);
 
@@ -254,6 +266,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
 
   async next(): Promise<void> {
     this.error.set('');
+    if (this.cart.stockIssues().length) return;
     if (!this.isCurrentStepValid()) {
       if (this.step() === 0) {
         this.touched.set({ firstName: true, lastName: true, email: true, phone: true });
@@ -266,6 +279,13 @@ export class CheckoutComponent implements OnInit, OnDestroy {
 
     if (this.step() === 1 && !(await this.ensureDeliveryQuote())) {
       return;
+    }
+
+    // Last cheap look at stock before the payment step, since filling in the
+    // form can take a while.
+    if (this.step() === 1) {
+      await this.cart.refresh();
+      if (this.cart.stockIssues().length) return;
     }
 
     if (this.step() < STEPS.length - 1) {
@@ -292,6 +312,21 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     window.scrollTo(0, 0);
   }
 
+
+  stockLabel(item: CartItem): string {
+    if (item.available == null || item.qty <= item.available) return '';
+    return item.available === 0
+      ? this.t('cart.stock.soldOut')
+      : this.tp('cart.stock.onlyLeft', { count: item.available });
+  }
+
+  /** Removes a sold-out line, or lowers it to what is left. */
+  fixStock(item: CartItem): void {
+    // The bag changed, so a retry must not reuse the previous attempt's key.
+    this.idempotencyKey = null;
+    this.error.set('');
+    void this.cart.setQty(item, item.available ?? 0);
+  }
 
   onImgError(e: Event): void {
     (e.target as HTMLImageElement).style.display = 'none';
@@ -337,7 +372,11 @@ export class CheckoutComponent implements OnInit, OnDestroy {
       this.error.set(this.t('checkout.error.empty'));
       return;
     }
+    const acceptedDelivery = this.shippingQuote();
+    const quoteWasCurrent = acceptedDelivery?.available && (!acceptedDelivery.expiresAt || Date.parse(acceptedDelivery.expiresAt) > Date.now())
+      && this.deliveryQuoteKey(this.form(), this.cart.items()) === this.quotedDeliveryKey;
     if (!(await this.ensureDeliveryQuote())) return;
+    if (!quoteWasCurrent) { this.error.set(this.t('checkout.delivery.reviewChanged')); return; }
 
     const form = this.form();
     const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
@@ -374,8 +413,16 @@ export class CheckoutComponent implements OnInit, OnDestroy {
         idempotencyKey: this.idempotencyKey,
       });
       orderId = order.id; // UUID for payment gateway
-    } catch {
-      this.error.set(this.t('checkout.error.submit'));
+    } catch (err) {
+      if (err instanceof HttpErrorResponse && ['QUOTE_CHANGED','INVALID_ID','RESERVATION_EXPIRED'].includes(err.error?.code)) {
+        this.shippingQuote.set(null);
+        this.idempotencyKey = '';
+        await this.ensureDeliveryQuote();
+        this.error.set(this.t('checkout.delivery.reviewChanged'));
+        this.placing.set(false);
+        return;
+      }
+      this.error.set(await this.orderErrorMessage(err));
       this.placing.set(false);
       return;
     }
@@ -391,19 +438,49 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     try {
       // This call builds a hidden form and submits it — browser navigates away.
       await this.paymentService.redirectToSadadCheckout(orderId);
-    } catch {
+    } catch (err) {
       sessionStorage.removeItem(PENDING_ORDER_KEY);
       sessionStorage.removeItem(PENDING_FORM_KEY);
       sessionStorage.removeItem(PENDING_QUOTE_KEY);
       this.redirecting.set(false);
-      this.error.set(this.t('checkout.error.payment'));
+      if (err instanceof HttpErrorResponse && err.error?.code === 'RESERVATION_EXPIRED') {
+        this.idempotencyKey = '';
+        this.shippingQuote.set(null);
+        this.error.set(this.t('checkout.delivery.reviewChanged'));
+      } else {
+        this.error.set(this.t('checkout.error.payment'));
+      }
     }
+  }
+
+  private async orderErrorMessage(err: unknown): Promise<string> {
+    const shortages = stockShortages(err);
+    if (shortages.length) {
+      await this.cart.refresh();
+      // The refreshed bag flags the lines itself and stockMessage explains them.
+      if (this.cart.stockIssues().length) return '';
+      if (shortages.length > 1) return this.tp('checkout.stock.many', { count: shortages.length });
+      const [s] = shortages;
+      const params = { name: this.itemName({ id: '', name: s.name }), size: s.size ?? '', count: s.available };
+      return s.available ? this.tp('checkout.stock.short', params) : this.tp('checkout.stock.soldOut', params);
+    }
+    if (err instanceof HttpErrorResponse) {
+      if (err.status === 409 && err.error?.code === 'ITEM_UNAVAILABLE') {
+        // The catalog changed under the bag (hidden product, removed size, new price).
+        await this.cart.refresh();
+        const [line] = Array.isArray(err.error.details) ? err.error.details : [];
+        return this.tp('checkout.error.itemUnavailable', { name: this.itemName({ id: '', name: line?.name || '' }) });
+      }
+      if (err.status === 0) return this.t('checkout.error.network');
+      if (err.status === 422) return this.t('checkout.error.validation');
+    }
+    return this.t('checkout.error.submit');
   }
 
   private async ensureDeliveryQuote(): Promise<boolean> {
     const existing = this.shippingQuote();
     const deliveryKey = this.deliveryQuoteKey(this.form(), this.cart.items());
-    if (existing?.available && deliveryKey === this.quotedDeliveryKey) return true;
+    if (existing?.available && (!existing.expiresAt || Date.parse(existing.expiresAt)>Date.now()) && deliveryKey === this.quotedDeliveryKey) return true;
     if (this.quoteLoading()) return false;
 
     const requestVersion = ++this.quoteRequestVersion;

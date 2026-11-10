@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
@@ -16,7 +16,7 @@ import { AdminProductsService } from '../../services/admin-products.service';
 import { MediaUploadService } from '../../services/media-upload.service';
 import { fmtBytes, MediaFile, Product } from '../../models';
 
-type FilterKey = 'all' | 'image' | 'glb' | 'unlinked';
+type FilterKey = 'all' | 'image' | 'unlinked';
 
 interface PendingUpload {
   id: string;
@@ -27,16 +27,15 @@ interface PendingUpload {
 }
 
 @Component({
-  selector: 'ap-media',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent, EmptyStateComponent, PaginationComponent, MediaCardComponent, MediaDetailDrawerComponent, AutoLinkModalComponent],
-  template: `
+    selector: 'ap-media',
+    imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent, EmptyStateComponent, PaginationComponent, MediaCardComponent, MediaDetailDrawerComponent, AutoLinkModalComponent],
+    template: `
     <div class="page-fade">
       <div class="grid-4 mb-24">
         <div class="stat-card">
           <div class="lbl">{{ t('media.totalFiles') }}</div>
           <div class="v">{{ counts().all }}</div>
-          <div class="muted small mt-8">{{ counts().image }} {{ t('media.filter.images') }} · {{ counts().glb }} {{ t('media.filter.3d') }}</div>
+          <div class="muted small mt-8">{{ counts().image }} {{ t('media.filter.images') }}</div>
         </div>
         <div class="stat-card">
           <div class="lbl">{{ t('media.linkedCount') }}</div>
@@ -71,7 +70,7 @@ interface PendingUpload {
             <div class="row gap-sm" style="justify-content:center;flex-wrap:wrap;">
               <label class="btn btn-primary" style="cursor:pointer;">
                 <ap-icon name="upload" [size]="14"/> {{ t('media.browse') }}
-                <input type="file" multiple accept="image/*,.glb,.gltf" hidden (change)="onPick($event)"/>
+                <input type="file" multiple accept="image/*" hidden (change)="onPick($event)"/>
               </label>
               <button class="btn btn-outline" (click)="openGDrive()">
                 <ap-icon name="link" [size]="14"/> {{ t('media.gdrive.btn') }}
@@ -92,7 +91,7 @@ interface PendingUpload {
                 <div class="upload-row" [class.is-error]="!!u.error">
                   <div class="upload-thumb">
                     @if (u.thumb) { <img [src]="u.thumb" [alt]="u.name"/> }
-                    @else { <ap-icon name="cube" [size]="18"/> }
+                    @else { <ap-icon name="media" [size]="18"/> }
                   </div>
                   <div class="upload-meta">
                     <div class="upload-name">{{ u.name }}</div>
@@ -120,25 +119,58 @@ interface PendingUpload {
           <button class="chip" [class.active]="filter() === 'image'" (click)="filter.set('image'); page.set(0)">
             {{ t('media.filter.images') }} <span class="chip-count">{{ counts().image }}</span>
           </button>
-          <button class="chip" [class.active]="filter() === 'glb'" (click)="filter.set('glb'); page.set(0)">
-            {{ t('media.filter.3d') }} <span class="chip-count">{{ counts().glb }}</span>
-          </button>
           <button class="chip" [class.active]="filter() === 'unlinked'" (click)="filter.set('unlinked'); page.set(0)"
                   [style.background]="filter() === 'unlinked' ? 'var(--warning)' : ''" [style.border-color]="filter() === 'unlinked' ? 'var(--warning)' : ''">
             {{ t('media.filter.unlinked') }} <span class="chip-count">{{ counts().unlinked }}</span>
           </button>
         </div>
 
-        @if (counts().unlinked > 0) {
-          <button class="btn btn-danger-outline btn-sm" [disabled]="cleaningUp()" (click)="cleanupOrphaned()">
-            @if (cleaningUp()) {
-              <span class="pg-spinner"></span> {{ t('media.cleanup.btn.loading') }}
-            } @else {
-              🗑 {{ counts().unlinked }} {{ t('media.cleanup.btn.unlinked') }} {{ counts().unlinked === 1 ? t('media.cleanup.btn.file') : t('media.cleanup.btn.files') }} ({{ orphanedSize() }})
-            }
+        <div class="row gap-sm" style="flex-wrap:wrap;">
+          <button class="btn btn-sm" [class.btn-outline]="!selectionMode()" [class.btn-active]="selectionMode()"
+                  (click)="toggleSelectionMode()" [title]="t('media.btn.select')">
+            <ap-icon name="check" [size]="13"/> {{ selectionMode() ? t('common.cancel') : t('media.btn.select') }}
           </button>
-        }
+          @if (counts().unlinked > 0) {
+            <button class="btn btn-danger-outline btn-sm" [disabled]="cleaningUp()" (click)="cleanupOrphaned()">
+              @if (cleaningUp()) {
+                <span class="pg-spinner"></span> {{ t('media.cleanup.btn.loading') }}
+              } @else {
+                🗑 {{ counts().unlinked }} {{ t('media.cleanup.btn.unlinked') }} {{ counts().unlinked === 1 ? t('media.cleanup.btn.file') : t('media.cleanup.btn.files') }} ({{ orphanedSize() }})
+              }
+            </button>
+          }
+        </div>
       </div>
+
+      @if (selectionMode()) {
+        <div class="sel-bar mb-16">
+          <div class="sel-count">
+            @if (selectedIds().size === 0) {
+              <span class="muted">{{ t('media.selection.tap') }}</span>
+            } @else {
+              <strong>{{ selectedIds().size }}</strong> {{ t('media.selection.of') }} {{ pagedMedia().length }} {{ t('media.selection.selected') }}
+            }
+          </div>
+          <div class="sel-actions">
+            <button class="btn btn-sm btn-outline" (click)="selectAll()">{{ t('media.selection.selectAll') }} ({{ pagedMedia().length }})</button>
+            @if (selectedIds().size > 0) {
+              <button class="btn btn-sm btn-outline" (click)="clearSelection()">{{ t('media.selection.clear') }}</button>
+
+              @if (confirmingDelete()) {
+                <div class="del-confirm">
+                  <span class="del-warn">{{ t('common.delete') }} {{ selectedIds().size }} {{ selectedIds().size === 1 ? t('media.cleanup.btn.file') : t('media.cleanup.btn.files') }}?</span>
+                  <button class="btn btn-sm btn-danger" (click)="confirmBulkDelete()">{{ t('media.bulk.confirmDelete') }}</button>
+                  <button class="btn btn-sm btn-outline" (click)="confirmingDelete.set(false)">{{ t('common.cancel') }}</button>
+                </div>
+              } @else {
+                <button class="btn btn-sm btn-danger" (click)="confirmingDelete.set(true)">
+                  <ap-icon name="trash" [size]="13"/> {{ t('common.delete') }} ({{ selectedIds().size }})
+                </button>
+              }
+            }
+          </div>
+        </div>
+      }
 
       @if (filtered().length === 0) {
         <div class="card">
@@ -149,7 +181,10 @@ interface PendingUpload {
       } @else {
         <div class="media-grid">
           @for (m of pagedMedia(); track m.id) {
-            <ap-media-card [media]="m" [products]="products()" [selected]="active()?.id === m.id" (clicked)="active.set(m)"/>
+            <ap-media-card [media]="m" [products]="products()"
+              [selectionMode]="selectionMode()"
+              [selected]="selectionMode() ? selectedIds().has(m.id) : active()?.id === m.id"
+              (clicked)="selectionMode() ? toggleSelect(m.id) : active.set(m)"/>
           }
         </div>
 
@@ -217,7 +252,8 @@ interface PendingUpload {
       </div>
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .upload-list {
       margin-top: 16px;
       display: flex;
@@ -344,7 +380,27 @@ interface PendingUpload {
       .upload-row { grid-template-columns: 32px 1fr auto; padding: 8px; }
       .upload-thumb { width: 32px; height: 32px; }
     }
-  `],
+
+    /* ── Selection toolbar ── */
+    .sel-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; padding: 10px 14px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; flex-wrap: wrap;
+    }
+    .sel-count { font-size: 13px; flex-shrink: 0; }
+    .sel-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .del-confirm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .del-warn { font-size: 12px; color: #dc2626; font-weight: 600; }
+    .btn-active { background: #c9a84c22; border-color: #c9a84c; color: #a07830; }
+    .btn-danger { background: #dc2626; color: #fff; border-color: #dc2626; }
+    .btn-danger:hover { background: #b91c1c; border-color: #b91c1c; }
+
+    @media (max-width: 640px) {
+      .sel-bar { flex-direction: column; align-items: flex-start; }
+      .sel-actions { width: 100%; flex-wrap: wrap; }
+    }
+  `]
 })
 export class MediaComponent implements OnInit {
   private readonly toast = inject(ToastService);
@@ -369,6 +425,10 @@ export class MediaComponent implements OnInit {
   readonly page = signal(0);
   readonly pageSize = signal(48);
 
+  readonly selectionMode = signal(false);
+  readonly selectedIds = signal(new Set<string>());
+  readonly confirmingDelete = signal(false);
+
   // ── Default fallback image ───────────────────────────────────────────────
 
   async setDefaultImage(m: MediaFile): Promise<void> {
@@ -378,8 +438,8 @@ export class MediaComponent implements OnInit {
       await this.mediaApi.setDefaultImage(m.preview || '');
       this.defaultImageUrl.set(m.preview || '');
       this.toast.success(this.t('media.toast.defaultSet'), `"${m.name}" ${this.t('media.toast.defaultSet.sub')}`);
-    } catch {
-      this.toast.error(this.t('media.toast.defaultError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('media.toast.defaultError'));
     } finally {
       this.settingDefault.set(false);
     }
@@ -449,8 +509,11 @@ export class MediaComponent implements OnInit {
     return {
       all: m.length,
       image: m.filter((x) => x.kind === 'image').length,
-      glb: m.filter((x) => x.kind === 'glb').length,
-      unlinked: m.filter((x) => !x.linkedTo).length,
+      // "Unlinked" here means eligible for the orphan-cleanup delete, so an
+      // asset the homepage hero/story content uses directly (no media_links
+      // row, see server/routes/admin-media.route.js) must not count as
+      // unlinked even though it has no linkedTo product.
+      unlinked: m.filter((x) => !x.linkedTo && !x.usedInContent).length,
     };
   });
 
@@ -466,8 +529,7 @@ export class MediaComponent implements OnInit {
     const m = this.media();
     if (f === 'all') return m;
     if (f === 'image') return m.filter((x) => x.kind === 'image');
-    if (f === 'glb') return m.filter((x) => x.kind === 'glb');
-    return m.filter((x) => !x.linkedTo);
+    return m.filter((x) => !x.linkedTo && !x.usedInContent);
   });
 
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize())));
@@ -479,7 +541,7 @@ export class MediaComponent implements OnInit {
   });
 
   readonly orphanedSize = computed(() =>
-    fmtBytes(this.media().filter((m) => !m.linkedTo).reduce((s, m) => s + m.size, 0)),
+    fmtBytes(this.media().filter((m) => !m.linkedTo && !m.usedInContent).reduce((s, m) => s + m.size, 0)),
   );
 
   onPageSizeChange(size: number): void {
@@ -500,8 +562,14 @@ export class MediaComponent implements OnInit {
     if (!ok) return;
     this.cleaningUp.set(true);
     try {
-      const { deleted } = await this.mediaApi.deleteOrphaned();
-      this.media.update((all) => all.filter((m) => m.linkedTo));
+      const { deleted, ids } = await this.mediaApi.deleteOrphaned();
+      // Filter by the ids the server actually deleted, not by `linkedTo` —
+      // an asset used only by the homepage hero/story content has no
+      // linkedTo product either, but the server correctly leaves it alone.
+      // Filtering on `linkedTo` here would drop it from the local list even
+      // though it still exists, out of sync until the next reload.
+      const deletedIds = new Set(ids ?? []);
+      this.media.update((all) => all.filter((m) => !deletedIds.has(m.id)));
       this.page.set(0);
       this.toast.success(
         `${deleted} ${deleted === 1 ? this.t('media.cleanup.btn.file') : this.t('media.cleanup.btn.files')} ${this.t('media.toast.deleted').toLowerCase()}`,
@@ -622,6 +690,45 @@ export class MediaComponent implements OnInit {
       label: this.t('media.toast.undo'),
       run: () => this.media.update((all) => [...all, removed]),
     } : undefined);
+  }
+
+  // ── Bulk selection ────────────────────────────────────────────────────────
+
+  toggleSelectionMode(): void {
+    this.selectionMode.update((v) => !v);
+    this.selectedIds.set(new Set());
+    this.confirmingDelete.set(false);
+    this.active.set(null);
+  }
+
+  toggleSelect(id: string): void {
+    this.selectedIds.update((set) => {
+      const next = new Set(set);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  selectAll(): void { this.selectedIds.set(new Set(this.pagedMedia().map((m) => m.id))); }
+  clearSelection(): void { this.selectedIds.set(new Set()); }
+
+  async confirmBulkDelete(): Promise<void> {
+    const ids = [...this.selectedIds()];
+    if (!ids.length) return;
+    this.confirmingDelete.set(false);
+    const removed = this.media().filter((m) => ids.includes(m.id));
+    this.media.update((all) => all.filter((m) => !ids.includes(m.id)));
+    this.selectedIds.set(new Set());
+    this.selectionMode.set(false);
+    try {
+      const { deleted } = await this.mediaApi.bulkDelete(ids);
+      this.toast.success(
+        `${deleted} ${deleted === 1 ? this.t('media.cleanup.btn.file') : this.t('media.cleanup.btn.files')} — ${this.t('common.delete').toLowerCase()}`,
+      );
+    } catch (caught) {
+      this.media.update((all) => [...removed, ...all]);
+      this.toast.errorFrom(caught, this.t('media.toast.bulkDeleteError'));
+    }
   }
 
   applyAutoLink(pairs: LinkPair[]): void {

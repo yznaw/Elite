@@ -1,7 +1,10 @@
+import { isPlatformBrowser, isPlatformServer } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { ApplicationRef, Injectable, PLATFORM_ID, TransferState, computed, inject, makeStateKey, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { EMPTY_HOME_CONTENT, HomeContentData, createEmptyHomeContent } from '../models/home-content.model';
+import { EMPTY_HOME_CONTENT, HeroProductRef, HomeContentData, MediaVariant, createEmptyHomeContent } from '../models/home-content.model';
+import { mediaVariantKey, resolveClientMediaUrl } from '../utils/media-url';
+import { API_BASE, PUBLIC_API_BASE } from '../core/api-base';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -19,6 +22,25 @@ interface StorefrontSnapshot {
   blocks: Array<{ id: string; title: string; visible: boolean }>;
 }
 
+/**
+ * What the server rendered the home page with, handed to the browser inside the
+ * document so the first client render can match it exactly.
+ *
+ * The HTTP transfer cache already stops the browser re-requesting this data,
+ * but it hands it back through `HttpClient`, which resolves a promise — always
+ * at least a microtask after the first change detection. That gap is enough:
+ * the page arrives fully rendered, the client's first pass finds empty content
+ * and `loading` still true, swaps the whole page for the loading shell, and
+ * swaps back a frame later. Seeding straight from `TransferState` is
+ * synchronous, so there is no pass where the state disagrees with the DOM.
+ */
+interface HomeContentSnapshot {
+  content: HomeContentData;
+  layout: HomeLayoutSection[];
+}
+
+const HOME_STATE_KEY = makeStateKey<HomeContentSnapshot>('home-content');
+
 const DEFAULT_HOME_LAYOUT: HomeLayoutSection[] = [
   { id: 'home-hero',        title: 'Landing Hero',        visible: true },
   { id: 'home-collections', title: 'Featured Collections', visible: true },
@@ -30,13 +52,50 @@ const DEFAULT_HOME_LAYOUT: HomeLayoutSection[] = [
 @Injectable({ providedIn: 'root' })
 export class HomeContentService {
   private readonly http = inject(HttpClient);
-  private readonly apiBase = this.resolveApiBase();
-  private readonly _contentData = signal<HomeContentData>(this.cloneContent(EMPTY_HOME_CONTENT));
-  private readonly _layoutSections = signal<HomeLayoutSection[]>([]);
-  private readonly _loading = signal(true);
-  private readonly _loaded = signal(false);
+  private readonly apiBase = inject(API_BASE);
+  private readonly publicApiBase = inject(PUBLIC_API_BASE);
+  private readonly transferState = inject(TransferState);
+  private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
+  /**
+   * Null on the server and on a cold client; the server's render on a hydrating
+   * one. Read once, here, because these fields initialise in declaration order
+   * and every signal below depends on it.
+   */
+  private readonly seeded = this.transferState.get(HOME_STATE_KEY, null);
+
+  private readonly _contentData = signal<HomeContentData>(
+    this.seeded ? this.seeded.content : this.cloneContent(EMPTY_HOME_CONTENT),
+  );
+  private readonly _layoutSections = signal<HomeLayoutSection[]>(this.seeded?.layout ?? []);
+  // `loading` gates a full-page loading shell, so it means "nothing to show
+  // yet", not "a request is in flight". A hydrating client has the server's
+  // page on screen already and must not start out claiming otherwise.
+  private readonly _loading = signal(!this.seeded);
+  private readonly _loaded = signal(this.seeded !== null);
   private readonly _previewToken = signal<string | null>(this.detectPreviewToken());
   private loadPromise: Promise<HomeContentData> | null = null;
+
+  /**
+   * False until the app has finished starting (and, after a server render,
+   * hydrating). Pages call `refresh(true)` on init so admin edits show on the
+   * next in-app navigation, and forcing appends a `?t=` timestamp. During
+   * startup that is exactly wrong: the server rendered the page with the plain
+   * URL and shipped the response in the transfer cache, keyed by that exact
+   * URL, so a timestamped request can never be served from it and the browser
+   * would download the content a second time. Content loaded moments ago by
+   * the server, or by the first request of a fresh tab, is not stale, so
+   * until the app is stable a forced refresh just shares the plain load. The
+   * server never leaves this window: each render is its own fresh request.
+   */
+  private startupSettled = false;
+
+  constructor() {
+    if (isPlatformBrowser(inject(PLATFORM_ID))) {
+      void inject(ApplicationRef).whenStable().then(() => {
+        this.startupSettled = true;
+      });
+    }
+  }
 
   readonly contentData = this._contentData.asReadonly();
   readonly layoutSections = this._layoutSections.asReadonly();
@@ -52,7 +111,7 @@ export class HomeContentService {
     if (token) {
       // Preview mode: never cache — always fetch the latest saved draft
       // so re-opening preview always reflects the most recent Save Draft.
-      this._loading.set(true);
+      if (!this._loaded()) this._loading.set(true);
       const bust = `&t=${Date.now()}`;
       return firstValueFrom(
         this.http.get<ApiResponse<HomeContentData>>(
@@ -62,6 +121,7 @@ export class HomeContentService {
         .then((res) => {
           if (res.data) this._contentData.set(this.normalizeContentImages(res.data));
           this._loaded.set(true);
+          this.captureForClient();
           return this._contentData();
         })
         .catch(() => this._contentData())
@@ -70,13 +130,22 @@ export class HomeContentService {
         });
     }
 
-    if (force) this.loadPromise = null;
+    // Only a forced refresh after startup reloads and busts; see startupSettled.
+    const reload = force && this.startupSettled;
+    if (reload) this.loadPromise = null;
     if (this.loadPromise) return this.loadPromise;
 
     // Normal mode: load live content + layout
-    const bust = force ? `?t=${Date.now()}` : '';
-    this._loading.set(true);
-    this._loaded.set(false);
+    const bust = reload ? `?t=${Date.now()}` : '';
+    // Only when there is genuinely nothing on screen. Every caller of this is
+    // also the hydration path and the in-app return to `/`, where the page is
+    // already rendered: flipping these unconditionally is what replaced it with
+    // the loading shell for a frame. A reload with content up is a background
+    // revalidation, and the new data simply lands when it lands.
+    if (!this._loaded()) {
+      this._loading.set(true);
+      this._loaded.set(false);
+    }
 
     this.loadPromise = Promise.allSettled([
       firstValueFrom(this.http.get<ApiResponse<HomeContentData>>(`${this.apiBase}/storefront-content${bust}`)),
@@ -95,6 +164,7 @@ export class HomeContentService {
         }
 
         this._loaded.set(true);
+        this.captureForClient();
         return this._contentData();
       })
       .catch(() => this._contentData())
@@ -105,6 +175,22 @@ export class HomeContentService {
     return this.loadPromise;
   }
 
+  /**
+   * Hand the rendered state to the browser. Server-only: on the client this
+   * would just grow the payload of a document nobody re-reads.
+   *
+   * Stored already normalised, which is safe because `PUBLIC_API_BASE` resolves
+   * to the same value on both sides for the same page (see core/api-base.ts) --
+   * the image URLs in here are the ones the browser would have built anyway.
+   */
+  private captureForClient(): void {
+    if (!this.isServer) return;
+    this.transferState.set(HOME_STATE_KEY, {
+      content: this._contentData(),
+      layout: this._layoutSections(),
+    });
+  }
+
   private detectPreviewToken(): string | null {
     if (typeof window === 'undefined') return null;
     const params = new URLSearchParams(window.location.search);
@@ -112,16 +198,6 @@ export class HomeContentService {
     return token && token.length > 0 ? token : null;
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal =
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      /^10\./.test(hostname) ||
-      /^192\.168\./.test(hostname) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 
   private cloneContent(content: HomeContentData): HomeContentData {
     return JSON.parse(JSON.stringify(content)) as HomeContentData;
@@ -149,24 +225,36 @@ export class HomeContentService {
       ...content,
       hero:       { ...fallback.hero,       ...(content.hero       || {}) },
       collections: Array.isArray(content.collections) ? content.collections : fallback.collections,
+      collectionsIntro: { ...fallback.collectionsIntro, ...(content.collectionsIntro || {}) },
       heroSlider: {
         ctaEn: content.heroSlider?.ctaEn || fallback.heroSlider.ctaEn,
         ctaAr: content.heroSlider?.ctaAr || fallback.heroSlider.ctaAr,
+        productCtaEn: content.heroSlider?.productCtaEn || fallback.heroSlider.productCtaEn,
+        productCtaAr: content.heroSlider?.productCtaAr || fallback.heroSlider.productCtaAr,
         items: Array.isArray(content.heroSlider?.items)
           ? content.heroSlider.items.map((item) => ({
               ...item,
-              callouts: Array.isArray(item.callouts) ? item.callouts : [],
+              descriptionEn: item.descriptionEn || '',
+              descriptionAr: item.descriptionAr || '',
+              productId: item.productId || '',
+              defaultColorSlug: item.defaultColorSlug || '',
+              colors: Array.isArray(item.colors)
+                ? item.colors.map((color) => ({ ...color, imageUrl: color.imageUrl || '' }))
+                : [],
             }))
           : fallback.heroSlider.items,
       },
       promise: {
+        ...fallback.promise,
+        ...(content.promise || {}),
         cards: Array.isArray(content.promise?.cards) ? content.promise!.cards : fallback.promise.cards,
       },
       stats: Array.isArray(content.stats) ? content.stats : fallback.stats,
       contact: {
         ...fallback.contact,
         ...(content.contact || {}),
-        infoBlocks:  Array.isArray(content.contact?.infoBlocks)  ? content.contact!.infoBlocks  : fallback.contact.infoBlocks,
+        branches:    Array.isArray(content.contact?.branches)    ? content.contact!.branches    : fallback.contact.branches,
+        stockists:   Array.isArray(content.contact?.stockists)   ? content.contact!.stockists   : fallback.contact.stockists,
         socialLinks: Array.isArray(content.contact?.socialLinks) ? content.contact!.socialLinks : fallback.contact.socialLinks,
       },
       story: {
@@ -199,21 +287,50 @@ export class HomeContentService {
     next.heroSlider.items = next.heroSlider.items.map((item) => ({
       ...item,
       imageUrl: this.resolveMediaUrl(item.imageUrl),
-      callouts: (item.callouts ?? []).map((cl) => ({
-        ...cl,
-        titleEn: cl.titleEn || cl.subtitleEn || cl.titleAr || '',
-        subtitleAr: cl.subtitleAr || '',
-        thumbnail: this.resolveMediaUrl(cl.thumbnail),
+      colors: (item.colors ?? []).map((color) => ({
+        ...color,
+        imageUrl: this.resolveMediaUrl(color.imageUrl),
       })),
     }));
+
+    // Rekeyed to the bare filename and with each candidate rebased onto this
+    // page's API, so the hero can look a variant set up from whatever form of
+    // the URL it happens to be holding.
+    next.mediaVariants = Object.entries(content.mediaVariants ?? {}).reduce(
+      (map, [storageUrl, variants]) => {
+        const key = mediaVariantKey(storageUrl);
+        if (!key || !Array.isArray(variants)) return map;
+        map[key] = variants
+          .filter((variant) => variant?.url && variant.width > 0)
+          .map((variant) => ({
+            url: this.resolveMediaUrl(variant.url),
+            width: variant.width,
+          }));
+        return map;
+      },
+      {} as Record<string, MediaVariant[]>,
+    );
+
+    // Carried through as-is: ids, a slug and colour labels, with no URL in it to
+    // rebase. Copied rather than referenced so a later mutation of the raw
+    // response cannot reach into the signal the hero reads.
+    next.heroProducts = Object.entries(content.heroProducts ?? {}).reduce(
+      (map, [productId, ref]) => {
+        if (!productId || !ref?.id) return map;
+        map[productId] = {
+          id: ref.id,
+          slug: ref.slug ?? '',
+          colors: Array.isArray(ref.colors) ? [...ref.colors] : [],
+        };
+        return map;
+      },
+      {} as Record<string, HeroProductRef>,
+    );
 
     return next;
   }
 
   private resolveMediaUrl(url: string): string {
-    const value = (url || '').trim();
-    if (!value || /^(https?:|data:|blob:|\/assets\/)/i.test(value)) return value;
-    if (!value.startsWith('/uploads/')) return value;
-    return `${this.apiBase}${value}`;
+    return resolveClientMediaUrl(url, this.publicApiBase);
   }
 }

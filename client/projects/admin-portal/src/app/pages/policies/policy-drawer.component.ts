@@ -13,12 +13,12 @@ import {
   computed,
   inject,
   signal,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { PillComponent } from '../../shared/pill/pill.component';
-import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
 import { RichTextComponent } from '../../shared/rich-text/rich-text.component';
 import { I18nService } from '../../services/i18n.service';
@@ -45,8 +45,10 @@ function slugify(s: string): string {
 
 interface PolicyForm {
   title: string;
+  titleAr: string;
   handle: string;
   content: string;
+  contentAr: string;
   policyType: PolicyType;
   status: 'active' | 'draft';
 }
@@ -57,10 +59,9 @@ const ALL_TYPES: PolicyType[] = [
 ];
 
 @Component({
-  selector: 'ap-policy-drawer',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, RichTextComponent, SaveBarComponent],
-  template: `
+    selector: 'ap-policy-drawer',
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, RichTextComponent, SaveBarComponent],
+    template: `
     @if (open) {
       <div class="pol-backdrop" (click)="onBackdropClick($event)" aria-hidden="true"></div>
       <aside class="drawer" role="dialog" aria-modal="true" #drawerEl>
@@ -159,6 +160,21 @@ const ALL_TYPES: PolicyType[] = [
                 (ngModelChange)="onTitleChange($event)"
                 [placeholder]="t('policies.type.' + form().policyType)"
               />
+            </div>
+
+            <!-- Title (Arabic) -->
+            <div class="field">
+              <label class="field-label" for="pol-title-ar">{{ t('policies.drawer.titleAr') }}</label>
+              <input
+                id="pol-title-ar"
+                class="inp"
+                type="text"
+                dir="rtl"
+                [ngModel]="form().titleAr"
+                (ngModelChange)="onTitleArChange($event)"
+                [placeholder]="form().title"
+              />
+              <div class="field-hint">{{ t('policies.drawer.titleAr.hint') }}</div>
             </div>
 
             <!-- Handle -->
@@ -263,6 +279,18 @@ const ALL_TYPES: PolicyType[] = [
             }
           </section>
 
+          <!-- 4b. CONTENT (Arabic) -->
+          <section class="drawer-section">
+            <div class="ds-label">{{ t('policies.drawer.contentAr') }}</div>
+            <ap-rich-text
+              [value]="form().contentAr"
+              (valueChange)="onContentArChange($event)"
+              [placeholder]="t('policies.drawer.contentAr.hint')"
+              dir="rtl"
+            />
+            <div class="field-hint">{{ t('policies.drawer.contentAr.hint') }}</div>
+          </section>
+
           <!-- 4. DANGER ZONE -->
           @if (!isNew) {
             <section class="drawer-section danger-zone">
@@ -283,7 +311,8 @@ const ALL_TYPES: PolicyType[] = [
       </aside>
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     :host { display: contents; }
 
     /* ── Backdrop ────────────────────────────── */
@@ -488,7 +517,7 @@ const ALL_TYPES: PolicyType[] = [
     @media (max-width: 640px) {
       .drawer-section { padding: 18px 16px; }
     }
-  `],
+  `]
 })
 export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, AfterViewInit {
   @Input() open = false;
@@ -517,16 +546,20 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
 
   readonly form = signal<PolicyForm>({
     title: '',
+    titleAr: '',
     handle: '',
     content: '',
+    contentAr: '',
     policyType: 'privacy_policy',
     status: 'active',
   });
 
   private readonly original = signal<PolicyForm>({
     title: '',
+    titleAr: '',
     handle: '',
     content: '',
+    contentAr: '',
     policyType: 'privacy_policy',
     status: 'active',
   });
@@ -539,11 +572,13 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
     const f = this.form();
     const o = this.original();
     return (
-      f.title    !== o.title    ||
-      f.handle   !== o.handle   ||
-      f.content  !== o.content  ||
+      f.title     !== o.title     ||
+      f.titleAr   !== o.titleAr   ||
+      f.handle    !== o.handle    ||
+      f.content   !== o.content   ||
+      f.contentAr !== o.contentAr ||
       f.policyType !== o.policyType ||
-      f.status   !== o.status
+      f.status    !== o.status
     );
   });
 
@@ -580,14 +615,18 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
     const p = this.policy;
     const f: PolicyForm = p ? {
       title:      p.title,
+      titleAr:    p.titleAr || '',
       handle:     p.handle,
       content:    p.content,
+      contentAr:  p.contentAr || '',
       policyType: p.policyType,
       status:     p.status,
     } : {
       title:      '',
+      titleAr:    '',
       handle:     TYPE_META['privacy_policy'].handle,
       content:    '',
+      contentAr:  '',
       policyType: 'privacy_policy',
       status:     'active',
     };
@@ -628,12 +667,20 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
     this.patch({ title: v, ...(autoHandle ? { handle: slugify(v) } : {}) });
   }
 
+  onTitleArChange(v: string): void {
+    this.patch({ titleAr: v });
+  }
+
   onHandleChange(v: string): void {
     this.patch({ handle: slugify(v) });
   }
 
   onContentChange(v: string): void {
     this.patch({ content: v });
+  }
+
+  onContentArChange(v: string): void {
+    this.patch({ contentAr: v });
   }
 
   private triggerShake(): void {
@@ -674,8 +721,10 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
     try {
       const payload = {
         title:      f.title || this.t('policies.type.' + f.policyType),
+        titleAr:    f.titleAr,
         handle,
         content:    f.content,
+        contentAr:  f.contentAr,
         policyType: f.policyType,
         status:     f.status,
       };
@@ -697,7 +746,7 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
         this.duplicateError.set(true);
       }
       this.saveState.set('error');
-      this.toast.error(this.t('policies.duplicate.error'));
+      this.toast.errorFrom(err, this.t('policies.duplicate.error'));
     }
   }
 
@@ -716,8 +765,8 @@ export class PolicyDrawerComponent implements OnInit, OnChanges, OnDestroy, Afte
       this.original.set({ ...this.form() });
       this.deleted.emit(this.policy!.id);
       this.closeDrawer.emit();
-    } catch {
-      this.toast.error(this.t('policies.deleteError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('policies.deleteError'));
     }
   }
 }

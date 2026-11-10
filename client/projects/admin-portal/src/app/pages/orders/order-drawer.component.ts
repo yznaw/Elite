@@ -1,4 +1,5 @@
-import { Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
+import { OrderDeliveriesComponent } from './order-deliveries.component';
+import { Component, EventEmitter, HostListener, Input, Output, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -7,10 +8,13 @@ import { PillComponent } from '../../shared/pill/pill.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { fulfillmentPillKind, paymentPillKind } from '../../shared/pill/status-pill';
 import { I18nService } from '../../services/i18n.service';
+import { LocaleService } from '../../services/locale.service';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { AdminOrdersService, OrderStatusPayload } from '../../services/admin-orders.service';
 import { Order, OrderFulfillment, OrderTimelineEntry, QAR } from '../../models';
+import { NO_IMAGE_LOGO } from '../../utils/no-image';
+import { OrderApprovalPanelComponent } from './order-approval-panel.component';
 
 const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
   placed:     'orderModal.tl.placed',
@@ -24,13 +28,21 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
   note:       'orderModal.tl.note',
 };
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 @Component({
-  selector: 'ap-order-drawer',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent],
-  template: `
+    selector: 'ap-order-drawer',
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, OrderApprovalPanelComponent, OrderDeliveriesComponent],
+    template: `
     <div class="overlay" (click)="closed.emit()"></div>
-    <div class="drawer drawer-wide order-drawer">
+    <div class="drawer drawer-wide order-drawer" role="dialog" aria-modal="true" [attr.aria-label]="t('orderDrawer.workflow.title') + ' ' + order().id">
       <div class="drawer-head">
         <div style="min-width:0;flex:1;">
           @if (backLabel) {
@@ -42,7 +54,11 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
           <div class="row gap-sm" style="flex-wrap:wrap;align-items:center;">
             <div class="card-title mono" style="color:var(--green);">{{ order().id }}</div>
             <ap-pill [kind]="paymentKind().kind">{{ t(paymentKind().labelKey) }}</ap-pill>
-            <ap-pill [kind]="fulfillmentKind().kind">{{ t(fulfillmentKind().labelKey) }}</ap-pill>
+            @if (order().needsApproval) {
+              <ap-pill kind="gold">{{ t('orders.awaitingApproval') }}</ap-pill>
+            } @else {
+              <ap-pill [kind]="fulfillmentKind().kind">{{ t(fulfillmentKind().labelKey) }}</ap-pill>
+            }
           </div>
           <div class="card-sub">{{ order().date }} · {{ order().customer }}</div>
         </div>
@@ -58,6 +74,7 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
       </div>
 
       <div class="drawer-body">
+        <ap-order-deliveries [order]="order()" (updated)="onApproved($event)"/>
         <!-- Status workflow -->
         <div class="section-title">
           <ap-icon name="orders" [size]="14"/>
@@ -74,6 +91,8 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
           }
         </div>
 
+        <ap-order-approval-panel [order]="order()" (approved)="onApproved($event)"/>
+
         @if (isStalePayment()) {
           <div class="stale-payment-callout mb-16">
             <ap-icon name="warning" [size]="14"/>
@@ -88,13 +107,13 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
           <div class="nbox-failure-callout mb-16">
             <ap-icon name="warning" [size]="14" style="flex-shrink:0;margin-top:1px;"/>
             <div style="flex:1;min-width:0;">
-              <strong>Delivery booking failed</strong>
+              <strong>{{ t('orderDrawer.delivery.failed') }}</strong>
               @if (order().nboxBookingError) {
                 <div class="small" style="margin-top:2px;opacity:0.8;">{{ order().nboxBookingError }}</div>
               }
             </div>
             <button class="btn btn-sm btn-outline" [disabled]="busy()" (click)="rebookDelivery()" style="flex-shrink:0;">
-              @if (busy()) { <ap-spinner [size]="12"/> } Retry booking
+              @if (busy()) { <ap-spinner [size]="12"/> } {{ t('orderDrawer.delivery.retry') }}
             </button>
           </div>
         }
@@ -132,7 +151,8 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
           }
         </div>
 
-        <!-- Tracking -->
+        <!-- Automatic orders have tracking on each delivery card. -->
+        @if (!order().automaticFulfillment) {
         <div class="tracking-block mb-24">
           <label class="lbl">{{ t('orderDrawer.tracking.label') }}</label>
           <div class="row gap-sm" style="flex-wrap:wrap;">
@@ -145,6 +165,7 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
           </div>
           <div class="muted small mt-8">{{ t('orderDrawer.tracking.help') }}</div>
         </div>
+        }
 
         <!-- Line items + summary -->
         <div class="section-title">
@@ -161,7 +182,7 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
                 @if (it.img) {
                   <img [src]="it.img" [alt]="it.n" style="width:100%;height:100%;object-fit:cover;" loading="lazy"/>
                 } @else {
-                  <div style="width:100%;height:100%;background:linear-gradient(135deg,#e8eaf2,#dde1ee);"></div>
+                  <img class="no-img" [src]="noImageLogo" [alt]="it.n" style="background:var(--surface);"/>
                 }
               </div>
               <div class="grow">
@@ -251,26 +272,52 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
           <span>{{ t('orderModal.timeline') }}</span>
         </div>
         <div class="panel" style="padding:14px 22px;">
-          @for (entry of timeline(); track entry.id) {
-            <div class="tl-item">
-              <div class="tl-dot done"></div>
-              <div class="tl-text">
-                <div class="tl-title">{{ t(timelineLabel(entry.kind)) }}</div>
-                <div class="tl-meta">
-                  {{ entry.ts }}
-                  @if (entry.actor) { · <span class="muted">{{ entry.actor }}</span> }
-                  @if (entry.detail) { · <span class="mono">{{ entry.detail }}</span> }
+          @if (timelineLoading()) {
+            @for (_ of timelineSkeletonRows; track $index) {
+              <div class="tl-item">
+                <div class="tl-dot sk-dot"></div>
+                <div class="tl-text" style="flex:1;">
+                  <div class="sk-line sk-w-sm mb-8"></div>
+                  <div class="sk-line sk-w-xs"></div>
                 </div>
               </div>
-            </div>
+            }
+          } @else if (timeline().length === 0) {
+            <div class="muted small">{{ t('orderModal.timelineEmpty') }}</div>
+          } @else {
+            @for (entry of timeline(); track entry.id) {
+              <div class="tl-item">
+                <div class="tl-dot done"></div>
+                <div class="tl-text">
+                  <div class="tl-title">{{ t(timelineLabel(entry.kind)) }}</div>
+                  <div class="tl-meta">
+                    {{ entry.ts }}
+                    @if (entry.actor) { · <span class="muted">{{ entry.actor }}</span> }
+                    @if (entry.detail) { · <span class="mono">{{ entry.detail }}</span> }
+                  </div>
+                </div>
+              </div>
+            }
           }
         </div>
       </div>
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .drawer-wide { width: min(640px, 100vw); }
     @media (max-width: 720px) { .drawer-wide { width: 100vw; } }
+
+    /* Timeline skeleton — shown until GET /admin/orders/:id returns the history */
+    @keyframes tl-shimmer { from { background-position: -400px 0; } to { background-position: 400px 0; } }
+    .sk-line {
+      height: 12px; border-radius: 6px;
+      background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-3,#e5e7eb) 50%, var(--bg-2) 75%);
+      background-size: 800px 100%; animation: tl-shimmer 1.4s infinite;
+    }
+    .sk-w-xs { width: 60px; } .sk-w-sm { width: 120px; }
+    .tl-dot.sk-dot { background: var(--bg-3, #e5e7eb); border-color: transparent; }
+    @media (prefers-reduced-motion: reduce) { .sk-line { animation: none; } }
 
     /* Back breadcrumb button */
     .back-btn {
@@ -436,13 +483,15 @@ const TIMELINE_LABEL: Record<OrderTimelineEntry['kind'], string> = {
       .workflow-stepper .step:nth-child(3)::before,
       .workflow-stepper .step:nth-child(odd)::before { display: none; }
     }
-  `],
+  `]
 })
 export class OrderDrawerComponent {
+  readonly noImageLogo = NO_IMAGE_LOGO;
   private readonly i18n = inject(I18nService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly ordersApi = inject(AdminOrdersService);
+  private readonly locale = inject(LocaleService);
   private readonly router = inject(Router);
 
   readonly t = (k: string): string => this.i18n.t(k);
@@ -494,12 +543,23 @@ export class OrderDrawerComponent {
   readonly fulfillmentKind = computed(() => fulfillmentPillKind(this._order().fulfillment));
   readonly timeline = computed(() => [...(this._order().timeline ?? [])].reverse());
 
+  /** The list payload carries no timeline; it arrives with GET /admin/orders/:id.
+      Undefined therefore means "still loading", not "this order has no history". */
+  readonly timelineLoading = computed(() => this._order().timeline === undefined);
+  readonly timelineSkeletonRows = [0, 1, 2];
+
+  /** Drawers are modal; Escape should dismiss them like every other dialog
+      in the portal. Guarded so a busy mutation is not abandoned mid-flight. */
+  @HostListener('window:keydown.escape')
+  onEscape(): void {
+    if (!this.busy()) this.closed.emit();
+  }
+
   private hydrate(o: Order): Order {
+    // `timeline` / `notes` are left undefined by the list endpoint and filled in
+    // by GET /admin/orders/:id. Never invent entries — an undefined timeline
+    // means "still loading", which the template renders as a skeleton.
     const next: Order = { ...o };
-    if (!next.timeline || next.timeline.length === 0) {
-      next.timeline = this.seedTimeline(o);
-    }
-    if (!next.notes) next.notes = [];
     this.trackingDraft.set(next.trackingNumber ?? '');
     this.noteDraft.set('');
     return next;
@@ -511,33 +571,6 @@ export class OrderDrawerComponent {
       payment: 'pending', fulfillment: 'awaiting',
       items: [], address: '', timeline: [], notes: [],
     };
-  }
-
-  /** Build a plausible historical timeline from the order's current state. */
-  private seedTimeline(o: Order): OrderTimelineEntry[] {
-    const tl: OrderTimelineEntry[] = [
-      { id: 'tl-placed', ts: `${o.date} 09:14`, kind: 'placed', actor: this.t('orderModal.tl.system') },
-    ];
-    if (o.payment === 'paid' || o.payment === 'refunded') {
-      tl.push({ id: 'tl-paid', ts: `${o.date} 09:15`, kind: 'paid' });
-    }
-    const advanced: OrderFulfillment[] = ['processing', 'shipped', 'delivered', 'returned'];
-    if (advanced.includes(o.fulfillment)) {
-      tl.push({ id: 'tl-processing', ts: `${o.date} 11:42`, kind: 'processing' });
-    }
-    if (['shipped', 'delivered', 'returned'].includes(o.fulfillment)) {
-      tl.push({ id: 'tl-shipped', ts: '2026-04-27 16:08', kind: 'shipped', detail: o.trackingNumber });
-    }
-    if (o.fulfillment === 'delivered') {
-      tl.push({ id: 'tl-delivered', ts: '2026-04-29 10:22', kind: 'delivered' });
-    }
-    if (o.fulfillment === 'cancelled') {
-      tl.push({ id: 'tl-cancelled', ts: `${o.date} 14:00`, kind: 'cancelled' });
-    }
-    if (o.payment === 'refunded') {
-      tl.push({ id: 'tl-refunded', ts: `${o.date} 15:00`, kind: 'refunded' });
-    }
-    return tl;
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -579,7 +612,15 @@ export class OrderDrawerComponent {
     return ['awaiting', 'processing', 'shipped', 'delivered'];
   }
 
+  /** The approval panel confirmed the order and chose its pickup location. */
+  onApproved(updated: Order): void {
+    this._order.set(updated);
+    this.updated.emit(updated);
+  }
+
   canTransitionTo(target: OrderFulfillment): boolean {
+    // Stock per location: nothing ships until the order is approved.
+    if (this._order().needsApproval || this._order().automaticFulfillment) return false;
     const cur = this._order().fulfillment;
     if (cur === 'cancelled' || cur === 'returned') return false;
     const order = this.stepOrder();
@@ -589,6 +630,7 @@ export class OrderDrawerComponent {
   }
 
   canCancel(): boolean {
+    if (this._order().automaticFulfillment) return false;
     const f = this._order().fulfillment;
     return f === 'awaiting' || f === 'processing';
   }
@@ -611,7 +653,7 @@ export class OrderDrawerComponent {
         fulfillment: target,
         trackingNumber: target === 'shipped' ? this.trackingDraft().trim() : undefined,
         timelineKind: target as OrderTimelineEntry['kind'],
-        detail: target === 'shipped' ? this.trackingDraft().trim() : `Marked ${target}`,
+        detail: target === 'shipped' ? this.trackingDraft().trim() : this.t('orderDrawer.timeline.marked').replace('{status}', target),
       });
       if (updated) {
         const toastKey = `orderDrawer.toast.${target}.title`;
@@ -630,7 +672,7 @@ export class OrderDrawerComponent {
       const updated = await this.safeUpdateStatus({
         payment: 'paid',
         timelineKind: 'paid',
-        detail: 'Payment confirmed',
+        detail: this.t('orderDrawer.timeline.paymentConfirmed'),
       });
       if (updated) this.toast.success(this.t('orderDrawer.toast.paid.title'), o.id);
     } finally {
@@ -655,7 +697,7 @@ export class OrderDrawerComponent {
         status: 'cancelled',
         fulfillment: 'cancelled',
         timelineKind: 'cancelled',
-        detail: 'Order cancelled',
+        detail: this.t('orderDrawer.timeline.cancelled'),
       });
       if (updated) this.toast.info(this.t('orderDrawer.toast.cancelled.title'), o.id);
     } finally {
@@ -738,7 +780,7 @@ export class OrderDrawerComponent {
       const updated = await this.ordersApi.rebookDelivery(o.id);
       this._order.set(updated);
       this.updated.emit(updated);
-      this.toast.success('Delivery booking submitted', o.id);
+      this.toast.success(this.t('orderDrawer.toast.deliverySubmitted'), o.id);
     } catch {
       // Global interceptor surfaces the error.
     } finally {
@@ -750,81 +792,162 @@ export class OrderDrawerComponent {
     return TIMELINE_LABEL[kind];
   }
 
+  /** Renders the invoice into a hidden same-page iframe and opens the browser's
+      print dialog, where "Save as PDF" produces the PDF. Deliberately not a
+      pop-up: `window.open` was silently blocked by ad-blockers and strict
+      pop-up settings. Deliberately not a PDF library either — the browser's own
+      print engine is the only one here that shapes Arabic correctly. */
   printInvoice(): void {
+    const html = this.invoiceHtml();
+
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    frame.srcdoc = html;
+
+    let cleaned = false;
+    const cleanup = (): void => {
+      if (cleaned) return;
+      cleaned = true;
+      frame.remove();
+    };
+
+    frame.onload = () => {
+      const win = frame.contentWindow;
+      if (!win) {
+        cleanup();
+        this.toast.error(this.t('orders.invoice.failed.title'), this.t('orders.invoice.failed.sub'));
+        return;
+      }
+      // Some browsers fire afterprint, some do not; the timeout is the backstop
+      // so a stray iframe never accumulates in the DOM.
+      win.addEventListener('afterprint', cleanup);
+      setTimeout(cleanup, 60_000);
+      try {
+        win.focus();
+        win.print();
+      } catch (caught) {
+        cleanup();
+        this.toast.errorFrom(caught, this.t('orders.invoice.failed.title'), this.t('orders.invoice.failed.sub'));
+      }
+    };
+
+    document.body.appendChild(frame);
+  }
+
+  /** Delivery details from the carrier, shown on the invoice only when a
+      shipment actually exists. */
+  private invoiceDeliveryRows(): Array<{ label: string; value: string }> {
+    if (this.order().automaticFulfillment) return (this.order().deliveries || []).flatMap((s,i) => [
+      {label: `${this.t('fulfillment.deliveries')} ${i+1}`, value: this.t('fulfillment.'+s.status)},
+      {label: this.t('orders.invoice.delivery.tracking'), value: s.trackingNumber || '—'},
+      {label: this.t('fulfillment.fee'), value: `${s.amount.toFixed(2)} QAR`},
+    ]);
+    const d = this.order().delivery;
+    if (!d) return [];
+
+    const date = (iso?: string): string => {
+      if (!iso) return '';
+      const parsed = new Date(iso);
+      return Number.isNaN(parsed.getTime()) ? iso : parsed.toISOString().slice(0, 10);
+    };
+
+    return [
+      { label: this.t('orders.invoice.delivery.carrier'),   value: d.carrier ?? '' },
+      { label: this.t('orders.invoice.delivery.service'),   value: d.service ?? '' },
+      { label: this.t('orders.invoice.delivery.tracking'),  value: d.trackingNumber ?? '' },
+      { label: this.t('orders.invoice.delivery.shipped'),   value: date(d.shippedAt) },
+      { label: this.t('orders.invoice.delivery.delivered'), value: date(d.deliveredAt) },
+      { label: this.t('orders.invoice.delivery.eta'),       value: d.eta ?? '' },
+    ].filter((row) => row.value !== '');
+  }
+
+  private invoiceHtml(): string {
     const o = this.order();
+    const lang = this.locale.locale();
+    const dir = this.locale.dir();
+    const isRtl = dir === 'rtl';
+    const start = isRtl ? 'right' : 'left';
+    const end = isRtl ? 'left' : 'right';
+
     const itemRows = o.items.map(it =>
       `<tr>
-        <td>${it.n}</td>
-        <td style="text-align:center">EU ${it.s}</td>
-        <td style="text-align:center">${it.q}</td>
-        <td style="text-align:right">${QAR(it.p * it.q)}</td>
+        <td>${escapeHtml(it.n)}</td>
+        <td style="text-align:center">EU ${escapeHtml(it.s)}</td>
+        <td style="text-align:center">${escapeHtml(it.q)}</td>
+        <td style="text-align:${end}">${QAR(it.p * it.q)}</td>
       </tr>`,
     ).join('');
 
-    const html = `<!DOCTYPE html>
-<html lang="en">
+    const deliveryRows = this.invoiceDeliveryRows();
+    const deliveryBlock = deliveryRows.length === 0 ? '' : `
+  <div class="section">
+    <div class="label">${escapeHtml(this.t('orders.invoice.delivery.title'))}</div>
+    <div class="kv">
+      ${deliveryRows.map(r => `<div class="kv-row"><span class="kv-k">${escapeHtml(r.label)}</span><span class="kv-v">${escapeHtml(r.value)}</span></div>`).join('')}
+    </div>
+  </div>`;
+
+    return `<!DOCTYPE html>
+<html lang="${escapeHtml(lang)}" dir="${escapeHtml(dir)}">
 <head>
   <meta charset="UTF-8">
-  <title>${this.t('orders.invoice.label')} ${o.id}</title>
+  <title>${escapeHtml(this.t('orders.invoice.label'))} ${escapeHtml(o.id)}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1a1a1a;padding:40px;max-width:700px;margin:0 auto;}
+    body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1a1a1a;padding:40px;max-width:700px;margin:0 auto;text-align:${start};}
     .hd{display:flex;justify-content:space-between;margin-bottom:32px;align-items:flex-start;}
     .brand{font-size:22px;font-weight:800;letter-spacing:.08em;}
     .inv-meta{font-size:13px;color:#666;margin-top:4px;}
     .section{margin-bottom:24px;}
     .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;margin-bottom:6px;}
     table{width:100%;border-collapse:collapse;font-size:13px;}
-    th{text-align:left;padding:8px 10px;border-bottom:2px solid #1a1a1a;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+    th{text-align:${start};padding:8px 10px;border-bottom:2px solid #1a1a1a;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
     td{padding:10px;border-bottom:1px solid #e5e5e5;vertical-align:top;}
     .total-row td{border-top:2px solid #1a1a1a;border-bottom:none;font-weight:700;font-size:15px;}
-    .print-btn{margin-top:24px;padding:8px 18px;background:#1a1a1a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;}
-    @media print{.print-btn{display:none;}}
+    .kv{font-size:13px;line-height:1.8;}
+    .kv-row{display:flex;gap:12px;}
+    .kv-k{color:#666;min-width:130px;}
+    .kv-v{font-weight:600;}
+    @page{margin:14mm;}
   </style>
 </head>
 <body>
   <div class="hd">
     <div>
       <div class="brand">ELITE COLLECTION</div>
-      <div class="inv-meta">${this.t('orders.invoice.label')} ${o.id}</div>
+      <div class="inv-meta">${escapeHtml(this.t('orders.invoice.label'))} ${escapeHtml(o.id)}</div>
     </div>
-    <div style="text-align:right;font-size:13px;color:#666;">
-      <div>${o.date}</div>
-      <div style="margin-top:4px;">${o.customer}</div>
-      ${o.customerEmail ? `<div style="margin-top:2px;">${o.customerEmail}</div>` : ''}
-      ${o.customerPhone ? `<div style="margin-top:2px;">${o.customerPhone}</div>` : ''}
+    <div style="text-align:${end};font-size:13px;color:#666;">
+      <div>${escapeHtml(o.date)}</div>
+      <div style="margin-top:4px;">${escapeHtml(o.customer)}</div>
+      ${o.customerEmail ? `<div style="margin-top:2px;">${escapeHtml(o.customerEmail)}</div>` : ''}
+      ${o.customerPhone ? `<div style="margin-top:2px;">${escapeHtml(o.customerPhone)}</div>` : ''}
     </div>
   </div>
   <div class="section">
-    <div class="label">${this.t('orders.invoice.shippingAddress')}</div>
-    <div style="font-size:13px;line-height:1.8;">${(o.address || '-').replace(/\n/g, '<br>')}</div>
-  </div>
+    <div class="label">${escapeHtml(this.t('orders.invoice.shippingAddress'))}</div>
+    <div style="font-size:13px;line-height:1.8;">${escapeHtml(o.address || '-').replace(/\n/g, '<br>')}</div>
+  </div>${deliveryBlock}
   <div class="section">
     <table>
       <thead><tr>
-        <th>${this.t('orders.invoice.colProduct')}</th>
-        <th style="text-align:center">${this.t('orders.invoice.colSize')}</th>
-        <th style="text-align:center">${this.t('orders.invoice.colQty')}</th>
-        <th style="text-align:right">${this.t('orders.invoice.colAmount')}</th>
+        <th>${escapeHtml(this.t('orders.invoice.colProduct'))}</th>
+        <th style="text-align:center">${escapeHtml(this.t('orders.invoice.colSize'))}</th>
+        <th style="text-align:center">${escapeHtml(this.t('orders.invoice.colQty'))}</th>
+        <th style="text-align:${end}">${escapeHtml(this.t('orders.invoice.colAmount'))}</th>
       </tr></thead>
       <tbody>${itemRows}</tbody>
       <tfoot>
         <tr class="total-row">
-          <td colspan="3">${this.t('orders.invoice.total')}</td>
-          <td style="text-align:right">${QAR(o.total)}</td>
+          <td colspan="3">${escapeHtml(this.t('orders.invoice.total'))}</td>
+          <td style="text-align:${end}">${QAR(o.total)}</td>
         </tr>
       </tfoot>
     </table>
   </div>
-  <button class="print-btn" onclick="window.print()">${this.t('orders.invoice.print')}</button>
 </body>
 </html>`;
-
-    const win = window.open('', '_blank');
-    if (win) {
-      win.document.write(html);
-      win.document.close();
-    }
   }
 
 }

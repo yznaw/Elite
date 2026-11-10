@@ -1,21 +1,22 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 export type IconName =
   | 'dash' | 'catalog' | 'collections' | 'store' | 'orders' | 'users' | 'chart' | 'sync' | 'settings'
-  | 'media' | 'search' | 'bell' | 'plus' | 'x' | 'drag' | 'edit' | 'trash' | 'eye'
+  | 'media' | 'search' | 'barcode' | 'bell' | 'plus' | 'x' | 'drag' | 'edit' | 'trash' | 'eye'
   | 'upload' | 'download' | 'cube' | 'link' | 'unlink' | 'wand' | 'check' | 'arrow' | 'arrowUp' | 'arrowDn'
   | 'csv' | 'clock' | 'spinner' | 'list' | 'filter' | 'grid' | 'rows' | 'copy' | 'print' | 'warning' | 'mail' | 'info' | 'team'
   | 'reference' | 'hierarchy' | 'star' | 'phone' | 'whatsapp'
   | 'eyeOff'
   | 'docs' | 'bold' | 'italic' | 'underline' | 'h2' | 'h3'
-  | 'listBullet' | 'listOrdered' | 'quote' | 'undo' | 'redo' | 'externalLink';
+  | 'listBullet' | 'listOrdered' | 'quote' | 'undo' | 'redo' | 'externalLink'
+  | 'lock' | 'scale' | 'device' | 'expenses';
 
 @Component({
-  selector: 'ap-icon',
-  standalone: true,
-  imports: [CommonModule],
-  template: `
+    selector: 'ap-icon',
+    imports: [CommonModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     @switch (name) {
       @case ('dash') {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
@@ -219,6 +220,11 @@ export type IconName =
           <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
         </svg>
       }
+      @case ('barcode') {
+        <svg viewBox="0 0 24 24" fill="currentColor" [attr.width]="size" [attr.height]="size">
+          <rect x="2" y="3" width="1.6" height="18"/><rect x="5" y="3" width="1" height="18"/><rect x="7.3" y="3" width="2.2" height="18"/><rect x="10.8" y="3" width="1" height="18"/><rect x="13" y="3" width="1.6" height="18"/><rect x="16" y="3" width="1" height="18"/><rect x="18.4" y="3" width="2.2" height="18"/><rect x="21.6" y="3" width="1" height="18"/>
+        </svg>
+      }
       @case ('warning') {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
           <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
@@ -315,8 +321,30 @@ export type IconName =
           <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
         </svg>
       }
+      @case ('lock') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+        </svg>
+      }
+      @case ('scale') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <path d="M12 3v18"/><path d="M5 21h14"/><path d="M7 7l-4 8a4 4 0 008 0z"/><path d="M17 7l-4 8a4 4 0 008 0z"/><path d="M5 7h14"/>
+        </svg>
+      }
+      @case ('expenses') {
+        <!-- A receipt with a torn bottom edge: money leaving the business,
+             distinct from 'scale' (reconciliation) and 'csv' (reports). -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <path d="M5 3h14v18l-2.5-1.5L14 21l-2-1.5L10 21l-2.5-1.5L5 21z"/><path d="M9 8h6"/><path d="M9 12h6"/>
+        </svg>
+      }
+      @case ('device') {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" [attr.width]="size" [attr.height]="size">
+          <rect x="4" y="2" width="16" height="20" rx="2"/><line x1="9" y1="19" x2="15" y2="19"/>
+        </svg>
+      }
     }
-  `,
+  `
 })
 export class IconComponent {
   @Input({ required: true }) name!: IconName;

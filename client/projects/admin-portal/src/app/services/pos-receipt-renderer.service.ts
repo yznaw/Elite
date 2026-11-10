@@ -1,0 +1,1146 @@
+import { Injectable } from '@angular/core';
+import { POS_PAYMENT_LABELS, PosBusinessProfile, PosPaymentMethod } from './pos.service';
+
+export interface PosReceiptLine {
+  name: string;
+  /** Snapshotted Arabic product name, printed above the English one. */
+  nameAr?: string | null;
+  variant?: string;
+  /** Structured variant values. These are preferred over the legacy combined
+   *  variant string so colour and size can be labelled bilingually. */
+  color?: string | null;
+  colorAr?: string | null;
+  size?: string | null;
+  sku?: string;
+  quantity: number;
+  unitPriceCents: number;
+  lineTotalCents: number;
+}
+
+export interface PosReceiptData {
+  kind?: 'sale' | 'refund' | 'void';
+  receiptNumber: string;
+  transactionId?: string;
+  refundId?: string;
+  createdAt: string;
+  cashierName?: string;
+  registerId?: string;
+  registerName?: string;
+  paymentMethod?: PosPaymentMethod;
+  method?: PosPaymentMethod;
+  terminalReference?: string | null;
+  items?: PosReceiptLine[];
+  subtotalCents?: number;
+  taxCents?: number;
+  totalCents?: number;
+  amountCents?: number;
+  amountTenderedCents?: number;
+  changeGivenCents?: number;
+  reason?: string;
+  lookupCode?: string;
+}
+
+/** Rendered receipt ready to hand to QZ Tray. */
+export interface PosRenderedReceipt {
+  /** PNG data URL, rasterized bilingual (Arabic + English) receipt body. */
+  imageDataUrl: string;
+  /** Raw ESC/POS command bytes for the QR code + cut, appended after the image. */
+  footerCommands: string;
+  /** Dynamic roll length sent to QZ so the driver never paginates the tail. */
+  paperHeightMm: number;
+}
+
+/** Z-report print data — a cash/sales summary, not a per-item receipt. */
+export interface PosZReportPrintData {
+  zReportId: string;
+  /** Z-DDMM-YYYY-NNN (migration 044); older reports fall back to the id. */
+  zNumber?: string | null;
+  registerName?: string | null;
+  branchName?: string | null;
+  cashierName?: string | null;
+  createdAt: string;
+  openingFloatCents: number;
+  grossSalesCents: number;
+  cashSalesCents: number;
+  cardSalesCents: number;
+  /** Absent on Z-reports saved before Sadad was added. */
+  sadadSalesCents?: number;
+  refundTotalCents: number;
+  voidTotalCents: number;
+  netSalesCents: number;
+  cashInCents: number;
+  cashOutCents: number;
+  expectedCashCents: number;
+  physicalCashCents: number;
+  varianceCents: number;
+  transactionCount: number;
+  refundCount: number;
+  voidCount: number;
+  soldItemQuantity: number;
+  returnedItemQuantity: number;
+  netItemQuantity: number;
+}
+
+const QATAR_TIME_ZONE = 'Asia/Qatar';
+const LOGO_URL = '/assets/brand/elite-logo-green.png';
+
+/**
+ * Renders receipts onto an HTML5 canvas instead of building a raw ESC/POS
+ * text string. Arabic text needs correct letter shaping and right-to-left
+ * layout, which ESC/POS text mode cannot do at all (it prints whatever code
+ * page bytes you send, with no shaping) — the canvas approach lets the
+ * browser's own text layout engine do that work, and the result is sent to
+ * the printer as a raster image (see pos-hardware.service.ts, which prints
+ * this through QZ Tray's `format: 'image'` + `language: 'escpos'` path).
+ *
+ * Design direction: quiet editorial confidence rather than a dense register
+ * tape — the wordmark gets one deliberate moment at the top, hierarchy comes
+ * from weight/size and whitespace rather than stacking horizontal rules, and
+ * every line pulls its weight (no decorative "COPY" banners, no filler).
+ */
+@Injectable({ providedIn: 'root' })
+export class PosReceiptRenderer {
+  /**
+   * SRP-QE300 spec: 80mm media, 180dpi, but only 72mm is actually printable
+   * (confirmed by a real test print — 576px, sized for 80mm at 203dpi, cut
+   * off the right ~15% of every line). 72mm / 25.4mm-per-inch * 180dpi ≈ 510px.
+   * Round DOWN to whole 8-dot bytes for ESC/POS raster rows. 510 is not
+   * byte-aligned; 504 keeps the bitmap inside the printable area and avoids
+   * mismatched raster row lengths in the QZ conversion.
+   */
+  private readonly widthPx = Math.floor((72 / 25.4 * 180) / 8) * 8;
+  private readonly marginPx = 28;
+  private readonly lineHeightPx = 34;
+  private readonly smallLineHeightPx = 26;
+
+  /** Brand serif for the wordmark-adjacent register (name, totals) — pairs
+   *  with the logo's serif-flavored letterforms. Arial stays for dense
+   *  tabular data (line items, SKUs) where a serif costs legibility at
+   *  small sizes. Both ship with Windows, so no webfont-loading risk on a
+   *  register that may print before a font is ready. */
+  private readonly displayFont = 'Georgia';
+  private readonly bodyFont = 'Arial';
+
+  /**
+   * There is no grey on this receipt, and there cannot be one.
+   *
+   * The canvas goes to QZ with `quantization: 'luma'`, a hard threshold rather
+   * than a dither: each pixel is either a black dot or bare paper. Grey does
+   * not become lighter ink, it becomes *eroded* ink. A glyph stem at 11-13px
+   * is about one pixel wide and mostly antialiased, so tinting it grey pushes
+   * those blended edge pixels over the threshold and they drop out. The stem
+   * survives in pieces, or not at all.
+   *
+   * That was visible on the real print in two stages. `#999` (luma 153) sits
+   * above the threshold outright, so the QR caption, the per-item SKU and the
+   * CR number printed as nothing at all, silently, with no error. Moving them
+   * to `#666` made them appear but shredded: "SCAN TO LOOK UP THIS SALE" came
+   * out as "SCAN TO _OGK UP TH S SALE" because every thin stem lost pixels.
+   *
+   * So de-emphasis on paper is done with size and weight, never with tone.
+   * This constant stays as a single named seam for that rule: it is black, and
+   * the reason it exists at all is so the next person reads this comment
+   * before reaching for a grey.
+   */
+  private readonly inkMuted = '#000';
+
+  private logoImage: HTMLImageElement | null = null;
+  private logoLoadFailed = false;
+
+  private async loadLogo(): Promise<HTMLImageElement | null> {
+    if (this.logoImage) return this.logoImage;
+    if (this.logoLoadFailed) return null;
+    try {
+      const image = new Image();
+      image.src = LOGO_URL;
+      await image.decode();
+      this.logoImage = image;
+      return image;
+    } catch {
+      // Printing must not fail because the logo asset is missing/offline —
+      // fall back to the plain trade-name text header.
+      this.logoLoadFailed = true;
+      return null;
+    }
+  }
+
+  async render(receipt: PosReceiptData, profile: PosBusinessProfile | null): Promise<PosRenderedReceipt> {
+    const logo = await this.loadLogo();
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context is not available for receipt rendering.');
+
+    // First pass at a generous height to measure; canvas is re-sized to the
+    // actual content height in the second pass so there's no blank tail.
+    canvas.width = this.widthPx;
+    canvas.height = 4000;
+    let y = this.paint(ctx, receipt, profile, logo);
+
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = this.widthPx;
+    finalCanvas.height = Math.ceil(y) + this.marginPx;
+    const finalCtx = finalCanvas.getContext('2d');
+    if (!finalCtx) throw new Error('Canvas 2D context is not available for receipt rendering.');
+    this.paint(finalCtx, receipt, profile, logo);
+    this.binarizeCanvas(finalCtx);
+
+    return {
+      imageDataUrl: finalCanvas.toDataURL('image/png'),
+      footerCommands: this.footerCommands(receipt),
+      paperHeightMm: this.paperHeightMm(finalCanvas.height, true),
+    };
+  }
+
+  /**
+   * Z-report: a cash/sales summary for a closed shift, not a per-item
+   * receipt — no line items, no customer-facing QR lookup. Reuses the same
+   * canvas two-pass sizing and column/rule helpers as `render()`.
+   */
+  async renderZReport(report: PosZReportPrintData, profile: PosBusinessProfile | null): Promise<PosRenderedReceipt> {
+    const logo = await this.loadLogo();
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context is not available for receipt rendering.');
+
+    canvas.width = this.widthPx;
+    canvas.height = 4000;
+    let y = this.paintZReport(ctx, report, profile, logo);
+
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = this.widthPx;
+    finalCanvas.height = Math.ceil(y) + this.marginPx;
+    const finalCtx = finalCanvas.getContext('2d');
+    if (!finalCtx) throw new Error('Canvas 2D context is not available for receipt rendering.');
+    this.paintZReport(finalCtx, report, profile, logo);
+    this.binarizeCanvas(finalCtx);
+
+    return {
+      imageDataUrl: finalCanvas.toDataURL('image/png'),
+      footerCommands: this.feedAndCutCommands(),
+      paperHeightMm: this.paperHeightMm(finalCanvas.height, false),
+    };
+  }
+
+  /**
+   * The QNB terminal's own pre-formatted slip (40 columns), printed on the
+   * Bixolon because the terminal's paper printing is off for ECR merchants.
+   * Format bytes from the guide (§9.1.5): 0x1E double width, 0x11 double
+   * height, 0x12 inverse, 0x1F normal, reset after each new line; 0x0C ends a
+   * copy; 0x22 is the contactless symbol, 0x23 the DCC disclaimer. Bank
+   * branding rule: no shop logo on a payment slip, so none is drawn.
+   * `copy: 'customer'` prints only the copy marked CUSTOMER (the merchant
+   * copy is kept digitally); falls back to the last copy when unmarked.
+   */
+  async renderTerminalSlip(text: string, copy: 'customer' | 'all' = 'customer'): Promise<PosRenderedReceipt> {
+    const copies = text.split('\f').map((part) => part.replace(/^[\r\n]+|[\r\n]+$/g, '')).filter((part) => part.trim());
+    let chosen = copies;
+    if (copy === 'customer' && copies.length > 1) {
+      const customer = copies.filter((part) => /CUSTOMER/i.test(part));
+      chosen = customer.length ? customer : [copies[copies.length - 1]];
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = this.widthPx;
+    canvas.height = 6000;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context is not available for receipt rendering.');
+    const y = this.paintTerminalSlip(ctx, chosen);
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = this.widthPx;
+    finalCanvas.height = Math.ceil(y) + this.marginPx;
+    const finalCtx = finalCanvas.getContext('2d');
+    if (!finalCtx) throw new Error('Canvas 2D context is not available for receipt rendering.');
+    this.paintTerminalSlip(finalCtx, chosen);
+    this.binarizeCanvas(finalCtx);
+    return {
+      imageDataUrl: finalCanvas.toDataURL('image/png'),
+      footerCommands: this.feedAndCutCommands(),
+      paperHeightMm: this.paperHeightMm(finalCanvas.height, false),
+    };
+  }
+
+  private paintTerminalSlip(ctx: CanvasRenderingContext2D, copies: string[]): number {
+    const width = this.widthPx;
+    const columns = 40;
+    const usable = width - 16;
+    const charWidth = usable / columns;
+    const fontPx = Math.floor(charWidth / 0.6);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, width, ctx.canvas.height);
+    ctx.textBaseline = 'top';
+    let y = this.marginPx;
+    copies.forEach((slip, index) => {
+      if (index > 0) { y = this.rule(ctx, y + 10) + 18; }
+      for (const raw of slip.split(/\r?\n|\r/)) {
+        let doubleWidth = false;
+        let doubleHeight = false;
+        let inverse = false;
+        let x = 8;
+        const lineHeight = () => (doubleHeight ? fontPx * 2 : fontPx) + 6;
+        const segments: Array<{ text: string; dw: boolean; dh: boolean; inv: boolean; symbol?: 'contactless' }> = [];
+        let current = '';
+        const flush = () => { if (current) segments.push({ text: current, dw: doubleWidth, dh: doubleHeight, inv: inverse }); current = ''; };
+        for (const ch of raw) {
+          const code = ch.charCodeAt(0);
+          if (code === 0x1e) { flush(); doubleWidth = true; }
+          else if (code === 0x11) { flush(); doubleHeight = true; }
+          else if (code === 0x12) { flush(); inverse = true; }
+          else if (code === 0x1f) { flush(); doubleWidth = false; doubleHeight = false; inverse = false; }
+          else if (code === 0x22) { flush(); segments.push({ text: '', dw: false, dh: false, inv: false, symbol: 'contactless' }); }
+          else if (code === 0x23) { flush(); }
+          else if (code >= 0x20) current += ch;
+        }
+        flush();
+        const height = segments.some((seg) => seg.dh) ? fontPx * 2 + 6 : lineHeight();
+        for (const seg of segments) {
+          if (seg.symbol === 'contactless') {
+            this.drawContactless(ctx, width / 2, y + height / 2, fontPx * 0.9);
+            continue;
+          }
+          const scaleX = seg.dw ? 2 : 1;
+          const scaleY = seg.dh ? 2 : 1;
+          const segWidth = seg.text.length * charWidth * scaleX;
+          ctx.save();
+          if (seg.inv) { ctx.fillStyle = '#000'; ctx.fillRect(x, y, segWidth, height - 2); ctx.fillStyle = '#fff'; } else { ctx.fillStyle = '#000'; }
+          ctx.translate(x, y);
+          ctx.scale(scaleX, scaleY);
+          ctx.font = `700 ${fontPx}px "Courier New", monospace`;
+          ctx.textAlign = 'left';
+          for (let i = 0; i < seg.text.length; i += 1) ctx.fillText(seg.text[i], i * charWidth, 0);
+          ctx.restore();
+          x += segWidth;
+        }
+        y += height;
+      }
+    });
+    return y;
+  }
+
+  /** Bank branding: 0x22 prints as the contactless "wave" sign. */
+  private drawContactless(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number): void {
+    ctx.save();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 4; i += 1) {
+      const r = size * 0.35 + i * size * 0.28;
+      ctx.beginPath();
+      ctx.arc(cx - size * 0.6, cy, r, -Math.PI / 4, Math.PI / 4);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  private paintZReport(
+    ctx: CanvasRenderingContext2D,
+    report: PosZReportPrintData,
+    profile: PosBusinessProfile | null,
+    logo: HTMLImageElement | null,
+  ): number {
+    const width = this.widthPx;
+    const centerX = width / 2;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, width, ctx.canvas.height);
+    ctx.fillStyle = '#000';
+    ctx.textBaseline = 'top';
+
+    let y = this.marginPx + 8;
+    if (logo) {
+      const logoWidth = Math.min(260, width * 0.54);
+      const logoHeight = logoWidth * (logo.naturalHeight / logo.naturalWidth);
+      this.drawThresholdedImage(ctx, logo, centerX - logoWidth / 2, y, logoWidth, logoHeight);
+      y += logoHeight + 16;
+    } else {
+      ctx.font = `italic 34px ${this.displayFont}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(profile?.tradeNameEn || 'Elite Collection', centerX, y);
+      y += 44;
+    }
+    y += 10;
+
+    ctx.font = `600 16px ${this.bodyFont}`;
+    ctx.textAlign = 'center';
+    this.fillTextTracked(ctx, 'Z REPORT', centerX, y, 3);
+    y += 26;
+    if (report.zNumber) {
+      ctx.font = `600 15px ${this.bodyFont}`;
+      ctx.fillText(report.zNumber, centerX, y);
+      y += 22;
+    }
+    ctx.font = `13px ${this.bodyFont}`;
+    ctx.fillStyle = this.inkMuted;
+    ctx.fillText(this.formatQatarDateTime(report.createdAt), centerX, y);
+    ctx.fillStyle = '#000';
+    y += 22;
+    if (report.branchName || report.registerName || report.cashierName) {
+      ctx.font = `13px ${this.bodyFont}`;
+      ctx.fillStyle = this.inkMuted;
+      ctx.fillText([report.branchName, report.cashierName, report.registerName].filter(Boolean).join('  ·  '), centerX, y);
+      ctx.fillStyle = '#000';
+      y += 22;
+    }
+    y += 8;
+    y = this.rule(ctx, y);
+    y += 16;
+
+    ctx.font = `14px ${this.bodyFont}`;
+    y = this.columns(ctx, 'Opening float', this.money(report.openingFloatCents), y);
+    y = this.columns(ctx, 'Gross sales', this.money(report.grossSalesCents), y);
+    y = this.columns(ctx, 'Cash sales', this.money(report.cashSalesCents), y);
+    y = this.columns(ctx, 'Card sales', this.money(report.cardSalesCents), y);
+    y = this.columns(ctx, 'Sadad sales', this.money(report.sadadSalesCents ?? 0), y);
+    y = this.columns(ctx, 'Refunds', this.money(-report.refundTotalCents), y);
+    y = this.columns(ctx, 'Voids', this.money(-report.voidTotalCents), y);
+    y += 4;
+    y = this.rule(ctx, y);
+    y += 14;
+    ctx.font = `600 18px ${this.displayFont}`;
+    y = this.columns(ctx, 'Net sales', this.money(report.netSalesCents), y);
+    y += 8;
+    ctx.font = `14px ${this.bodyFont}`;
+    y = this.columns(ctx, 'Cash paid in', this.money(report.cashInCents), y);
+    y = this.columns(ctx, 'Cash paid out', this.money(-report.cashOutCents), y);
+    y += 4;
+    y = this.rule(ctx, y);
+    y += 14;
+    y = this.columns(ctx, 'Expected cash', this.money(report.expectedCashCents), y);
+    y = this.columns(ctx, 'Physical cash', this.money(report.physicalCashCents), y);
+    ctx.font = `600 16px ${this.bodyFont}`;
+    // Thermal heads do not reproduce semantic UI colours reliably. Keep the
+    // variance black and use weight for emphasis, exactly like the receipt.
+    ctx.fillStyle = '#000';
+    y = this.columns(ctx, 'Variance', this.money(report.varianceCents), y);
+    ctx.fillStyle = '#000';
+    y += 10;
+    y = this.rule(ctx, y);
+    y += 16;
+
+    ctx.font = `13px ${this.bodyFont}`;
+    ctx.fillStyle = this.inkMuted;
+    y = this.columns(ctx, 'Transactions', String(report.transactionCount), y);
+    y = this.columns(ctx, 'Items sold', String(report.soldItemQuantity), y);
+    y = this.columns(ctx, 'Items returned', String(report.returnedItemQuantity), y);
+    y = this.columns(ctx, 'Net items', String(report.netItemQuantity), y);
+    y = this.columns(ctx, 'Refunds', String(report.refundCount), y);
+    y = this.columns(ctx, 'Voids', String(report.voidCount), y);
+    ctx.fillStyle = '#000';
+    y += 6;
+    y = this.rule(ctx, y);
+    y += 14;
+
+    // A positive end marker makes a complete report obvious at a glance. If
+    // the printer/driver ever truncates a job, staff can immediately tell that
+    // the paper is incomplete instead of treating a partial financial report
+    // as valid. The immutable report id ties the paper back to history.
+    ctx.font = `600 12px ${this.bodyFont}`;
+    ctx.textAlign = 'center';
+    this.fillTextTracked(ctx, 'END OF Z REPORT', centerX, y, 1.2);
+    y += 20;
+    ctx.font = `12px ${this.bodyFont}`;
+    ctx.fillText(report.zNumber || `ID ${report.zReportId}`, centerX, y);
+    y += 20;
+
+    return y;
+  }
+
+  /**
+   * ESC/POS QR + cut, appended as raw commands after the rasterized image.
+   *
+   * Centring is not optional here, and its absence is why the QR printed hard
+   * against the left edge of every receipt while the rest of the page was
+   * centred. The body is a canvas raster, so its centring is baked into the
+   * pixels; the QR is not in that image at all, it is drawn by the printer
+   * from these commands, using the printer's own justification state. That
+   * state defaults to left. `ESC a 1` sets centre for the QR and `ESC a 0`
+   * puts it back so nothing after this inherits it.
+   *
+   * A feed of blank lines is inserted between the QR print command and the
+   * cut command, because a real test print showed the auto-cutter slicing
+   * through the QR when no gap was reserved after it. `ESC d n` feeds n lines
+   * before the cut fires, guaranteeing clear paper below the QR regardless of
+   * how tall it renders for a given payload length.
+   */
+  private footerCommands(receipt: PosReceiptData): string {
+    const esc = '\x1b';
+    const centre = esc + 'a' + '\x01';
+    const lookup = receipt.lookupCode || `#${receipt.receiptNumber}`;
+    return centre + this.qrCode(lookup) + this.feedAndCutCommands();
+  }
+
+  private feedAndCutCommands(): string {
+    // Reset line spacing before feeding: ESC d uses the printer's current
+    // spacing, which an image/previous job can change. Six default lines
+    // advance about 25mm past the thermal head so the final rows (including
+    // refund/void counts on Z reports) leave the cutter before it fires.
+    return '\x1b' + 'a' + '\x00' + '\x1b' + '2' + '\x1b' + 'd' + '\x06' + '\x1d' + 'V' + '\x01';
+  }
+
+  private qrCode(data: string): string {
+    const gs = '\x1d';
+    const bytes = `${data}`;
+    const storeLen = bytes.length + 3;
+    const pL = String.fromCharCode(storeLen % 256);
+    const pH = String.fromCharCode(Math.floor(storeLen / 256));
+    return [
+      gs + '(k' + '\x04\x00\x31\x41\x32\x00', // select model 2
+      // Module size 8, not 4.
+      //
+      // At 180dpi a module is 8/180in ≈ 1.13mm, so the short lookup payload
+      // used here (a version 1-2 symbol, 21-25 modules a side) prints about
+      // 24-28mm square. That clears the ~20mm floor most phone cameras want
+      // at arm's length and still leaves half the 72mm printable width free.
+      // Size 4 was chosen to keep the code visually quiet, but a QR nobody
+      // can scan is not restraint, it is decoration.
+      gs + '(k' + '\x03\x00\x31\x43\x08',
+      gs + '(k' + '\x03\x00\x31\x45\x31', // error correction level M
+      gs + '(k' + pL + pH + '\x31\x50\x30' + bytes, // store data
+      gs + '(k' + '\x03\x00\x31\x51\x30', // print
+    ].join('');
+  }
+
+  drawerCommand(pin: 'epson-pin-2' | 'epson-pin-5'): string {
+    const pinByte = pin === 'epson-pin-2' ? '\x00' : '\x01';
+    return '\x1b' + 'p' + pinByte + '\x32' + '\x32';
+  }
+
+  /** Paints the full receipt and returns the final Y cursor (content height). */
+  private paint(
+    ctx: CanvasRenderingContext2D,
+    receipt: PosReceiptData,
+    profile: PosBusinessProfile | null,
+    logo: HTMLImageElement | null,
+  ): number {
+    const width = this.widthPx;
+    const centerX = width / 2;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, width, ctx.canvas.height);
+    ctx.fillStyle = '#000';
+    ctx.textBaseline = 'top';
+
+    let y = this.marginPx + 8;
+    const amount = receipt.kind === 'refund' ? receipt.amountCents ?? 0 : receipt.totalCents ?? 0;
+    const correctionKind = receipt.kind === 'refund' || receipt.kind === 'void';
+
+    // Wordmark: the real brand logo, thresholded to pure black so it stays
+    // crisp on a thermal head instead of dithering into grey mush. Falls
+    // back to the plain trade name if the asset couldn't load.
+    if (logo) {
+      const logoWidth = Math.min(260, width * 0.54);
+      const logoHeight = logoWidth * (logo.naturalHeight / logo.naturalWidth);
+      this.drawThresholdedImage(ctx, logo, centerX - logoWidth / 2, y, logoWidth, logoHeight);
+      y += logoHeight + 16;
+    } else {
+      ctx.font = `italic 34px ${this.displayFont}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(profile?.tradeNameEn || 'Elite Collection', centerX, y);
+      y += 44;
+    }
+
+    ctx.textAlign = 'center';
+    // The brand name always prints under the logo, even on an unconfigured
+    // profile. Previously it was skipped when `tradeNameEn` was empty, so a
+    // receipt showed the logo and then jumped straight to the sale — which is
+    // what the last real test print looked like. The receipt has to name the
+    // shop (owner requirement, 2026-08-01: logo, brand name, branch, phone).
+    // Only when the wordmark actually rendered. This line is a subtitle *to*
+    // the logo, spelling out in plain letterforms what the mark says in
+    // stylised ones. On the fallback path the mark is already plain text, so
+    // printing this too gave "Elite Collection" in Georgia italic with
+    // "ELITE COLLECTION" in tracked caps directly beneath it: the same shop
+    // named twice, which reads as a rendering fault rather than a header.
+    if (logo) {
+      ctx.font = `700 18px ${this.bodyFont}`;
+      ctx.save();
+      ctx.textAlign = 'center';
+      this.fillTextTracked(ctx, (profile?.tradeNameEn || 'ELITE COLLECTION').toUpperCase(), centerX, y, 2);
+      ctx.restore();
+      y += 27;
+    }
+    if (profile?.tradeNameAr) {
+      ctx.font = `700 19px ${this.bodyFont}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(this.shapeArabic(profile.tradeNameAr), centerX, y);
+      y += 28;
+    }
+    y += 10;
+
+    ctx.font = `600 16px ${this.bodyFont}`;
+    ctx.fillStyle = this.inkMuted;
+    if (profile?.addressAr) {
+      for (const line of profile.addressAr.split(/\r?\n/)) {
+        const text = line.trim();
+        if (!text) continue;
+        y = this.wrapText(ctx, text, this.marginPx, y, width - this.marginPx * 2, true, true);
+      }
+      y += 2;
+    }
+    // A real shop address does not fit on one line. The Pearl branch alone is
+    // "Parcel 14, 25 La Croisette Ground Floor / Shop 317, Marina Way 23 /
+    // The Pearl - Qatar" — printed with a single `fillText` it ran off both
+    // edges of a 72mm tape. Author-entered newlines are honoured as written,
+    // because a postal address has meaningful line breaks, and any line still
+    // too long for the paper is wrapped rather than clipped.
+    if (profile?.addressEn) {
+      for (const line of profile.addressEn.split(/\r?\n/)) {
+        const text = line.trim();
+        if (!text) continue;
+        y = this.wrapText(ctx, text, this.marginPx, y, width - this.marginPx * 2, true);
+      }
+      y += 2;
+    }
+    if (profile?.phone) {
+      ctx.font = `700 17px ${this.bodyFont}`;
+      ctx.fillText(profile.phone, centerX, y);
+      y += 24;
+    }
+    ctx.fillStyle = '#000';
+    y += 20;
+
+    // A single hairline under the header block — the one structural divider
+    // that earns its place, separating "who we are" from "what happened."
+    y = this.rule(ctx, y);
+    y += 14;
+
+    ctx.font = `700 20px ${this.bodyFont}`;
+    ctx.textAlign = 'center';
+    const receiptTitle = receipt.kind === 'refund' ? 'REFUND' : receipt.kind === 'void' ? 'VOID' : 'RECEIPT';
+    const receiptTitleAr = receipt.kind === 'refund' ? 'مرتجع' : receipt.kind === 'void' ? 'إلغاء' : 'فاتورة';
+    ctx.fillText(this.shapeArabic(receiptTitleAr), centerX, y);
+    y += 28;
+    this.fillTextTracked(ctx, receiptTitle, centerX, y, 2.2);
+    y += 31;
+    // The number is language-neutral. Printing it once at a strong weight is
+    // clearer than repeating it in two small labelled lines.
+    ctx.font = `700 27px ${this.bodyFont}`;
+    ctx.fillText(`#${receipt.receiptNumber}`, centerX, y);
+    y += 35;
+    ctx.font = `600 16px ${this.bodyFont}`;
+    ctx.fillStyle = this.inkMuted;
+    ctx.fillText(this.formatQatarDateTime(receipt.createdAt), centerX, y);
+    ctx.fillStyle = '#000';
+    y += 32;
+
+    ctx.textAlign = 'left';
+    ctx.font = `600 16px ${this.bodyFont}`;
+    ctx.fillStyle = this.inkMuted;
+    const meta: string[] = [];
+    if (receipt.cashierName) meta.push(receipt.cashierName);
+    if (receipt.registerName) meta.push(receipt.registerName);
+    if (meta.length) { ctx.textAlign = 'center'; ctx.fillText(meta.join('  ·  '), centerX, y); y += 25; }
+    ctx.fillStyle = '#000';
+    ctx.textAlign = 'left';
+    y += 8;
+    y = this.rule(ctx, y);
+    y += 16;
+
+    const items = receipt.items ?? [];
+    items.forEach((item, index) => {
+      // Each item is one block, and the spacing has to say so. The lines
+      // within a block are set tight and the gap between blocks is wide;
+      // previously both were the same, so on a two-line bilingual name the
+      // Arabic and English halves of one product read as two separate
+      // purchases sitting at opposite margins.
+      if (index > 0) y += 14;
+
+      // The Arabic name sits above the English one so a customer reading
+      // either language recognises what they bought.
+      // It is right-aligned because Arabic reads right-to-left — left-aligning
+      // it would put the end of the phrase where the eye starts.
+      //
+      // `shapeArabic` is required here: the receipt is rasterised, but the
+      // canvas still needs the letters joined and reordered before drawing.
+      if (item.nameAr) {
+        ctx.font = `700 21px ${this.bodyFont}`;
+        ctx.textAlign = 'right';
+        y = this.wrapText(
+          ctx,
+          item.nameAr,
+          this.widthPx - this.marginPx,
+          y,
+          width - this.marginPx * 2,
+          false,
+          true,
+          29,
+        );
+        ctx.textAlign = 'left';
+      }
+      ctx.font = `700 20px ${this.bodyFont}`;
+      y = this.wrapText(ctx, item.name, this.marginPx, y, width - this.marginPx * 2, false, false, 29);
+      const color = item.color?.trim() || '';
+      const size = item.size?.trim() || '';
+      if (color || size) {
+        // Colour and size are separate, explicitly-labelled lines. Keeping the
+        // Arabic on its own row gives the thermal printer enough pixels for
+        // joined Arabic glyphs instead of squeezing two languages together.
+        const variantEn = [color && `Color: ${color}`, size && `Size: ${size}`].filter(Boolean).join('  •  ');
+        const variantAr = [
+          color && `اللون: ${item.colorAr?.trim() || color}`,
+          size && `المقاس: ${this.arabicDigits(size)}`,
+        ].filter(Boolean).join('  •  ');
+        ctx.font = `700 18px ${this.bodyFont}`;
+        ctx.textAlign = 'left';
+        y = this.wrapText(ctx, variantEn, this.marginPx, y, width - this.marginPx * 2, false, false, 27);
+        ctx.textAlign = 'right';
+        y = this.wrapText(
+          ctx,
+          variantAr,
+          this.widthPx - this.marginPx,
+          y,
+          width - this.marginPx * 2,
+          false,
+          true,
+          27,
+        );
+        ctx.textAlign = 'left';
+      } else if (item.variant) {
+        // Backward-compatible fallback for historical receipts created before
+        // colour and size were snapshotted separately.
+        ctx.font = `700 18px ${this.bodyFont}`;
+        ctx.fillText(this.labelVariant(item.variant), this.marginPx, y);
+        ctx.textAlign = 'right';
+        ctx.fillText(this.shapeArabic(this.labelVariantAr(item.variant)), this.widthPx - this.marginPx, y);
+        ctx.textAlign = 'left';
+        y += 27;
+      }
+      // The SKU is deliberately not printed (owner decision, 2026-08-02).
+      // It is an internal catalogue reference: the receipt number and the QR
+      // already cover returns and lookup, so on a customer's copy it is noise.
+      // `PosReceiptLine.sku` stays on the interface because the refund and
+      // exchange screens still read it.
+      // Prices use a full 18px at 700 weight. On the real printer the old 15px
+      // regular decimal point disappeared, making QAR 1,200.00 ambiguous.
+      ctx.font = `700 18px ${this.bodyFont}`;
+      y = this.columns(ctx, `${item.quantity} × ${this.money(item.unitPriceCents)}`, this.money(item.lineTotalCents), y);
+      ctx.font = `700 18px ${this.bodyFont}`;
+      y = this.arabicColumns(
+        ctx,
+        `${this.arabicNumber(item.quantity)} × ${this.arabicMoney(item.unitPriceCents)}`,
+        this.arabicMoney(item.lineTotalCents),
+        y,
+      );
+    });
+    y += 12;
+    y = this.rule(ctx, y);
+    y += 16;
+
+    ctx.font = `600 18px ${this.bodyFont}`;
+    // Qatar has no sales tax, so the receipt carries no tax line at all (owner
+    // decision, 2026-08-01) — printing "Tax QAR 0.00" on a customer's invoice
+    // invites the question of which tax, and the honest answer is none.
+    //
+    // Subtotal prints only when it actually differs from the total. Today it
+    // never does; once discounts exist (docs/25 Phase 6) the line reappears by
+    // itself and means something.
+    if (!correctionKind) {
+      const subtotal = receipt.subtotalCents ?? 0;
+      if (subtotal !== amount) {
+        y = this.bilingualValue(ctx, 'Subtotal', 'المجموع الفرعي', this.money(subtotal), y, false);
+        y += 8;
+      }
+    }
+    const totalLabel = receipt.kind === 'refund' ? 'Refund total' : receipt.kind === 'void' ? 'Void total' : 'Total';
+    const totalLabelAr = receipt.kind === 'refund' ? 'إجمالي المرتجع' : receipt.kind === 'void' ? 'إجمالي الإلغاء' : 'الإجمالي';
+    y = this.bilingualValue(ctx, totalLabel, totalLabelAr, this.money(amount), y, true);
+    y += 14;
+    y = this.bilingualValue(
+      ctx,
+      'Payment',
+      'طريقة الدفع',
+      this.paymentMethodEn(receipt.paymentMethod || receipt.method).toUpperCase(),
+      y,
+      false,
+      this.paymentMethodAr(receipt.paymentMethod || receipt.method),
+    );
+    if (receipt.terminalReference) {
+      const sadad = (receipt.paymentMethod || receipt.method) === 'sadad';
+      y = this.bilingualValue(ctx, sadad ? 'Sadad ref' : 'Terminal ref', sadad ? 'مرجع سداد' : 'مرجع الدفع', receipt.terminalReference, y, false);
+    }
+    if (!correctionKind && (receipt.paymentMethod || receipt.method) === 'cash') {
+      y = this.bilingualValue(ctx, 'Tendered', 'المبلغ المدفوع', this.money(receipt.amountTenderedCents ?? 0), y, false);
+      y = this.bilingualValue(ctx, 'Change', 'الباقي', this.money(receipt.changeGivenCents ?? 0), y, false);
+    }
+    ctx.fillStyle = '#000';
+    if (receipt.reason) {
+      ctx.font = `600 17px ${this.bodyFont}`;
+      y += 4;
+      y = this.wrapText(ctx, `Reason: ${receipt.reason}`, this.marginPx, y, width - this.marginPx * 2);
+      y = this.wrapText(ctx, `السبب: ${receipt.reason}`, this.marginPx, y, width - this.marginPx * 2, true, true);
+    }
+    y += 10;
+    y = this.rule(ctx, y);
+    y += 18;
+
+    // Return/exchange policy — Arabic above English, same order and reasoning
+    // as the item lines: whichever language the customer reads, it's the
+    // first thing under the rule, not buried below the other one.
+    //
+    // Printed as separate points (Refunds / Exchanges / Condition, each its
+    // own line in the stored text) rather than one run-on paragraph — same
+    // "author's line breaks are meaningful" handling as the address block
+    // above. Without this, wrapText (which only breaks on spaces) would
+    // glue "...original receipt.\n\nExchanges: Within 14 days..." into one
+    // continuous ribbon with no visual separation between points.
+    if (profile?.returnPolicyAr) {
+      ctx.font = `700 16px ${this.bodyFont}`;
+      ctx.fillStyle = this.inkMuted;
+      ctx.textAlign = 'center';
+      for (const line of profile.returnPolicyAr.split(/\r?\n/)) {
+        const text = line.trim();
+        if (!text) continue;
+        y = this.wrapText(ctx, text, this.marginPx, y, width - this.marginPx * 2, true, true);
+      }
+      ctx.fillStyle = '#000';
+      y += 6;
+    }
+    if (profile?.returnPolicyEn) {
+      ctx.font = `600 16px ${this.bodyFont}`;
+      ctx.fillStyle = this.inkMuted;
+      ctx.textAlign = 'center';
+      for (const line of profile.returnPolicyEn.split(/\r?\n/)) {
+        const text = line.trim();
+        if (!text) continue;
+        y = this.wrapText(ctx, text, this.marginPx, y, width - this.marginPx * 2, true);
+      }
+      ctx.fillStyle = '#000';
+      y += 10;
+    }
+
+    if (profile?.crLicenseNumber) {
+      ctx.font = `700 16px ${this.bodyFont}`;
+      ctx.fillStyle = this.inkMuted;
+      ctx.textAlign = 'center';
+      ctx.fillText(`CR ${profile.crLicenseNumber}`, centerX, y);
+      y += 25;
+      ctx.fillText(this.shapeArabic(`السجل التجاري ${profile.crLicenseNumber}`), centerX, y);
+      ctx.fillStyle = '#000';
+      y += 25;
+    }
+
+    if (profile?.footerStampEn) {
+      ctx.font = `700 16px ${this.bodyFont}`;
+      ctx.fillStyle = this.inkMuted;
+      ctx.textAlign = 'center';
+      ctx.fillText(profile.footerStampEn, centerX, y);
+      y += 24;
+      ctx.fillStyle = '#000';
+    }
+
+    y += 14;
+    ctx.font = `700 19px ${this.bodyFont}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(this.shapeArabic(receipt.kind === 'void' ? 'تم إلغاء العملية' : 'شكراً لتسوقكم معنا'), centerX, y);
+    y += 27;
+    ctx.fillText(receipt.kind === 'void' ? 'Transaction cancelled' : 'Thank you', centerX, y);
+    y += 30;
+
+    // Caption for the QR the printer draws immediately after this image.
+    //
+    // Kept at the same print-safe floor as the policy and address. The old
+    // 12px caption was visibly fragmented even though the QR itself was bold.
+    y += 10;
+    ctx.font = `700 16px ${this.bodyFont}`;
+    ctx.fillStyle = this.inkMuted;
+    ctx.fillText(this.shapeArabic('امسح الرمز لعرض الفاتورة'), centerX, y);
+    y += 24;
+    this.fillTextTracked(ctx, 'SCAN TO LOOK UP THIS SALE', centerX, y, 0.8);
+    ctx.fillStyle = '#000';
+
+    // No space is reserved for the QR itself, deliberately.
+    //
+    // The QR is not part of this raster. It is printed after it, by the
+    // commands from `footerCommands()`, and the printer advances the paper on
+    // its own as it draws. Reserving its footprint here therefore did not
+    // position anything; it just emitted a blank band roughly a third of the
+    // receipt tall, followed by the QR, followed by the feed lines before the
+    // cut. All that is needed is a small gap so the caption is not touching
+    // the code beneath it.
+    y += 14;
+
+    return y;
+  }
+
+  /**
+   * Draws the logo image thresholded to pure black-or-transparent so it
+   * survives an 1-bit thermal print head cleanly instead of dithering into
+   * grey noise. Any pixel with meaningful opacity becomes solid black;
+   * everything else stays white.
+   */
+  private drawThresholdedImage(
+    ctx: CanvasRenderingContext2D,
+    image: HTMLImageElement,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): void {
+    const off = document.createElement('canvas');
+    off.width = Math.max(1, Math.round(width));
+    off.height = Math.max(1, Math.round(height));
+    const offCtx = off.getContext('2d');
+    if (!offCtx) {
+      ctx.drawImage(image, x, y, width, height);
+      return;
+    }
+    offCtx.drawImage(image, 0, 0, off.width, off.height);
+    const imageData = offCtx.getImageData(0, 0, off.width, off.height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const alpha = data[i + 3];
+      const solid = alpha > 96;
+      data[i] = 0;
+      data[i + 1] = 0;
+      data[i + 2] = 0;
+      data[i + 3] = solid ? 255 : 0;
+    }
+    offCtx.putImageData(imageData, 0, 0);
+    ctx.drawImage(off, x, y, width, height);
+  }
+
+  /**
+   * Give the printer a genuinely one-bit page instead of asking its driver to
+   * decide which antialiased edge pixels survive. A deliberately generous
+   * cutoff turns the pale edge pixels around glyphs black, adding roughly one
+   * thermal dot to thin stems and punctuation. That is what keeps Arabic joins,
+   * decimal points and small Latin counters intact on the real 180dpi head.
+   */
+  private binarizeCanvas(ctx: CanvasRenderingContext2D): void {
+    const image = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+    const data = image.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const luminance = (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000;
+      const value = luminance < 218 ? 0 : 255;
+      data[i] = value;
+      data[i + 1] = value;
+      data[i + 2] = value;
+      data[i + 3] = 255;
+    }
+    ctx.putImageData(image, 0, 0);
+  }
+
+  /** Letter-spaced small-caps label — canvas has no letter-spacing API, so
+   *  this draws char-by-char with manual advance. Used sparingly for the
+   *  one or two eyebrow-style labels that earn the emphasis. */
+  private fillTextTracked(ctx: CanvasRenderingContext2D, text: string, centerX: number, y: number, trackingPx: number): void {
+    const widths = [...text].map((ch) => ctx.measureText(ch).width);
+    const totalWidth = widths.reduce((sum, w) => sum + w, 0) + trackingPx * (text.length - 1);
+    let cursor = centerX - totalWidth / 2;
+    const originalAlign = ctx.textAlign;
+    ctx.textAlign = 'left';
+    [...text].forEach((ch, i) => {
+      ctx.fillText(ch, cursor, y);
+      cursor += widths[i] + trackingPx;
+    });
+    ctx.textAlign = originalAlign;
+  }
+
+  /**
+   * Canvas's 2D text API does not run the Unicode bidi algorithm on its own
+   * for a string drawn via fillText — but it DOES shape and reorder Arabic
+   * correctly as long as the string's *character order* is already logical
+   * (which it is, since these come from the DB as authored Arabic text) and
+   * `direction` is set to rtl so combining/joining forms render properly.
+   * Toggling ctx.direction per-call would work too; using the Unicode RTL
+   * embedding marks is simpler and doesn't require touching canvas state.
+   */
+  private shapeArabic(value: string): string {
+    return '‫' + value + '‬'; // RLE ... PDF (right-to-left embedding)
+  }
+
+  private rule(ctx: CanvasRenderingContext2D, y: number): number {
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(this.marginPx, y);
+    ctx.lineTo(this.widthPx - this.marginPx, y);
+    ctx.stroke();
+    return y;
+  }
+
+  private columns(ctx: CanvasRenderingContext2D, left: string, right: string, y: number): number {
+    const originalAlign = ctx.textAlign;
+    ctx.textAlign = 'left';
+    ctx.fillText(left, this.marginPx, y);
+    ctx.textAlign = 'right';
+    ctx.fillText(right, this.widthPx - this.marginPx, y);
+    ctx.textAlign = originalAlign;
+    return y + this.lineHeightPx;
+  }
+
+  /** RTL counterpart to columns(): label starts at the right edge and the
+   * value sits at the left edge, both shaped independently for reliable
+   * thermal raster output. */
+  private arabicColumns(ctx: CanvasRenderingContext2D, label: string, value: string, y: number): number {
+    const originalAlign = ctx.textAlign;
+    ctx.textAlign = 'right';
+    ctx.fillText(this.shapeArabic(label), this.widthPx - this.marginPx, y);
+    ctx.textAlign = 'left';
+    ctx.fillText(this.shapeArabic(value), this.marginPx, y);
+    ctx.textAlign = originalAlign;
+    return y + this.lineHeightPx;
+  }
+
+  /**
+   * A full-width bilingual detail block. Labels share the first line, while
+   * the important value gets its own line instead of competing horizontally
+   * with two translations. This is intentionally taller than a compact table:
+   * thermal paper is cheap; a total the customer cannot read is not.
+   */
+  private bilingualValue(
+    ctx: CanvasRenderingContext2D,
+    labelEn: string,
+    labelAr: string,
+    value: string,
+    y: number,
+    emphasis: boolean,
+    valueAr = '',
+  ): number {
+    const originalAlign = ctx.textAlign;
+    ctx.fillStyle = '#000';
+    ctx.font = `${emphasis ? 700 : 600} ${emphasis ? 20 : 17}px ${this.bodyFont}`;
+    ctx.textAlign = 'left';
+    ctx.fillText(labelEn, this.marginPx, y);
+    ctx.textAlign = 'right';
+    ctx.fillText(this.shapeArabic(labelAr), this.widthPx - this.marginPx, y);
+    y += emphasis ? 31 : 27;
+
+    ctx.font = `700 ${emphasis ? 28 : 20}px ${this.bodyFont}`;
+    if (valueAr) {
+      ctx.textAlign = 'left';
+      ctx.fillText(value, this.marginPx, y);
+      ctx.textAlign = 'right';
+      ctx.fillText(this.shapeArabic(valueAr), this.widthPx - this.marginPx, y);
+    } else {
+      ctx.textAlign = 'center';
+      ctx.fillText(value, this.widthPx / 2, y);
+    }
+    ctx.textAlign = originalAlign;
+    return y + (emphasis ? 42 : 32);
+  }
+
+  /**
+   * `rtl` shapes each wrapped LINE individually (not the whole paragraph
+   * once before wrapping) — `shapeArabic`'s RLE/PDF embedding marks only
+   * balance correctly within a single `fillText` call. Wrapping the full
+   * string first and then splitting it on spaces would hand `fillText` an
+   * unclosed RLE on the first line and an orphaned PDF on the last, which
+   * is exactly the kind of thing that renders fine on screen and wrong on
+   * a thermal printer. `measureText` is run on the unshaped word/line: the
+   * marks are zero-width formatting characters, so this doesn't skew the
+   * wrap width.
+   */
+  private wrapText(
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    x: number,
+    y: number,
+    maxWidth: number,
+    center = false,
+    rtl = false,
+    lineHeight = this.smallLineHeightPx,
+  ): number {
+    const words = text.split(' ');
+    let line = '';
+    let cursorY = y;
+    const draw = (value: string): void => {
+      ctx.fillText(rtl ? this.shapeArabic(value) : value, center ? this.widthPx / 2 : x, cursorY);
+    };
+    for (const word of words) {
+      const attempt = line ? `${line} ${word}` : word;
+      if (ctx.measureText(attempt).width > maxWidth && line) {
+        draw(line);
+        line = word;
+        cursorY += lineHeight;
+      } else {
+        line = attempt;
+      }
+    }
+    if (line) {
+      draw(line);
+      cursorY += lineHeight;
+    }
+    return cursorY;
+  }
+
+  /**
+   * A bare size reads as a mystery number on paper. If the variant is nothing
+   * but digits it is a shoe size, so say so; anything else already describes
+   * itself ("Beige / 42", "Black") and is printed as stored.
+   */
+  private labelVariant(variant: string): string {
+    const value = variant.trim();
+    return /^\d+([.,]\d+)?$/.test(value) ? `Size ${value}` : value;
+  }
+
+  private labelVariantAr(variant: string): string {
+    const value = variant.trim();
+    return /^\d+([.,]\d+)?$/.test(value) ? `المقاس ${this.arabicDigits(value)}` : value;
+  }
+
+  private money(cents: number): string {
+    // Grouped thousands. A four-figure sale is the normal case here, and
+    // "QAR 1220.00" makes the customer count digits to read their own total.
+    const amount = Number(cents) / 100;
+    return `QAR ${amount.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
+
+  private arabicMoney(cents: number): string {
+    const amount = Number(cents) / 100;
+    try {
+      return new Intl.NumberFormat('ar-QA-u-nu-arab', {
+        style: 'currency',
+        currency: 'QAR',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    } catch {
+      return `${this.arabicDigits(amount.toFixed(2))} ر.ق`;
+    }
+  }
+
+  private arabicNumber(value: number): string {
+    try {
+      return new Intl.NumberFormat('ar-QA-u-nu-arab', { maximumFractionDigits: 2 }).format(value);
+    } catch {
+      return this.arabicDigits(String(value));
+    }
+  }
+
+  private arabicDigits(value: string): string {
+    return value.replace(/\d/g, (digit) => '٠١٢٣٤٥٦٧٨٩'[Number(digit)]);
+  }
+
+  private paymentMethodEn(method?: PosPaymentMethod): string {
+    return method ? POS_PAYMENT_LABELS[method] ?? String(method) : '';
+  }
+
+  private paymentMethodAr(method?: PosPaymentMethod): string {
+    if (method === 'cash') return 'نقداً';
+    if (method === 'card') return 'بطاقة';
+    if (method === 'sadad') return 'سداد';
+    return 'غير محدد';
+  }
+
+  /** 180dpi renderer pixels converted to millimetres, plus the native QR and
+   * cutter feed that are appended after the raster body. */
+  private paperHeightMm(bodyHeightPx: number, includesQr: boolean): number {
+    const bodyMm = bodyHeightPx / 180 * 25.4;
+    const footerMm = includesQr ? 58 : 30;
+    return Math.ceil(bodyMm + footerMm);
+  }
+
+  private formatQatarDateTime(value: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: QATAR_TIME_ZONE,
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date).replace(',', ' ·');
+  }
+}

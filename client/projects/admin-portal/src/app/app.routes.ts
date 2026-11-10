@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard } from './guards/auth.guard';
+import { authGuard, authenticatedRoleGuard } from './guards/auth.guard';
 import { roleGuard } from './guards/role.guard';
 
 export const routes: Routes = [
@@ -24,6 +24,12 @@ export const routes: Routes = [
       import('./pages/accept-invite/accept-invite.component').then((m) => m.AcceptInviteComponent),
   },
   {
+    path: 'pos',
+    canMatch: [authenticatedRoleGuard(['owner', 'admin', 'manager', 'cashier'])],
+    loadComponent: () =>
+      import('./pages/pos/pos.component').then((m) => m.PosComponent),
+  },
+  {
     path: '',
     canMatch: [authGuard],
     children: [
@@ -34,9 +40,15 @@ export const routes: Routes = [
           import('./pages/dashboard/dashboard.component').then((m) => m.DashboardComponent),
       },
       {
+        path: 'restock-requests',
+        loadComponent: () => import('./pages/restock-requests/restock-requests.component').then(m => m.RestockRequestsComponent),
+      },
+      {
         path: 'catalog',
         loadComponent: () =>
           import('./pages/catalog/catalog.component').then((m) => m.CatalogComponent),
+        // Leaving the catalog with an unsaved product asks first.
+        canDeactivate: [(component: { canLeave?: () => boolean | Promise<boolean> }) => component.canLeave?.() ?? true],
       },
       {
         path: 'collections',
@@ -85,10 +97,59 @@ export const routes: Routes = [
           import('./pages/analytics/analytics.component').then((m) => m.AnalyticsComponent),
       },
       {
+        // Operating expenses ledger. Owner/admin only — matches the API mount,
+        // since this is whole-business financial data.
+        path: 'expenses',
+        canMatch: [roleGuard(['owner', 'admin'])],
+        loadComponent: () =>
+          import('./pages/expenses/expenses.component').then((m) => m.ExpensesComponent),
+      },
+      {
         path: 'reference',
         canMatch: [roleGuard(['owner', 'admin'])],
         loadComponent: () =>
           import('./pages/reference/reference.component').then((m) => m.ReferenceComponent),
+      },
+      {
+        // Back-office card settlement reconciliation — no cashier access.
+        path: 'reconciliation',
+        canMatch: [roleGuard(['owner', 'admin', 'manager'])],
+        loadComponent: () =>
+          import('./pages/pos-reconciliation/pos-reconciliation.component').then((m) => m.PosReconciliationComponent),
+      },
+      {
+        // Core reporting (Phase 5) — same access scope as reconciliation.
+        path: 'reports',
+        canMatch: [roleGuard(['owner', 'admin', 'manager'])],
+        loadComponent: () =>
+          import('./pages/reports/reports.component').then((m) => m.ReportsComponent),
+      },
+      {
+        // Stock per location: add stock, move it between locations. Cashiers
+        // have no access (client decision 2026-09-26).
+        path: 'inventory',
+        canMatch: [roleGuard(['owner', 'admin', 'manager'])],
+        loadComponent: () =>
+          import('./pages/inventory/inventory.component').then((m) => m.InventoryComponent),
+      },
+      {
+        // Managers may enter physical counts; only owner/admin actions can
+        // start, cancel, reopen or post the final stock adjustment.
+        path: 'stocktake',
+        canMatch: [roleGuard(['owner', 'admin', 'manager'])],
+        loadComponent: () =>
+          import('./pages/stocktake/stocktake.component').then((m) => m.StocktakeComponent),
+        // Leaving with typed counts that are not saved yet asks first.
+        canDeactivate: [(component: { canLeave?: () => boolean | Promise<boolean> }) => component.canLeave?.() ?? true],
+      },
+      {
+        // Application errors (server, register browsers, CSP) and the audit
+        // trail. Owner/admin only — stack traces and audit rows are not for
+        // every role. See docs/24-logging-observability-plan.md Phase H.
+        path: 'diagnostics',
+        canMatch: [roleGuard(['owner', 'admin'])],
+        loadComponent: () =>
+          import('./pages/diagnostics/diagnostics.component').then((m) => m.DiagnosticsComponent),
       },
       {
         // Only owners and admins can manage workspace settings & team members.
@@ -96,6 +157,16 @@ export const routes: Routes = [
         canMatch: [roleGuard(['owner', 'admin'])],
         loadComponent: () =>
           import('./pages/settings/settings.component').then((m) => m.SettingsComponent),
+      },
+      {
+        // Manager-role accounts can't reach the rest of Settings (store
+        // config/team management are owner/admin-only) but still need a way
+        // to set the manager PIN that approver-separation requires them to
+        // have — see docs/17-pos-remote-verification, 2026-07-20 retest.
+        path: 'my-pin',
+        canMatch: [roleGuard(['owner', 'admin', 'manager'])],
+        loadComponent: () =>
+          import('./pages/my-pin/my-pin.component').then((m) => m.MyPinComponent),
       },
     ],
   },

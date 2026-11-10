@@ -8,16 +8,28 @@ export interface SaveProductPayload {
   sku: string;
   brand: string;
   price: number;
+  defaultCostPrice: number | null;
+  defaultShippingCost: number | null;
   stock: number;
   hidden: boolean;
+  posHidden: boolean;
   enDesc: string;
   arDesc: string;
+  shortEn: string;
+  shortAr: string;
+  teaserEn: string;
+  teaserAr: string;
+  noteEn: string;
+  noteAr: string;
+  careEn: string;
+  careAr: string;
   metaTitle: string;
   metaDesc: string;
   slug: string;
   variants: ProductVariant[];
   images: string[];
   imageColors: Record<string, string>;
+  colorCovers: Record<string, string>;
   relatedProductIds: string[];
 }
 
@@ -47,6 +59,9 @@ export class AdminProductsService {
       imageColors: Object.fromEntries(
         Object.entries(p.imageColors ?? {}).map(([url, color]) => [norm(url), color])
       ),
+      colorCovers: Object.fromEntries(
+        Object.entries(p.colorCovers ?? {}).map(([color, url]) => [color, norm(url)])
+      ),
     };
   }
 
@@ -62,6 +77,12 @@ export class AdminProductsService {
 
   archive(id: string): Promise<{ id: string }> {
     return firstValueFrom(this.api.delete<{ id: string }>(`/admin/products/${id}`));
+  }
+
+  /** Undo an archive. `hidden` restores the visibility it had before. */
+  restore(id: string, hidden?: boolean): Promise<Product> {
+    return firstValueFrom(this.api.post<Product>(`/admin/products/${id}/restore`, { hidden }))
+      .then(p => this.normalizeProduct(p));
   }
 
   bulkDelete(ids: string[]): Promise<{ deleted: number }> {

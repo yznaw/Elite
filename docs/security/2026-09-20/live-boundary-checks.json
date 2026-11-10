@@ -1,0 +1,23 @@
+[
+  {
+    "method": "HEAD",
+    "url": "https://elitecollections.qa/api/contact",
+    "status": 200,
+    "content_type": "application/json; charset=utf-8",
+    "body_sample": "[HEAD: no response body requested]"
+  },
+  {
+    "method": "GET",
+    "url": "https://elitecollections.qa/api/health",
+    "status": 403,
+    "content_type": "application/json; charset=utf-8",
+    "body_sample": "{\"success\":false,\"message\":\"CORS blocked: origin https://untrusted.example not allowed\",\"code\":\"CORS_ORIGIN_DENIED\",\"requestId\":\"f0967483c0c3\"}"
+  },
+  {
+    "method": "POST",
+    "url": "https://elitecollections.qa/api/carts/checkout",
+    "status": 422,
+    "content_type": "application/json; charset=utf-8",
+    "body_sample": "{\"success\":false,\"message\":\"Validation failed.\",\"errors\":[\"Customer name is required.\",\"Customer email is required.\",\"Customer phone is required.\",\"Delivery address, city, and country are required.\",\"At least one cart item is required.\",\"A valid NBOX delivery quote is required.\"]}"
+  }
+]

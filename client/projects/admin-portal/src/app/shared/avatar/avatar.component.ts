@@ -1,8 +1,9 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
 
 @Component({
   selector: 'ap-avatar',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.Eager,
   template: `<div class="avatar" [class.lg]="size === 'lg'" [class.muted]="muted" [style.width.px]="customSize" [style.height.px]="customSize" [style.font-size.px]="fontSize">{{ initials }}</div>`,
 })
 export class AvatarComponent {

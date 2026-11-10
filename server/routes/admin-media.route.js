@@ -4,19 +4,28 @@ const { ensureDefaultTenant } = require('../db/tenant');
 const { asyncHandler, created, notFound, ok, validationError } = require('./lib');
 const { upload, MAX_SIZE_BYTES } = require('../middleware/upload');
 const { storage } = require('../lib/storage');
+const { getContentReferencedBasenames } = require('./storefront-content.route');
 
 const router = Router();
 
-function mapMedia(row) {
+// A media asset can be "in use" without a media_links row: the homepage
+// hero/story sections reference images by URL directly inside
+// store_settings.home_content, not through media_links. Without this check,
+// an image used only there reads as unlinked in the library and — worse —
+// is exactly what DELETE /orphaned considers safe to delete.
+function mapMedia(row, contentBasenames = new Set()) {
+  const basename = row.storage_url ? row.storage_url.split('/').pop() : null;
+  const usedInContent = basename ? contentBasenames.has(basename) : false;
   return {
     id: row.id,
     name: row.filename,
-    kind: row.kind === 'model_3d' ? 'glb' : row.kind,
+    kind: row.kind,
     size: Number(row.size_bytes || 0),
     w: row.width || undefined,
     h: row.height || undefined,
     uploaded: row.uploaded_at,
     linkedTo: row.product_id || null,
+    usedInContent,
     uploader: row.uploader || 'System',
     initials: row.initials || 'SY',
     preview: row.preview_url || row.storage_url,
@@ -33,10 +42,8 @@ async function removeAssetFiles(metadata = {}) {
   await storage.removeMany([metadata.storagePath, ...variantPaths]);
 }
 
-function kindFromMime(mime, originalname) {
-  if ((originalname || '').toLowerCase().endsWith('.glb')) return 'model_3d';
+function kindFromMime(mime, _originalname) {
   if (mime && mime.startsWith('image/')) return 'image';
-  if (mime === 'model/gltf-binary') return 'model_3d';
   return 'document';
 }
 
@@ -46,6 +53,8 @@ router.get(
     const client = await db.pool.connect();
     try {
       const tenant = await ensureDefaultTenant(client);
+      // Sequential, not Promise.all: both queries run on this one pg client,
+      // and node-postgres serializes commands on a single connection anyway.
       const result = await client.query(
         `
           SELECT m.*, ml.product_id, u.full_name AS uploader, u.initials
@@ -57,7 +66,8 @@ router.get(
         `,
         [tenant.id],
       );
-      ok(res, result.rows.map(mapMedia));
+      const contentBasenames = await getContentReferencedBasenames(client, tenant.id);
+      ok(res, result.rows.map((row) => mapMedia(row, contentBasenames)));
     } finally {
       client.release();
     }
@@ -111,7 +121,7 @@ router.post(
               file.originalname,
               kind,
               stored.mimeType,
-              file.size,
+              stored.sizeBytes || file.size,
               stored.width,
               stored.height,
               stored.url,
@@ -164,7 +174,7 @@ router.post(
     const client = await db.pool.connect();
     try {
       const tenant = await ensureDefaultTenant(client);
-      const kind = req.body.kind === 'glb' ? 'model_3d' : req.body.kind || 'image';
+      const kind = req.body.kind || 'image';
       const result = await client.query(
         `
           INSERT INTO media_assets (tenant_id, filename, kind, mime_type, size_bytes, width, height, storage_url, preview_url)
@@ -217,10 +227,15 @@ router.delete(
       await client.query('BEGIN');
       const tenant = await ensureDefaultTenant(client);
 
-      // Find all unlinked assets (no entry in media_links for this tenant)
+      // Find all unlinked assets (no entry in media_links for this tenant).
+      // "Unlinked" here means no product gallery link — it does NOT yet
+      // account for an asset the homepage hero/story sections reference
+      // directly by URL (store_settings.home_content), which carries no
+      // media_links row at all. Filtered out below before anything is
+      // deleted, or "clean up orphaned media" would delete a live hero image.
       const lookup = await client.query(
         `
-          SELECT m.id, m.metadata
+          SELECT m.id, m.metadata, m.storage_url
           FROM media_assets m
           LEFT JOIN media_links ml ON ml.media_id = m.id
           WHERE m.tenant_id = $1 AND ml.media_id IS NULL
@@ -228,10 +243,16 @@ router.delete(
         [tenant.id],
       );
 
-      const ids = lookup.rows.map((r) => r.id);
+      const contentBasenames = await getContentReferencedBasenames(client, tenant.id);
+      const trulyOrphaned = lookup.rows.filter((row) => {
+        const basename = row.storage_url ? row.storage_url.split('/').pop() : null;
+        return !basename || !contentBasenames.has(basename);
+      });
+
+      const ids = trulyOrphaned.map((r) => r.id);
       let deleted = 0;
 
-      for (const row of lookup.rows) {
+      for (const row of trulyOrphaned) {
         await client.query('DELETE FROM media_assets WHERE tenant_id = $1 AND id = $2', [tenant.id, row.id]);
         await removeAssetFiles(row.metadata).catch(() => undefined);
         deleted++;
@@ -239,6 +260,45 @@ router.delete(
 
       await client.query('COMMIT');
       ok(res, { deleted, ids }, `${deleted} orphaned media asset${deleted === 1 ? '' : 's'} deleted.`);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }),
+);
+
+router.post(
+  '/bulk-delete',
+  asyncHandler(async (req, res) => {
+    const ids = Array.isArray(req.body.ids) ? [...new Set(req.body.ids.filter(Boolean))] : [];
+    if (ids.length === 0) return validationError(res, ['ids must be a non-empty array.']);
+
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const tenant = await ensureDefaultTenant(client);
+
+      const lookup = await client.query(
+        'SELECT id, metadata FROM media_assets WHERE tenant_id = $1 AND id = ANY($2::uuid[])',
+        [tenant.id, ids],
+      );
+      await client.query(
+        'DELETE FROM media_assets WHERE tenant_id = $1 AND id = ANY($2::uuid[])',
+        [tenant.id, ids],
+      );
+
+      await client.query('COMMIT');
+
+      // Best-effort: physical file cleanup happens after the transaction
+      // commits so a storage hiccup never rolls back the DB deletion.
+      for (const row of lookup.rows) {
+        await removeAssetFiles(row.metadata).catch(() => undefined);
+      }
+
+      const deleted = lookup.rowCount;
+      ok(res, { deleted, ids: lookup.rows.map((r) => r.id) }, `${deleted} media asset${deleted === 1 ? '' : 's'} deleted.`);
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -477,7 +537,7 @@ router.post(
              (tenant_id, filename, kind, mime_type, size_bytes, width, height, storage_url, preview_url, uploaded_by_user_id, metadata)
            VALUES ($1,$2,'image',$3,$4,$5,$6,$7,$8,$9,$10::jsonb) RETURNING *`,
           [
-            tenant.id, filename, contentType, buffer.length,
+            tenant.id, filename, stored.mimeType, stored.sizeBytes,
             stored.width, stored.height,
             stored.url, stored.previewUrl, userId,
             JSON.stringify({

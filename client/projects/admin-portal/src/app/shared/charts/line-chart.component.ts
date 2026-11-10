@@ -1,11 +1,11 @@
-import { Component, Input, computed, signal } from '@angular/core';
+import { Component, Input, computed, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
-  selector: 'ap-line-chart',
-  standalone: true,
-  imports: [CommonModule],
-  template: `
+    selector: 'ap-line-chart',
+    imports: [CommonModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     <svg [attr.viewBox]="'0 0 ' + w + ' ' + h" width="100%" preserveAspectRatio="none" style="display:block;">
       <defs>
         <linearGradient [attr.id]="gradId" x1="0" y1="0" x2="0" y2="1">
@@ -32,7 +32,7 @@ import { CommonModule } from '@angular/common';
         <circle [attr.cx]="lp.x" [attr.cy]="lp.y" r="4" fill="#c5a572" stroke="#fff" stroke-width="2"/>
       }
     </svg>
-  `,
+  `
 })
 export class LineChartComponent {
   @Input({ required: true }) set data(d: Array<Record<string, unknown>>) { this._data.set(d); }

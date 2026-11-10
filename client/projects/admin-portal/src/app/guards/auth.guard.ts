@@ -1,6 +1,6 @@
 import { inject } from '@angular/core';
 import { CanMatchFn, Router, UrlSegment } from '@angular/router';
-import { AuthService } from '../services/auth.service';
+import { AuthService, UserRole } from '../services/auth.service';
 
 /**
  * Block navigation to admin routes when no session exists.
@@ -9,13 +9,39 @@ import { AuthService } from '../services/auth.service';
  * when the visitor isn't authenticated. We always re-check via `/api/auth/me`
  * so a stale cookie / cleared server session immediately bounces to /login.
  */
-export const authGuard: CanMatchFn = async (_route, segments: UrlSegment[]) => {
-  const auth = inject(AuthService);
-  const router = inject(Router);
+function createAuthGuard(allowedRoles?: readonly UserRole[]): CanMatchFn {
+  return async (_route, segments: UrlSegment[]) => {
+    const auth = inject(AuthService);
+    const router = inject(Router);
+    const isPos = segments[0]?.path === 'pos';
 
-  const user = await auth.me();
-  if (user) return true;
+    // A POS known to be offline skips the probe and resumes its cached
+    // identity. Elsewhere me() keeps the cached user on a network or server
+    // error and clears it only on 401/403. Role checks still apply, and every
+    // write is authorized again by the API.
+    const cachedUser = auth.user();
+    const user = !navigator.onLine && isPos && cachedUser
+      ? cachedUser
+      : await auth.me();
 
-  const returnUrl = '/' + segments.map((s) => s.path).join('/');
-  return router.createUrlTree(['/login'], { queryParams: { returnUrl } });
-};
+    if (!user) {
+      const returnUrl = '/' + segments.map((s) => s.path).join('/');
+      return router.createUrlTree(['/login'], { queryParams: { returnUrl } });
+    }
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
+      return router.createUrlTree(['/dashboard']);
+    }
+    return true;
+  };
+}
+
+export const authGuard = createAuthGuard();
+
+/**
+ * Resolve the session before checking its role. Separate canMatch guards run
+ * concurrently, so [authGuard, roleGuard(...)] can reject an uncached user
+ * before /auth/me returns, or authorize using a stale cached role.
+ */
+export function authenticatedRoleGuard(allowedRoles: readonly UserRole[]): CanMatchFn {
+  return createAuthGuard(allowedRoles);
+}

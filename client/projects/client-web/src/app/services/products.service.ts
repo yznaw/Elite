@@ -1,7 +1,10 @@
-import { HttpClient } from '@angular/common/http';
-import { Injectable, inject, signal } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { Injectable, PLATFORM_ID, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { Product } from '../models/product.model';
+import { resolveClientMediaUrl } from '../utils/media-url';
+import { API_BASE, PUBLIC_API_BASE } from '../core/api-base';
 
 const LOGO_FALLBACK = '/assets/brand/elite-logo-green.png';
 
@@ -18,9 +21,11 @@ export class ProductsService {
   private readonly _loading = signal(false);
   private readonly _loaded = signal(false);
   private readonly _error = signal<string | null>(null);
-  private readonly apiBase = this.resolveApiBase();
+  private readonly apiBase = inject(API_BASE);
+  private readonly publicApiBase = inject(PUBLIC_API_BASE);
   private readonly cacheMs = 60_000;
   private loadPromise: Promise<Product[]> | null = null;
+  private configPromise: Promise<void> | null = null;
   private loadedAt = 0;
   defaultImage = LOGO_FALLBACK;
   readonly products = this._products.asReadonly();
@@ -29,16 +34,31 @@ export class ProductsService {
   readonly error = this._error.asReadonly();
 
   constructor() {
-    void this.loadConfig().then(() => this.loadFromApi());
+    // Browser: warm the catalogue immediately, so search and navigation feel
+    // instant. Server: only when a page asks (`ensureLoaded()` from home and
+    // collection). The nav injects this service on every page, so an eager
+    // load here fetched the whole catalogue for every render, including
+    // contact, story and policy pages that never show a product: ~800 kB
+    // embedded in each page's transfer state and the full /api/products
+    // response time added to every request.
+    if (isPlatformBrowser(inject(PLATFORM_ID))) void this.loadFromApi();
   }
 
-  private async loadConfig(): Promise<void> {
-    try {
-      const res = await firstValueFrom(
-        this.http.get<{ success: boolean; data: { defaultImage?: string } }>(`${this.apiBase}/config`),
-      );
-      if (res?.data?.defaultImage) this.defaultImage = res.data.defaultImage;
-    } catch { /* use logo fallback */ }
+  /**
+   * `defaultImage` feeds every product without art, so it must be known before
+   * products are normalised, on both sides alike: a server that normalised with
+   * the logo fallback and a browser that normalised with the configured image
+   * would render different `src`s for the same product. Fetched once.
+   */
+  private loadConfig(): Promise<void> {
+    this.configPromise ??= firstValueFrom(
+      this.http.get<{ success: boolean; data: { defaultImage?: string } }>(`${this.apiBase}/config`),
+    )
+      .then((res) => {
+        if (res?.data?.defaultImage) this.defaultImage = res.data.defaultImage;
+      })
+      .catch(() => { /* use logo fallback */ });
+    return this.configPromise;
   }
 
   getAll(): Product[] {
@@ -47,6 +67,54 @@ export class ProductsService {
 
   getById(id: string): Product | undefined {
     return this._products().find((p) => p.id === id);
+  }
+
+  /**
+   * Fetch a single product by slug or id, without loading the catalogue.
+   *
+   * A server render of one product page would otherwise pull the whole
+   * catalogue (roughly a megabyte) to find one row, on every request. The
+   * browser still loads the catalogue afterwards for search and related
+   * products; this just keeps the page itself off that critical path.
+   *
+   * Resolves to undefined only when the API says the product is not there,
+   * which the page turns into a real 404. Every other failure — API down,
+   * timeout, 500 — throws, because answering 404 for a product that still
+   * exists would tell search engines to drop it over a blip.
+   */
+  async fetchOne(idOrSlug: string): Promise<Product | undefined> {
+    const key = idOrSlug.trim();
+    if (!key) return undefined;
+    await this.loadConfig();
+    try {
+      const res = await firstValueFrom(
+        this.http.get<ApiResponse<Product>>(`${this.apiBase}/products/${encodeURIComponent(key)}`),
+      );
+      return res?.data ? this.normalizeProductImages(res.data) : undefined;
+    } catch (err) {
+      if (err instanceof HttpErrorResponse && err.status === 404) return undefined;
+      throw err;
+    }
+  }
+
+  getBySlug(slug: string): Product | undefined {
+    const key = slug.trim().toLowerCase();
+    if (!key) return undefined;
+    return this._products().find((p) => (p.slug || '').toLowerCase() === key);
+  }
+
+  /**
+   * What a product's URL uses: its slug, or its id for a product saved before
+   * slugs existed. One definition, because a link built any other way either
+   * 404s or costs a redirect.
+   */
+  productKey(product: Pick<Product, 'id' | 'slug'>): string {
+    return product.slug?.trim() || product.id;
+  }
+
+  /** Path form of the same, for canonical URLs and structured data. */
+  productPath(product: Pick<Product, 'id' | 'slug'>): string {
+    return `/product/${this.productKey(product)}`;
   }
 
   getFeatured(): Product[] {
@@ -77,11 +145,10 @@ export class ProductsService {
     this._loading.set(true);
     this._error.set(null);
 
-    this.loadPromise = firstValueFrom(
-      this.http.get<ApiResponse<Product[]>>(url),
-    )
+    this.loadPromise = this.loadConfig()
+      .then(() => firstValueFrom(this.http.get<ApiResponse<Product[]>>(url)))
       .then((res) => {
-        if (Array.isArray(res.data) && res.data.length > 0) {
+        if (Array.isArray(res.data)) {
           this._products.set(res.data.map((product) => this.normalizeProductImages(product)));
         }
         this.loadedAt = Date.now();
@@ -107,11 +174,12 @@ export class ProductsService {
       : [];
     const image = this.resolveMediaUrl(product.image) || images[0] || this.defaultImage;
     const colorImages = this.normalizeColorImages(product.colorImages);
+    const colorGalleries = this.normalizeColorGalleries(product.colorGalleries);
     const imageVariants = this.normalizeImageVariants(product.imageVariants);
     const variants = Array.isArray(product.variants)
       ? product.variants.map((variant) => ({
         ...variant,
-        size: Number.isFinite(Number(variant.size)) ? Number(variant.size) : undefined,
+        size: variant.size != null && Number.isFinite(Number(variant.size)) ? Number(variant.size) : undefined,
         stock: Math.max(0, Number.parseInt(String(variant.stock), 10) || 0),
       }))
       : undefined;
@@ -122,8 +190,20 @@ export class ProductsService {
       images: images.length ? [...new Set([image, ...images])] : product.images,
       imageVariants: Object.keys(imageVariants).length ? imageVariants : undefined,
       colorImages: Object.keys(colorImages).length ? colorImages : undefined,
+      colorGalleries: Object.keys(colorGalleries).length ? colorGalleries : undefined,
       variants,
     };
+  }
+
+  private normalizeColorGalleries(colorGalleries: Product['colorGalleries']): Record<string, string[]> {
+    return Object.entries(colorGalleries || {}).reduce<Record<string, string[]>>((map, [color, urls]) => {
+      const key = String(color || '').trim().toLowerCase();
+      const list = (Array.isArray(urls) ? urls : [])
+        .map((url) => this.resolveMediaUrl(String(url || '')))
+        .filter(Boolean);
+      if (key && list.length) map[key] = [...new Set(list)];
+      return map;
+    }, {});
   }
 
   private normalizeColorImages(colorImages: Product['colorImages']): Record<string, string> {
@@ -162,23 +242,8 @@ export class ProductsService {
     }, {});
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost'
-      || hostname === '127.0.0.1'
-      || hostname === '::1'
-      || hostname === '[::1]'
-      || /^10\./.test(hostname)
-      || /^192\.168\./.test(hostname)
-      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 
   private resolveMediaUrl(url: string | undefined): string {
-    const value = (url || '').trim();
-    if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
-    if (!value.startsWith('/uploads/')) return value;
-
-    return `${this.apiBase}${value}`; // /api/uploads/… routes through the existing proxy
+    return resolveClientMediaUrl(url, this.publicApiBase);
   }
 }

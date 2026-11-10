@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -10,10 +10,9 @@ import { I18nService } from '../../services/i18n.service';
 import { LocaleService } from '../../services/locale.service';
 
 @Component({
-  selector: 'ap-reset-password',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, SpinnerComponent],
-  template: `
+    selector: 'ap-reset-password',
+    imports: [CommonModule, FormsModule, RouterLink, SpinnerComponent],
+    template: `
     <div class="login-shell" [attr.dir]="locale.dir()">
       <div class="login-wrap">
         <img src="assets/brand/elite-logo-cream.png" alt="Elite Collection" class="login-logo"/>
@@ -73,7 +72,8 @@ import { LocaleService } from '../../services/locale.service';
       </div>
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     :host { display: block; }
     .login-shell {
       min-height: 100dvh;
@@ -139,7 +139,7 @@ import { LocaleService } from '../../services/locale.service';
       transition: border-color 0.15s;
     }
     .login-link:hover { border-bottom-color: var(--gold); }
-  `],
+  `]
 })
 export class ResetPasswordComponent implements OnInit {
   private readonly auth = inject(AuthService);

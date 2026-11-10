@@ -5,9 +5,9 @@
   "brand": {
     "name": "Elite",
     "displayName": "ELITE",
-    "tagline": "Arabic Leather Artisans",
-    "established": "Est. 1962 · Doha",
-    "establishedFull": "Est. 1962 · Doha, Kingdom of Qatar",
+    "tagline": "Qatari Design, Crafted in Italy",
+    "established": "Est. 2018 · Doha",
+    "establishedFull": "Est. 2018 · Doha, Kingdom of Qatar",
     "copyright": "© 2026 Elite Collection. All rights reserved.",
     "cities": "Doha · Dubai · Doha",
     "contact": {
@@ -109,8 +109,8 @@
 
   "seo": {
     "clientWeb": {
-      "title": "Elite Collection — Arabic Leather Artisans",
-      "description": "Elite Collection — handcrafted Arabic leather shoes from Doha since 1962.",
+      "title": "Elite Collection - Qatari Design, Crafted in Italy",
+      "description": "Qatari-designed footwear and accessories, custom-crafted in Italy. Founded in Qatar, 2018.",
       "themeColor": "#b8924a"
     },
     "adminPortal": {

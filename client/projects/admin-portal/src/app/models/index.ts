@@ -1,14 +1,25 @@
 export interface ProductVariant {
   id: string;
   sku: string;
+  barcode?: string;
+  barcodeSource?: 'auto' | 'manual';
   size: string;
   color: string;
   material: string;
+  /** Bilingual note for a detail unique to this size/colour, e.g. "Back zipper".
+   *  Shown on the storefront next to the selected size. */
+  noteEn?: string;
+  noteAr?: string;
   price: number;
   costPrice?: number;
   shippingCost?: number;
   totalCost?: number;
   stock: number;
+  /** Per-location stock (location id -> quantity) when stock per location is
+   *  on. `stock` is then the sellable total: these minus `held`. */
+  locationStock?: Record<string, number>;
+  /** Units paid for on the website and not yet approved (sellable nowhere). */
+  held?: number;
 }
 
 export interface Product {
@@ -18,8 +29,19 @@ export interface Product {
   sku: string;
   brand: string;
   price: number;
+  /** Cheapest and dearest active variant, or the product's price when it has none. */
+  priceMin?: number;
+  priceMax?: number;
+  /** Defaults copied onto newly-created size variants. */
+  defaultCostPrice?: number | null;
+  defaultShippingCost?: number | null;
+  duplicatedFromProductId?: string | null;
+  catalogRevision?: number;
   stock: number;
   hidden: boolean;
+  /** Independent POS visibility. Storefront-hidden products may still be sold
+      unless this flag is also enabled. */
+  posHidden?: boolean;
   /** Primary thumbnail used everywhere except the editor gallery.
       Mirrors `images[0]` whenever a gallery is present. */
   image: string;
@@ -27,10 +49,26 @@ export interface Product {
   images?: string[];
   /** Gallery image URL -> color name selected in the product drawer. */
   imageColors?: Record<string, string>;
+  /** Color name -> the image shown for that color on collection cards. */
+  colorCovers?: Record<string, string>;
   variants?: ProductVariant[];
   relatedProductIds?: string[];
+  /** Legacy long description. No longer editable; kept as a fallback source
+      for products saved before Material & Care existed. */
   enDesc?: string;
   arDesc?: string;
+  /** Hook: the tagline used on the home hero and other compact surfaces. */
+  shortEn?: string;
+  shortAr?: string;
+  /** Short description shown directly under the product name on the PDP. */
+  teaserEn?: string;
+  teaserAr?: string;
+  /** Product-wide note, shown on the storefront above any per-variant note. */
+  noteEn?: string;
+  noteAr?: string;
+  /** Material & Care copy, its own section on the PDP. */
+  careEn?: string;
+  careAr?: string;
   metaTitle?: string;
   metaDesc?: string;
   slug?: string;
@@ -51,15 +89,21 @@ export interface Collection {
 export interface MediaFile {
   id: string;
   name: string;
-  kind: 'image' | 'glb';
+  kind: 'image';
   size: number;
   w?: number;
   h?: number;
   uploaded: string;
   linkedTo: string | null;
+  /** True when referenced by homepage hero/story content, which has no
+   *  media_links row of its own (see server/routes/admin-media.route.js). */
+  usedInContent?: boolean;
   uploader: string;
   initials: string;
+  /** Small card-sized variant (~640px). For thumbnails and grids only. */
   preview?: string;
+  /** Full-resolution original. Use this anywhere the image renders large. */
+  storageUrl?: string;
 }
 
 export interface OrderItem {
@@ -92,7 +136,24 @@ export interface OrderNote {
   body: string;
 }
 
+/** Shipment details as reported by the delivery provider (NBOX today). */
+export interface OrderDelivery {
+  carrier?: string;
+  service?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  /** ISO timestamps. */
+  shippedAt?: string;
+  deliveredAt?: string;
+  /** Carrier's own estimated delivery, as quoted at booking time. */
+  eta?: string;
+}
+
 export interface Order {
+  automaticFulfillment?: boolean;
+  allocationState?: string;
+  deliveryProgress?: {label:string;delivered:number;total:number};
+  deliveries?: {id:string;location?:string;reference?:string;status:string;bookingState?:string;bookingError?:string;amount:number;trackingNumber?:string;trackingUrl?:string;items:{name:string;size?:string;quantity:number}[]}[];
   id: string;
   date: string;
   customer: string;
@@ -114,6 +175,14 @@ export interface Order {
   trackingNumber?: string;
   nboxBookingFailed?: boolean;
   nboxBookingError?: string;
+  /** Carrier/shipment details. Absent when nothing has been booked yet. */
+  delivery?: OrderDelivery;
+  /** Stock per location: paid online, waiting for staff to pick where it ships from. */
+  needsApproval?: boolean;
+  /** Stock per location: where it ships from once approved (staff only). */
+  pickupLocation?: string;
+  /** Undefined until GET /admin/orders/:id has resolved — the list endpoint
+      does not carry these, so undefined means "loading", not "none". */
   timeline?: OrderTimelineEntry[];
   notes?: OrderNote[];
 }
@@ -139,13 +208,23 @@ export interface Trigger {
   label?: string;
 }
 
+export type TeamMemberRole = 'Owner' | 'Admin' | 'Manager' | 'Cashier' | 'Viewer';
+export type TeamMemberStatus = 'invited' | 'active' | 'disabled' | 'removed';
+
 export interface TeamMember {
   id: string;
   name: string;
   email: string;
-  role: 'Admin' | 'Manager' | 'Viewer';
+  role: TeamMemberRole;
   joined: string;
   initials: string;
+  status: TeamMemberStatus;
+  last_login_at: string | null;
+  /** Which branch this person works at, scoping the POS "which till is this?"
+      picker to that branch's registers. `null` means every branch, which is
+      the default and the right one for owners and admins. */
+  posBranchId?: string | null;
+  posBranchName?: string | null;
 }
 
 export interface Integration {
@@ -211,7 +290,9 @@ export interface Policy {
   id: string;
   handle: string;
   title: string;
+  titleAr: string;
   content: string;
+  contentAr: string;
   policyType: PolicyType;
   status: 'active' | 'draft';
   sortOrder: number;
@@ -220,6 +301,67 @@ export interface Policy {
 }
 
 export const QAR = (n: number): string => 'QAR ' + n.toLocaleString();
+
+/**
+ * Money for display, with control over the piastres. Headline revenue figures
+ * read better whole; cost and expense figures need the decimals. Use this
+ * rather than hand-rolling a toLocaleString per component, which is how the
+ * Analytics page ended up showing revenue and costs in two different formats.
+ */
+export const formatQAR = (n: number | null | undefined, decimals = 0): string => {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return 'QAR ' + n.toLocaleString('en', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+};
+
+export type ExpenseCategory =
+  | 'rent' | 'salaries' | 'utilities' | 'marketing' | 'logistics'
+  | 'supplies' | 'software' | 'fees' | 'maintenance' | 'other';
+
+export type ExpensePaymentMethod = 'cash' | 'card' | 'bank_transfer' | 'cheque' | 'other';
+
+export type ExpenseRecurrence = 'none' | 'monthly' | 'yearly';
+
+export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  'rent', 'salaries', 'utilities', 'marketing', 'logistics',
+  'supplies', 'software', 'fees', 'maintenance', 'other',
+];
+
+export const EXPENSE_PAYMENT_METHODS: ExpensePaymentMethod[] =
+  ['cash', 'card', 'bank_transfer', 'cheque', 'other'];
+
+export interface Expense {
+  id: string;
+  expenseDate: string;
+  category: ExpenseCategory;
+  amount: number;
+  vendor: string;
+  paymentMethod: ExpensePaymentMethod;
+  note: string;
+  receiptMediaId: string | null;
+  receiptUrl: string | null;
+  recurrence: ExpenseRecurrence;
+  source: 'manual' | 'pos_cash_out';
+  /** A future occurrence of a recurring bill that has no row of its own yet. */
+  isProjected: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExpenseListResult {
+  from: string;
+  to: string;
+  expenses: Expense[];
+}
+
+export interface ExpenseSummary {
+  from: string;
+  to: string;
+  total: number;
+  byCategory: Array<{ category: ExpenseCategory; total: number; entryCount: number }>;
+}
 
 export const fmtBytes = (n: number): string => {
   if (n < 1024) return n + ' B';

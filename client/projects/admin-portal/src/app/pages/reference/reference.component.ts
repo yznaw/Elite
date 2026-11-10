@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -12,10 +12,9 @@ import { I18nService } from '../../services/i18n.service';
 type Tab = 'colors' | 'materials' | 'sizes';
 
 @Component({
-  selector: 'ap-reference',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent],
-  template: `
+    selector: 'ap-reference',
+    imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent],
+    template: `
     <div class="page-fade">
 
       <!-- ── Page header ── -->
@@ -197,72 +196,18 @@ type Tab = 'colors' | 'materials' | 'sizes';
             <div class="ref-empty">{{ t('reference.sizeSets.empty') }}</div>
           } @else {
             <div class="size-list">
+
+              <!-- NEW SIZE SET form card -->
+              @if (editingId() === '__new_sizeset__') {
+                <div class="size-card editing">
+                  <ng-container *ngTemplateOutlet="sizeEditForm; context: { $implicit: null }"/>
+                </div>
+              }
+
               @for (s of sizeSets(); track s.id) {
                 <div class="size-card" [class.editing]="editingId() === s.id">
                   @if (editingId() === s.id) {
-                    <div class="size-edit">
-
-                      <!-- Name + order row -->
-                      <div class="ef-row" style="margin-bottom:12px;">
-                        <input class="inp inp-sm" [placeholder]="t('reference.field.sizeName')" [(ngModel)]="editSizeSet.name" style="flex:1;"/>
-                        <input class="inp inp-sm mono" type="number" [placeholder]="t('reference.field.order')" style="width:72px;" [(ngModel)]="editSizeSet.sort_order"/>
-                      </div>
-
-                      <!-- Size Conversion Chart -->
-                      <label class="lbl">{{ t('reference.field.sizeChart') }}</label>
-                      <div class="chart-editor">
-                        <div class="chart-head">
-                          <span class="chart-col-label">{{ t('reference.field.sizeChart.uk') }}</span>
-                          <span class="chart-col-label">{{ t('reference.field.sizeChart.eu') }}</span>
-                          <span class="chart-col-label">{{ t('reference.field.sizeChart.us') }}</span>
-                          <span class="chart-col-label chart-col-del"></span>
-                        </div>
-                        @for (row of editSizeSet.size_chart; track row; let ri = $index) {
-                          <div class="chart-row">
-                            <input class="inp inp-xs mono" [(ngModel)]="row.uk" placeholder="UK"/>
-                            <input class="inp inp-xs mono" [(ngModel)]="row.eu" placeholder="EU"/>
-                            <input class="inp inp-xs mono" [(ngModel)]="row.us" placeholder="US"/>
-                            <button class="chart-del-btn" (click)="removeChartRow(ri)" title="Remove row">
-                              <ap-icon name="trash" [size]="12"/>
-                            </button>
-                          </div>
-                        }
-                        <button class="btn btn-sm btn-outline chart-add-btn" (click)="addChartRow()">
-                          <ap-icon name="plus" [size]="12"/> {{ t('reference.field.sizeChart.addRow') }}
-                        </button>
-                      </div>
-
-                      <!-- Tip -->
-                      <div style="margin-top:10px;">
-                        <label class="lbl">{{ t('reference.field.sizeChart.tip') }}</label>
-                        <input class="inp inp-sm" [placeholder]="t('reference.field.sizeChart.tipPlaceholder')" [(ngModel)]="editSizeSet.tip" style="width:100%;"/>
-                      </div>
-
-                      <!-- Fallback sizes (hidden if chart is populated) -->
-                      @if (editSizeSet.size_chart.length === 0) {
-                        <div style="margin-top:10px;">
-                          <label class="lbl">{{ t('reference.field.sizes') }}</label>
-                          <input class="inp inp-sm mono" [ngModel]="sizesText()" (ngModelChange)="setSizesFromText($event)" placeholder="39, 40, 41, 42 ..."/>
-                          <div class="size-preview">
-                            @for (sz of editSizeSet.sizes; track sz; let si = $index) {
-                              <span class="size-chip size-chip--reorder">
-                                {{ sz }}
-                                <button class="chip-btn" (click)="moveSizeChip(si, -1)" [disabled]="si === 0">‹</button>
-                                <button class="chip-btn" (click)="moveSizeChip(si, 1)" [disabled]="si === editSizeSet.sizes.length - 1">›</button>
-                                <button class="chip-btn chip-btn--rm" (click)="removeSizeChip(si)">×</button>
-                              </span>
-                            }
-                          </div>
-                        </div>
-                      }
-
-                      <div class="edit-actions" style="margin-top:14px;">
-                        <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveSizeSet(s.id)">
-                          @if (saving()) { <ap-spinner [size]="10"/> } {{ t('common.save') }}
-                        </button>
-                        <button class="btn btn-sm btn-outline" (click)="cancelEdit()">{{ t('common.cancel') }}</button>
-                      </div>
-                    </div>
+                    <ng-container *ngTemplateOutlet="sizeEditForm; context: { $implicit: s }"/>
                   } @else {
                     <div class="size-head">
                       <div class="size-name-wrap">
@@ -349,7 +294,7 @@ type Tab = 'colors' | 'materials' | 'sizes';
             <p class="ef-hint">{{ t('reference.field.swatchHint') }}</p>
           </div>
           <div class="edit-actions">
-            <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveColor(c?.id)">
+            <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveColor($safeNavigationMigration(c?.id))">
               @if (saving()) { <ap-spinner [size]="10"/> } {{ t('common.save') }}
             </button>
             <button class="btn btn-sm btn-outline" (click)="cancelEdit()">{{ t('common.cancel') }}</button>
@@ -363,16 +308,84 @@ type Tab = 'colors' | 'materials' | 'sizes';
           <input class="inp inp-sm" [placeholder]="t('reference.field.nameEn')" [(ngModel)]="editMaterial.name_en" style="flex:1;min-width:140px;"/>
           <input class="inp inp-sm" [placeholder]="t('reference.field.nameAr')" dir="rtl" [(ngModel)]="editMaterial.name_ar" style="flex:1;min-width:120px;"/>
           <input class="inp inp-sm mono" type="number" [placeholder]="t('reference.field.order')" style="width:72px;" [(ngModel)]="editMaterial.sort_order"/>
-          <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveMaterial(m?.id)">
+          <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveMaterial($safeNavigationMigration(m?.id))">
             @if (saving()) { <ap-spinner [size]="10"/> } {{ t('common.save') }}
           </button>
           <button class="btn btn-sm btn-outline" (click)="cancelEdit()">{{ t('common.cancel') }}</button>
         </div>
       </ng-template>
 
+      <!-- ════ Size set edit form template ════ -->
+      <ng-template #sizeEditForm let-s>
+        <div class="size-edit">
+
+          <!-- Name + order row -->
+          <div class="ef-row" style="margin-bottom:12px;">
+            <input class="inp inp-sm" [placeholder]="t('reference.field.sizeName')" [(ngModel)]="editSizeSet.name" style="flex:1;"/>
+            <input class="inp inp-sm mono" type="number" [placeholder]="t('reference.field.order')" style="width:72px;" [(ngModel)]="editSizeSet.sort_order"/>
+          </div>
+
+          <!-- Size Conversion Chart -->
+          <label class="lbl">{{ t('reference.field.sizeChart') }}</label>
+          <div class="chart-editor">
+            <div class="chart-head">
+              <span class="chart-col-label">{{ t('reference.field.sizeChart.uk') }}</span>
+              <span class="chart-col-label">{{ t('reference.field.sizeChart.eu') }}</span>
+              <span class="chart-col-label">{{ t('reference.field.sizeChart.us') }}</span>
+              <span class="chart-col-label chart-col-del"></span>
+            </div>
+            @for (row of editSizeSet.size_chart; track row; let ri = $index) {
+              <div class="chart-row">
+                <input class="inp inp-xs mono" [(ngModel)]="row.uk" placeholder="UK"/>
+                <input class="inp inp-xs mono" [(ngModel)]="row.eu" placeholder="EU"/>
+                <input class="inp inp-xs mono" [(ngModel)]="row.us" placeholder="US"/>
+                <button class="chart-del-btn" (click)="removeChartRow(ri)" title="Remove row">
+                  <ap-icon name="trash" [size]="12"/>
+                </button>
+              </div>
+            }
+            <button class="btn btn-sm btn-outline chart-add-btn" (click)="addChartRow()">
+              <ap-icon name="plus" [size]="12"/> {{ t('reference.field.sizeChart.addRow') }}
+            </button>
+          </div>
+
+          <!-- Tip -->
+          <div style="margin-top:10px;">
+            <label class="lbl">{{ t('reference.field.sizeChart.tip') }}</label>
+            <input class="inp inp-sm" [placeholder]="t('reference.field.sizeChart.tipPlaceholder')" [(ngModel)]="editSizeSet.tip" style="width:100%;"/>
+          </div>
+
+          <!-- Fallback sizes (hidden if chart is populated) -->
+          @if (editSizeSet.size_chart.length === 0) {
+            <div style="margin-top:10px;">
+              <label class="lbl">{{ t('reference.field.sizes') }}</label>
+              <input class="inp inp-sm mono" [ngModel]="sizesText()" (ngModelChange)="setSizesFromText($event)" placeholder="39, 40, 41, 42 ..."/>
+              <div class="size-preview">
+                @for (sz of editSizeSet.sizes; track sz; let si = $index) {
+                  <span class="size-chip size-chip--reorder">
+                    {{ sz }}
+                    <button class="chip-btn" (click)="moveSizeChip(si, -1)" [disabled]="si === 0">‹</button>
+                    <button class="chip-btn" (click)="moveSizeChip(si, 1)" [disabled]="si === editSizeSet.sizes.length - 1">›</button>
+                    <button class="chip-btn chip-btn--rm" (click)="removeSizeChip(si)">×</button>
+                  </span>
+                }
+              </div>
+            </div>
+          }
+
+          <div class="edit-actions" style="margin-top:14px;">
+            <button class="btn btn-sm btn-gold" [disabled]="saving()" (click)="saveSizeSet($safeNavigationMigration(s?.id))">
+              @if (saving()) { <ap-spinner [size]="10"/> } {{ t('common.save') }}
+            </button>
+            <button class="btn btn-sm btn-outline" (click)="cancelEdit()">{{ t('common.cancel') }}</button>
+          </div>
+        </div>
+      </ng-template>
+
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .ref-header { margin-bottom: 24px; }
     .ref-title {
       font-size: 22px; font-weight: 800;
@@ -633,7 +646,7 @@ type Tab = 'colors' | 'materials' | 'sizes';
       .ef-row { flex-direction: column; }
       .mat-edit { flex-direction: column; align-items: stretch; }
     }
-  `],
+  `]
 })
 export class ReferenceComponent implements OnInit {
   private readonly refApi  = inject(AdminRefService);
@@ -680,8 +693,8 @@ export class ReferenceComponent implements OnInit {
       this.colors.set(c);
       this.materials.set(m);
       this.sizeSets.set(s);
-    } catch {
-      this.toast.error(this.t('reference.toast.loadError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('reference.toast.loadError'));
     } finally {
       this.loading.set(false);
     }
@@ -736,26 +749,73 @@ export class ReferenceComponent implements OnInit {
       }
       this.editingId.set(null);
       this.toast.success(this.t('reference.toast.colorSaved'));
-    } catch { this.toast.error(this.t('reference.toast.colorSaveError')); }
+    } catch (error) { this.toast.errorFrom(error, this.apiErrorMessage(error, this.t('reference.toast.colorSaveError'))); }
     finally { this.saving.set(false); }
   }
 
   async deleteColor(c: RefColor): Promise<void> {
-    const count = c.variant_count ?? 0;
-    const confirmed = await this.confirm.ask({
-      title:        count > 0 ? this.t('reference.confirm.deleteColor.inUseTitle') : `${this.t('reference.confirm.deleteColor.title')} "${c.name_en}"`,
-      message:      this.t('reference.confirm.deleteColor.message'),
-      variant:      'danger',
-      confirmLabel: count > 0 ? this.t('reference.confirm.deleteColor.forceLabel') : this.t('reference.confirm.deleteColor.confirmLabel'),
-      cancelLabel:  this.t('common.cancel'),
-    });
+    let count = c.variant_count ?? 0;
+    let force = count > 0;
+    let confirmed = await this.confirmColorDelete(c, count);
     if (!confirmed) return;
 
     try {
-      await this.refApi.deleteColor(c.id, count > 0);
-      this.colors.update(list => list.filter(x => x.id !== c.id));
-      this.toast.success(this.t('reference.toast.colorDeleted'));
-    } catch { this.toast.error(this.t('reference.toast.colorDeleteError')); }
+      await this.refApi.deleteColor(c.id, force);
+    } catch (error) {
+      // The server is authoritative. A stale/missing client usage count must
+      // not strand the user at a generic 409; explain the impact and retry only
+      // after explicit confirmation.
+      const serverCount = this.variantCountFromError(error);
+      if (!force && serverCount > 0) {
+        count = serverCount;
+        confirmed = await this.confirmColorDelete(c, count);
+        if (!confirmed) return;
+        force = true;
+        try {
+          await this.refApi.deleteColor(c.id, true);
+        } catch (retryError) {
+          this.toast.errorFrom(retryError, this.apiErrorMessage(retryError, this.t('reference.toast.colorDeleteError')));
+          return;
+        }
+      } else {
+        this.toast.errorFrom(error, this.apiErrorMessage(error, this.t('reference.toast.colorDeleteError')));
+        return;
+      }
+    }
+
+    this.colors.update(list => list.filter(x => x.id !== c.id));
+    this.toast.success(this.t('reference.toast.colorDeleted'));
+  }
+
+  private confirmColorDelete(c: RefColor, variantCount: number): Promise<boolean> {
+    const inUse = variantCount > 0;
+    return this.confirm.ask({
+      title: inUse
+        ? this.t('reference.confirm.deleteColor.inUseTitle')
+        : `${this.t('reference.confirm.deleteColor.title')} "${c.name_en}"`,
+      message: inUse
+        ? `${variantCount} ${variantCount === 1 ? this.t('common.variant') : this.t('common.variants')}. ${this.t('reference.confirm.deleteColor.inUseMessage')}`
+        : this.t('reference.confirm.deleteColor.message'),
+      variant: 'danger',
+      confirmLabel: inUse
+        ? this.t('reference.confirm.deleteColor.forceLabel')
+        : this.t('reference.confirm.deleteColor.confirmLabel'),
+      cancelLabel: this.t('common.cancel'),
+    });
+  }
+
+  private variantCountFromError(error: unknown): number {
+    const value = (error as { error?: { variantCount?: unknown } })?.error?.variantCount;
+    const count = Number(value);
+    return Number.isFinite(count) && count > 0 ? count : 0;
+  }
+
+  private apiErrorMessage(error: unknown, fallback: string): string {
+    const body = (error as { error?: { message?: unknown; error?: unknown; errors?: unknown } })?.error;
+    if (Array.isArray(body?.errors) && body.errors.length > 0) return String(body.errors[0]);
+    if (typeof body?.message === 'string' && body.message.trim()) return body.message;
+    if (typeof body?.error === 'string' && body.error.trim()) return body.error;
+    return fallback;
   }
 
   // ── Color drag-to-reorder ─────────────────────────────────────────────────
@@ -796,7 +856,7 @@ export class ReferenceComponent implements OnInit {
     try {
       const items = this.colors().map((c, i) => ({ id: c.id, sort_order: i }));
       await this.refApi.saveColorSortOrders(items);
-    } catch { this.toast.error(this.t('reference.toast.colorOrderError')); }
+    } catch (caught) { this.toast.errorFrom(caught, this.t('reference.toast.colorOrderError')); }
     finally { this.savingSort.set(false); }
   }
 
@@ -825,7 +885,7 @@ export class ReferenceComponent implements OnInit {
       }
       this.editingId.set(null);
       this.toast.success(this.t('reference.toast.materialSaved'));
-    } catch { this.toast.error(this.t('reference.toast.materialSaveError')); }
+    } catch (caught) { this.toast.errorFrom(caught, this.t('reference.toast.materialSaveError')); }
     finally { this.saving.set(false); }
   }
 
@@ -844,7 +904,7 @@ export class ReferenceComponent implements OnInit {
       await this.refApi.deleteMaterial(m.id, count > 0);
       this.materials.update(list => list.filter(x => x.id !== m.id));
       this.toast.success(this.t('reference.toast.materialDeleted'));
-    } catch { this.toast.error(this.t('reference.toast.materialDeleteError')); }
+    } catch (caught) { this.toast.errorFrom(caught, this.t('reference.toast.materialDeleteError')); }
   }
 
   // ── Material drag-to-reorder ──────────────────────────────────────────────
@@ -885,7 +945,7 @@ export class ReferenceComponent implements OnInit {
     try {
       const items = this.materials().map((m, i) => ({ id: m.id, sort_order: i }));
       await this.refApi.saveMaterialSortOrders(items);
-    } catch { this.toast.error(this.t('reference.toast.materialOrderError')); }
+    } catch (caught) { this.toast.errorFrom(caught, this.t('reference.toast.materialOrderError')); }
     finally { this.savingSort.set(false); }
   }
 
@@ -948,7 +1008,7 @@ export class ReferenceComponent implements OnInit {
       const created = await this.refApi.duplicateSizeSet(id);
       this.sizeSets.update(list => [...list, created]);
       this.toast.success(this.t('reference.toast.sizeSetDuplicated'));
-    } catch { this.toast.error(this.t('reference.toast.sizeSetDuplicateError')); }
+    } catch (caught) { this.toast.errorFrom(caught, this.t('reference.toast.sizeSetDuplicateError')); }
   }
 
   async saveSizeSet(existingId?: string): Promise<void> {
@@ -974,7 +1034,7 @@ export class ReferenceComponent implements OnInit {
       }
       this.editingId.set(null);
       this.toast.success(this.t('reference.toast.sizeSetSaved'));
-    } catch { this.toast.error(this.t('reference.toast.sizeSetSaveError')); }
+    } catch (caught) { this.toast.errorFrom(caught, this.t('reference.toast.sizeSetSaveError')); }
     finally { this.saving.set(false); }
   }
 
@@ -991,6 +1051,6 @@ export class ReferenceComponent implements OnInit {
       await this.refApi.deleteSizeSet(id);
       this.sizeSets.update(list => list.filter(s => s.id !== id));
       this.toast.success(this.t('reference.toast.sizeSetDeleted'));
-    } catch { this.toast.error(this.t('reference.toast.sizeSetDeleteError')); }
+    } catch (caught) { this.toast.errorFrom(caught, this.t('reference.toast.sizeSetDeleteError')); }
   }
 }

@@ -23,8 +23,12 @@ export class AdminMediaService {
     return firstValueFrom(this.api.delete<{ id: string }>(`/admin/media/${id}`)).then(() => undefined);
   }
 
-  deleteOrphaned(): Promise<{ deleted: number }> {
-    return firstValueFrom(this.api.delete<{ deleted: number }>('/admin/media/orphaned'));
+  deleteOrphaned(): Promise<{ deleted: number; ids: string[] }> {
+    return firstValueFrom(this.api.delete<{ deleted: number; ids: string[] }>('/admin/media/orphaned'));
+  }
+
+  bulkDelete(ids: string[]): Promise<{ deleted: number }> {
+    return firstValueFrom(this.api.post<{ deleted: number }>('/admin/media/bulk-delete', { ids }));
   }
 
   /** Import image files from a publicly-shared Google Drive file or folder URL. */
@@ -50,6 +54,13 @@ export class AdminMediaService {
 
   /** Resolve relative /uploads/… URLs so they route through the API proxy. */
   normalizeFile(f: MediaFile): MediaFile {
-    return { ...f, preview: f.preview ? this.api.mediaUrl(f.preview) : f.preview };
+    return {
+      ...f,
+      preview: f.preview ? this.api.mediaUrl(f.preview) : f.preview,
+      // The media picker prefers the full-resolution original. Leaving this as
+      // `/uploads/...` made the admin browser request it from the Angular host
+      // instead of the API, so the selected image immediately looked broken.
+      storageUrl: f.storageUrl ? this.api.mediaUrl(f.storageUrl) : f.storageUrl,
+    };
   }
 }

@@ -19,6 +19,11 @@ server/uploads/
 # ── Angular build output ──────────────────────────────────────
 client/dist/
 client/.angular/
+client/out-tsc/
+
+# ── Browser test output ───────────────────────────────────────
+client/test-results/
+client/playwright-report/
 
 # ── OS ────────────────────────────────────────────────────────
 .DS_Store

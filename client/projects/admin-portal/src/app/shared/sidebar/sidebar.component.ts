@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
@@ -8,19 +8,35 @@ import { I18nService } from '../../services/i18n.service';
 import { AuthService } from '../../services/auth.service';
 import { SidebarToggleService } from '../sidebar-toggle.service';
 
+type Role = 'owner' | 'admin' | 'manager' | 'cashier' | 'viewer';
+
 interface NavLink {
   path: string;
   labelKey: string;
   subKey: string;
   icon: IconName;
   exact?: boolean;
+  /** Plain <a href target="_blank"> instead of an Angular routerLink — for links that leave the app's own routes, e.g. the static staff guide. */
+  external?: boolean;
+  /**
+   * Roles allowed to see this link — must mirror the `roleGuard([...])` on
+   * the matching route in app.routes.ts exactly (see
+   * docs/32-permission-enforcement-ux-design.md §3.1). Omit for a link
+   * whose route carries no roleGuard, meaning any authenticated role can
+   * reach it.
+   */
+  roles?: Role[];
+}
+
+interface NavGroup {
+  labelKey: string;
+  links: NavLink[];
 }
 
 @Component({
-  selector: 'ap-sidebar',
-  standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent, AvatarComponent],
-  template: `
+    selector: 'ap-sidebar',
+    imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent, AvatarComponent],
+    template: `
     @if (toggle.open()) {
       <div class="sidebar-backdrop" (click)="toggle.close()" aria-hidden="true"></div>
     }
@@ -54,25 +70,43 @@ interface NavLink {
         </button>
       </div>
 
-      <div class="nav-section-label"><span class="label-text">{{ t('nav.section.workspace') }}</span></div>
-
       <!-- Scrollable nav container -->
       <div class="nav-scroll">
-        @for (n of links; track n.path) {
-          <a
-            [routerLink]="n.path"
-            routerLinkActive="active"
-            [routerLinkActiveOptions]="{ exact: !!n.exact }"
-            class="nav-item"
-            (click)="toggle.close()"
-            [attr.title]="toggle.collapsed() ? t(n.labelKey) : null"
-          >
-            <ap-icon [name]="n.icon" [size]="18"/>
-            <div class="nav-label">
-              <span>{{ t(n.labelKey) }}</span>
-              <div class="label-sub">{{ t(n.subKey) }}</div>
-            </div>
-          </a>
+        @for (group of visibleGroups(); track group.labelKey) {
+          <div class="nav-section-label"><span class="label-text">{{ t(group.labelKey) }}</span></div>
+          @for (n of group.links; track n.path) {
+            @if (n.external) {
+              <a
+                [href]="n.path"
+                target="_blank"
+                rel="noopener"
+                class="nav-item"
+                (click)="toggle.close()"
+                [attr.title]="toggle.collapsed() ? t(n.labelKey) : null"
+              >
+                <ap-icon [name]="n.icon" [size]="18"/>
+                <div class="nav-label">
+                  <span>{{ t(n.labelKey) }}</span>
+                  <div class="label-sub">{{ t(n.subKey) }}</div>
+                </div>
+              </a>
+            } @else {
+              <a
+                [routerLink]="n.path"
+                routerLinkActive="active"
+                [routerLinkActiveOptions]="{ exact: !!n.exact }"
+                class="nav-item"
+                (click)="toggle.close()"
+                [attr.title]="toggle.collapsed() ? t(n.labelKey) : null"
+              >
+                <ap-icon [name]="n.icon" [size]="18"/>
+                <div class="nav-label">
+                  <span>{{ t(n.labelKey) }}</span>
+                  <div class="label-sub">{{ t(n.subKey) }}</div>
+                </div>
+              </a>
+            }
+          }
         }
       </div>
 
@@ -93,7 +127,8 @@ interface NavLink {
       </div>
     </aside>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     :host { display: contents; }
 
     .sidebar {
@@ -170,6 +205,10 @@ interface NavLink {
       position: relative; z-index: 1;
       flex-shrink: 0;
     }
+    /* Extra breathing room before every group after the first one, so a
+       long grouped list still reads as distinct sections, not one run-on
+       list with small labels sprinkled in. */
+    .nav-section-label:not(:first-child) { margin-top: 18px; }
     html[dir='rtl'] .nav-section-label { letter-spacing: 0; }
 
     /* ── Scrollable nav ────────────────── */
@@ -315,7 +354,7 @@ interface NavLink {
       -webkit-backdrop-filter: blur(4px);
       animation: fadeIn 0.2s ease;
     }
-  `],
+  `]
 })
 export class SidebarComponent {
   private readonly i18n  = inject(I18nService);
@@ -341,20 +380,98 @@ export class SidebarComponent {
     }
   }
 
-  readonly links: NavLink[] = [
-    { path: '/dashboard',   labelKey: 'nav.dashboard',   subKey: 'nav.dashboard.sub',   icon: 'dash' },
-    { path: '/catalog',     labelKey: 'nav.catalog',     subKey: 'nav.catalog.sub',     icon: 'catalog' },
-    { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'collections' },
-    { path: '/media',       labelKey: 'nav.media',       subKey: 'nav.media.sub',       icon: 'media' },
-    { path: '/storefront',  labelKey: 'nav.storefront',  subKey: 'nav.storefront.sub',  icon: 'store' },
-    { path: '/orders',      labelKey: 'nav.orders',      subKey: 'nav.orders.sub',      icon: 'orders' },
-    { path: '/customers',   labelKey: 'nav.customers',   subKey: 'nav.customers.sub',   icon: 'users' },
-    { path: '/feedback',    labelKey: 'nav.feedback',    subKey: 'nav.feedback.sub',    icon: 'star'  },
-    { path: '/policies',    labelKey: 'nav.policies',    subKey: 'nav.policies.sub',    icon: 'docs'  },
-    { path: '/analytics',   labelKey: 'nav.analytics',   subKey: 'nav.analytics.sub',   icon: 'chart' },
-    { path: '/reference',   labelKey: 'nav.reference',   subKey: 'nav.reference.sub',   icon: 'reference' },
-    { path: '/settings',    labelKey: 'nav.settings',    subKey: 'nav.settings.sub',    icon: 'settings' },
+  // Grouped by what the section is actually for, not left as one flat run-on
+  // list — the nav grew to 15+ items across all the POS/reporting phases,
+  // past the point a single "Workspace" label stays scannable.
+  private readonly groups: NavGroup[] = [
+    {
+      labelKey: 'nav.section.overview',
+      links: [
+        { path: '/dashboard', labelKey: 'nav.dashboard', subKey: 'nav.dashboard.sub', icon: 'dash' },
+      ],
+    },
+    {
+      labelKey: 'nav.section.storefront',
+      links: [
+        { path: '/catalog',     labelKey: 'nav.catalog',     subKey: 'nav.catalog.sub',     icon: 'catalog' },
+        { path: '/collections', labelKey: 'nav.collections', subKey: 'nav.collections.sub', icon: 'collections' },
+        { path: '/media',       labelKey: 'nav.media',       subKey: 'nav.media.sub',       icon: 'media' },
+        { path: '/storefront',  labelKey: 'nav.storefront',  subKey: 'nav.storefront.sub',  icon: 'store' },
+      ],
+    },
+    {
+      labelKey: 'nav.section.sales',
+      links: [
+        // 'barcode' distinguishes POS from Storefront's 'store' icon — both
+        // used to share 'store', with nothing to tell them apart at a glance.
+        // Excludes viewer, matching roleGuard(['owner','admin','manager','cashier']) on /pos.
+        { path: '/pos',            labelKey: 'nav.pos',            subKey: 'nav.pos.sub',            icon: 'barcode', roles: ['owner', 'admin', 'manager', 'cashier'] },
+        { path: '/orders',         labelKey: 'nav.orders',         subKey: 'nav.orders.sub',         icon: 'orders' },
+        { path: '/inventory',      labelKey: 'nav.inventory',      subKey: 'nav.inventory.sub',      icon: 'cube', roles: ['owner', 'admin', 'manager'] },
+        { path: '/customers',      labelKey: 'nav.customers',      subKey: 'nav.customers.sub',      icon: 'users' },
+        // 'scale' (a balance) for reconciling two totals against each other —
+        // previously reused 'chart', identical to Analytics' icon.
+        // No cashier access, matching roleGuard(['owner','admin','manager']) on /reconciliation.
+        { path: '/reconciliation', labelKey: 'nav.reconciliation', subKey: 'nav.reconciliation.sub', icon: 'scale', roles: ['owner', 'admin', 'manager'] },
+        // 'csv' for exportable ledger reports — previously reused 'docs',
+        // identical to Policies' icon. Same access scope as reconciliation.
+        { path: '/reports',        labelKey: 'nav.reports',        subKey: 'nav.reports.sub',        icon: 'csv', roles: ['owner', 'admin', 'manager'] },
+        // Money leaving the business (rent, salaries, marketing). Owner/admin
+        // only — narrower than reports, matching roleGuard on /expenses.
+        { path: '/expenses',       labelKey: 'nav.expenses',       subKey: 'nav.expenses.sub',       icon: 'expenses', roles: ['owner', 'admin'] },
+      ],
+    },
+    {
+      labelKey: 'nav.section.engagement',
+      links: [
+        { path: '/feedback',  labelKey: 'nav.feedback',  subKey: 'nav.feedback.sub',  icon: 'star' },
+        { path: '/policies',  labelKey: 'nav.policies',  subKey: 'nav.policies.sub',  icon: 'docs' },
+        { path: '/analytics', labelKey: 'nav.analytics', subKey: 'nav.analytics.sub', icon: 'chart' },
+      ],
+    },
+    {
+      labelKey: 'nav.section.system',
+      links: [
+        // Matches roleGuard(['owner','admin']) on /reference and /settings.
+        { path: '/reference', labelKey: 'nav.reference', subKey: 'nav.reference.sub', icon: 'reference', roles: ['owner', 'admin'] },
+        { path: '/settings',  labelKey: 'nav.settings',  subKey: 'nav.settings.sub',  icon: 'settings', roles: ['owner', 'admin'] },
+        { path: 'assets/docs/staff-guide.html', labelKey: 'nav.documentation', subKey: 'nav.documentation.sub', icon: 'externalLink', external: true },
+      ],
+    },
   ];
+
+  // Manager-role accounts can't reach /settings (owner/admin-only — store
+  // config and team management live there) but still need a way to set
+  // their own manager PIN. Owner/admin already reach that same PIN card
+  // inside Settings, so this link only needs to appear for managers —
+  // showing it to everyone would just be a confusing near-duplicate of
+  // the Settings link for the roles that don't need it. 'lock' distinguishes
+  // it from Settings' own icon since they're different destinations.
+  private readonly myPinLink: NavLink = { path: '/my-pin', labelKey: 'nav.myPin', subKey: 'nav.myPin.sub', icon: 'lock' };
+
+  // Owner/admin only, matching the route guard on /diagnostics. Appended
+  // conditionally rather than added to `groups` because every non-manager role
+  // sees all groups — a viewer would otherwise get a visible link that only
+  // bounces them back to the dashboard.
+  private readonly stocktakeLink: NavLink = { path: '/stocktake', labelKey: 'nav.stocktake', subKey: 'nav.stocktake.sub', icon: 'list' };
+
+  private readonly diagnosticsLink: NavLink = { path: '/diagnostics', labelKey: 'nav.diagnostics', subKey: 'nav.diagnostics.sub', icon: 'warning' };
+
+  readonly visibleGroups = computed<NavGroup[]>(() => {
+    const role = this.user()?.role as Role | undefined;
+    const extras: NavLink[] = [];
+    if (role === 'manager') extras.push(this.myPinLink);
+    if (role === 'owner' || role === 'admin') extras.push(this.diagnosticsLink, this.stocktakeLink);
+    return this.groups
+      .map((group) => ({
+        ...group,
+        links: [
+          ...group.links.filter((link) => !link.roles || !role || link.roles.includes(role)),
+          ...(group.labelKey === 'nav.section.system' ? extras : []),
+        ],
+      }))
+      .filter((group) => group.links.length > 0);
+  });
 
   constructor() {
     this.router.events

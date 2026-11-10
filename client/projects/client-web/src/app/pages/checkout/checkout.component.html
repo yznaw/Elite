@@ -562,17 +562,19 @@
           </div>
         }
 
-        @if (error()) {
+        @if (stockMessage() || error()) {
           <p
+            role="alert"
             style="
               font-family: var(--ff-sans);
-              font-size: 11px;
+              font-size: 12px;
+              line-height: 1.5;
               color: #f3a7a7;
               text-align: center;
               margin-top: 20px;
             "
           >
-            {{ error() }}
+            {{ stockMessage() || error() }}
           </p>
         }
 
@@ -745,6 +747,41 @@
                   >
                     {{ itemDetails(item) }} · {{ t("cart.qty") }} {{ item.qty }}
                   </div>
+                  @if (stockLabel(item); as label) {
+                    <div
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                        margin-top: 6px;
+                        font-family: var(--ff-sans);
+                        font-size: 11px;
+                        color: #f3a7a7;
+                      "
+                    >
+                      <span>{{ label }}</span>
+                      <button
+                        type="button"
+                        (click)="fixStock(item)"
+                        [disabled]="placing() || redirecting()"
+                        style="
+                          background: none;
+                          border: none;
+                          padding: 0;
+                          cursor: pointer;
+                          font: inherit;
+                          color: var(--cream);
+                          text-decoration: underline;
+                        "
+                      >
+                        {{
+                          item.available
+                            ? tp("cart.stock.changeTo", { count: item.available })
+                            : t("cart.remove")
+                        }}
+                      </button>
+                    </div>
+                  }
                 </div>
                 <div
                   style="

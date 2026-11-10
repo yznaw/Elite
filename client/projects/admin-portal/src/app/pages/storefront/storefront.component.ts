@@ -1,11 +1,11 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, effect, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
-import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
 import { HOME_LAYOUT_BLOCKS, StorefrontService } from '../../services/storefront.service';
@@ -14,7 +14,9 @@ import { AdminCollectionsService } from '../../services/admin-collections.servic
 import { ApiClient } from '../../services/api-client.service';
 import { MediaUploadService } from '../../services/media-upload.service';
 import { AdminMediaService } from '../../services/admin-media.service';
-import { Collection, MediaFile, StorefrontBlock } from '../../models';
+import { AdminProductsService } from '../../services/admin-products.service';
+import { AdminRefService, RefColor } from '../../services/admin-ref.service';
+import { Collection, MediaFile, Product, StorefrontBlock } from '../../models';
 
 // ── Page-tab types ────────────────────────────────────────────────────
 type PageTab = 'home' | 'story' | 'contact';
@@ -22,43 +24,64 @@ type HomeSubTab = 'order' | 'hero-slider' | 'collections' | 'discount' | 'promis
 type StorySubTab = 'hero' | 'hero-facts' | 'intro' | 'chapters' | 'quote' | 'atelier';
 type ContactSubTab = 'header' | 'info' | 'phone';
 
+/** Featured swatches per hero slide. Mirrors HERO_MAX_COLORS on the server. */
+const HERO_MAX_COLORS = 4;
+
+/** Mirrors colorSlug() in client-web utils/color-slug.ts, used for `?color=` links. */
+function heroColorSlug(value: string): string {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
 // ── Content data shapes (mirrors server defaults) ─────────────────────
-interface HeroCallout   { id: string; titleEn: string; titleAr: string; subtitleEn: string; subtitleAr: string; thumbnail: string; alt: string; }
-interface HeroSliderItem { id: string; name: string; subtitle: string; imageUrl: string; alt: string; callouts: HeroCallout[]; }
+interface HeroColor     { label: string; slug: string; imageUrl: string; }
+interface HeroSliderItem { id: string; name: string; subtitle: string; nameEn: string; nameAr: string; subtitleEn: string; subtitleAr: string; descriptionEn: string; descriptionAr: string; imageUrl: string; alt: string; productId: string; colors: HeroColor[]; defaultColorSlug: string; }
 interface PromiseCard   { id: string; icon: string; labelEn: string; labelAr: string; subEn: string; subAr: string; }
 interface StatItem      { id: string; value: string; labelEn: string; labelAr: string; }
-interface ContactBlock  { id: string; icon: string; titleEn: string; titleAr: string; lines: string[]; }
+interface ContactBranch {
+  id: string; nameEn: string; nameAr: string;
+  addressEn: string; addressAr: string;
+  phone: string; mapUrl: string; mapEmbedUrl: string;
+  lat: number | null; lng: number | null; parking: boolean;
+  weekdayOpen: number; weekdayClose: number; weekendOpen: number; weekendClose: number;
+}
+interface ContactStockist {
+  id: string; nameEn: string; nameAr: string;
+  locationEn: string; locationAr: string;
+  hoursNoteEn: string; hoursNoteAr: string; mapUrl: string;
+}
 interface SocialLink    { id: string; platform: string; handle: string; enabled: boolean; }
-interface HeroFact      { id: string; label: string; }
+interface HeroFact      { id: string; label: string; labelEn: string; labelAr: string; }
 
 interface StorefrontContent {
-  hero: { imageUrl: string; title: string; body: string; discountText: string; ctaText: string; ctaLink: string; };
-  collections: Array<{ id: string; collectionId?: string; title: string; imageUrl: string; link: string; ctaText?: string; }>;
-  heroSlider: { ctaEn: string; ctaAr: string; items: HeroSliderItem[]; };
-  promise: { cards: PromiseCard[]; };
+  hero: { imageUrl: string; title: string; body: string; kickerEn: string; kickerAr: string; ctaText: string; ctaLink: string; titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; ctaTextEn: string; ctaTextAr: string; };
+  collections: Array<{ id: string; collectionId?: string; title: string; imageUrl: string; link: string; ctaText?: string; titleEn: string; titleAr: string; ctaTextEn: string; ctaTextAr: string; }>;
+  collectionsIntro: { titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; };
+  heroSlider: { ctaEn: string; ctaAr: string; productCtaEn: string; productCtaAr: string; items: HeroSliderItem[]; };
+  promise: { kickerEn: string; kickerAr: string; titleEn: string; titleAr: string; cards: PromiseCard[]; };
   stats: StatItem[];
   contact: {
     kicker: string; headlineEn: string; headlineAccentEn: string;
-    headlineAr: string; headlineAccentAr: string; subhead: string;
+    headlineAr: string; headlineAccentAr: string;
+    subhead: string; subheadAr: string;
     email: string; phone: string; whatsapp: string;
-    promiseLine: string; promiseSignature: string;
-    infoBlocks: ContactBlock[]; socialLinks: SocialLink[];
+    promiseLine: string; promiseLineAr: string;
+    promiseSignature: string; promiseSignatureAr: string;
+    branches: ContactBranch[]; stockists: ContactStockist[]; socialLinks: SocialLink[];
   };
   story: {
-    hero:      { kicker: string; title: string; accent: string; body: string; imageUrl: string; imageAlt: string; };
+    hero:      { kicker: string; title: string; accent: string; body: string; imageUrl: string; imageAlt: string; imageAltEn: string; imageAltAr: string; kickerEn: string; kickerAr: string; titleEn: string; titleAr: string; accentEn: string; accentAr: string; bodyEn: string; bodyAr: string; };
     heroFacts: HeroFact[];
-    intro:     { kicker: string; headline: string; body: string; };
-    chapters:  Array<{ id: string; eyebrow: string; title: string; body: string; imageUrl: string; imageAlt: string; }>;
-    quote:     { text: string; accent: string; author: string; };
-    atelier:   { kicker: string; title: string; body: string; items: Array<{ id: string; title: string; meta: string; }>; };
+    intro:     { kicker: string; headline: string; body: string; kickerEn: string; kickerAr: string; headlineEn: string; headlineAr: string; bodyEn: string; bodyAr: string; };
+    chapters:  Array<{ id: string; eyebrow: string; title: string; body: string; imageUrl: string; imageAlt: string; imageAltEn: string; imageAltAr: string; eyebrowEn: string; eyebrowAr: string; titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; }>;
+    quote:     { text: string; accent: string; author: string; textEn: string; textAr: string; accentEn: string; accentAr: string; authorEn: string; authorAr: string; };
+    atelier:   { kicker: string; title: string; body: string; kickerEn: string; kickerAr: string; titleEn: string; titleAr: string; bodyEn: string; bodyAr: string; items: Array<{ id: string; title: string; meta: string; titleEn: string; titleAr: string; metaEn: string; metaAr: string; }>; };
   };
 }
 
 @Component({
-  selector: 'ap-storefront',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent, SaveBarComponent],
-  template: `
+    selector: 'ap-storefront',
+    imports: [CommonModule, FormsModule, IconComponent, SpinnerComponent],
+    template: `
   <div class="page-fade sf-shell">
 
     <!-- ── Action bar ──────────────────────────────────────────── -->
@@ -84,7 +107,7 @@ interface StorefrontContent {
         <!-- Preview — always shown -->
         <button class="pub-bar__btn pub-bar__btn--ghost" type="button"
                 [disabled]="generatingToken()" (click)="openPreview()"
-                title="Open a fresh preview tab showing the current saved draft">
+                [title]="t('storefront.editor.btn.preview.tooltip')">
           @if (generatingToken()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="eye" [size]="14"/> }
           <span class="pub-bar__btn-label">{{ t('storefront.editor.btn.preview') }}</span>
         </button>
@@ -94,7 +117,7 @@ interface StorefrontContent {
           <div class="pub-bar__divider"></div>
           <button class="pub-bar__btn pub-bar__btn--discard" type="button"
                   [disabled]="savingDraft()" (click)="discardContent()"
-                  title="Discard unsaved edits and reload last saved state">
+                  [title]="t('storefront.editor.btn.discard.tooltip')">
             <ap-icon name="x" [size]="13"/>
             <span class="pub-bar__btn-label">{{ t('storefront.editor.btn.discard') }}</span>
           </button>
@@ -110,7 +133,7 @@ interface StorefrontContent {
           <div class="pub-bar__divider"></div>
           <button class="pub-bar__btn pub-bar__btn--revert" type="button"
                   [disabled]="revertingDraft()" (click)="revertToLive()"
-                  title="Discard this draft and go back to the published live content">
+                  [title]="t('storefront.editor.btn.revertToLive.tooltip')">
             @if (revertingDraft()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="x" [size]="13"/> }
             <span class="pub-bar__btn-label">{{ t('storefront.editor.btn.revertToLive') }}</span>
           </button>
@@ -126,7 +149,7 @@ interface StorefrontContent {
         <!-- Publish layout — always available -->
         <button class="pub-bar__btn pub-bar__btn--layout" type="button"
                 [disabled]="publishing()" (click)="publish()"
-                title="Publish section order and visibility to the live storefront">
+                [title]="t('storefront.editor.btn.publishLayout.tooltip')">
           @if (publishing()) { <ap-spinner [size]="12"/> } @else { <ap-icon name="sync" [size]="13"/> }
           <span class="pub-bar__btn-label">@if (publishing()) { {{ t('storefront.editor.btn.publishingLayout') }} } @else { {{ t('storefront.editor.btn.publishLayout') }} }</span>
         </button>
@@ -190,8 +213,8 @@ interface StorefrontContent {
                     (drop)="onDrop($event, block.id)" (dragend)="onDragEnd()">
                     <span class="layout-handle"><ap-icon name="drag" [size]="14"/></span>
                     <div class="layout-copy">
-                      <div class="layout-title">{{ block.title }}</div>
-                      <div class="layout-meta">{{ block.config }}</div>
+                      <div class="layout-title">{{ t(blockTitleKey(block.id)) }}</div>
+                      <div class="layout-meta">{{ t(blockMetaKey(block.id)) }}</div>
                     </div>
                     <button class="toggle" type="button" [class.on]="block.visible" (click)="toggleVisible(block.id)"></button>
                   </article>
@@ -214,18 +237,34 @@ interface StorefrontContent {
             <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.slider.title') }}</div><div class="card-sub">{{ t('storefront.editor.slider.sub') }}</div></div></div>
             <div class="card-pad field-stack">
               <div class="two-col">
+                <label><span class="lbl">{{ t('storefront.editor.slider.productCtaEn') }}</span><input class="inp" [ngModel]="content().heroSlider.productCtaEn" (ngModelChange)="patchHeroSlider('productCtaEn', $event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.slider.productCtaAr') }}</span><input class="inp" dir="rtl" [ngModel]="content().heroSlider.productCtaAr" (ngModelChange)="patchHeroSlider('productCtaAr', $event)"/></label>
+              </div>
+              <div class="two-col">
                 <label><span class="lbl">{{ t('storefront.editor.slider.ctaEn') }}</span><input class="inp" [ngModel]="content().heroSlider.ctaEn" (ngModelChange)="patchHeroSlider('ctaEn', $event)"/></label>
                 <label><span class="lbl">{{ t('storefront.editor.slider.ctaAr') }}</span><input class="inp" dir="rtl" [ngModel]="content().heroSlider.ctaAr" (ngModelChange)="patchHeroSlider('ctaAr', $event)"/></label>
               </div>
+              <div class="hint-box">{{ t('storefront.editor.slider.ctaDifferenceHint') }}</div>
             </div>
           </div>
 
           @for (item of content().heroSlider.items; track item.id; let i = $index) {
-            <div class="card mb-16">
+            <div class="card mb-16 slide-card">
               <div class="card-header">
-                <div>
-                  <div class="card-title">{{ t('storefront.editor.slider.slide') }} {{ i + 1 }}</div>
-                  <div class="card-sub mono small">{{ item.id }}</div>
+                <div class="slide-card__title">
+                  <span class="slide-card__num">{{ i + 1 }}</span>
+                  <div style="min-width:0;">
+                    <div class="card-title">
+                      {{ item.name || t('storefront.editor.slider.untitled') }}
+                    </div>
+                    <div class="card-sub small">
+                      @if (item.productId && productById(item.productId); as linked) {
+                        {{ linked.name }} · {{ item.colors.length }}/4 {{ t('storefront.editor.slider.colours') }}
+                      } @else {
+                        {{ t('storefront.editor.slider.noProductYet') }}
+                      }
+                    </div>
+                  </div>
                 </div>
                 @if (content().heroSlider.items.length > 1) {
                   <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeSliderItem(i)">
@@ -234,87 +273,251 @@ interface StorefrontContent {
                 }
               </div>
               <div class="card-pad field-stack">
-                <div class="two-col">
-                  <label><span class="lbl">{{ t('storefront.editor.slider.productName') }}</span><input class="inp" [ngModel]="item.name" (ngModelChange)="patchSliderItem(i,'name',$event)"/></label>
-                  <label><span class="lbl">{{ t('storefront.editor.slider.subtitle') }}</span><input class="inp" [ngModel]="item.subtitle" (ngModelChange)="patchSliderItem(i,'subtitle',$event)"/></label>
-                </div>
-                <label>
-                  <span class="lbl">{{ t('storefront.editor.slider.image') }}</span>
-                  <div class="image-picker-row">
-                    @if (item.imageUrl) { <img class="img-thumb" [src]="item.imageUrl" [alt]="item.name"/> }
-                    <div class="ip-info">
-                      <span class="small mono">{{ imageName(item.imageUrl) }}</span>
-                      <div class="row gap-sm">
-                        <input #slFile type="file" accept="image/*" (change)="uploadSliderImage(i, $event)" hidden/>
-                        <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="slFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
-                        <button class="btn btn-outline btn-sm" (click)="openMediaPicker('slider-item-'+i)"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
-                      </div>
-                      <input class="inp mt-8" placeholder="or paste URL…" [ngModel]="item.imageUrl" (ngModelChange)="patchSliderItem(i,'imageUrl',$event)"/>
-                    </div>
-                  </div>
-                </label>
-                <label><span class="lbl">{{ t('storefront.editor.slider.altText') }}</span><input class="inp" [ngModel]="item.alt" (ngModelChange)="patchSliderItem(i,'alt',$event)"/></label>
 
-                <!-- Per-slide collapsible callouts — clear accordion UI -->
-                <div class="callouts-section" [class.callouts-open]="expandedSlide() === i">
-                  <button class="callouts-toggle" type="button" (click)="toggleSlideCallouts(i)"
-                          [attr.aria-expanded]="expandedSlide() === i">
-                    <span class="callouts-toggle__icon">
-                      <ap-icon name="list" [size]="12"/>
+                <!-- Step 1 — Linked product + colour swatches -->
+                <div class="hero-link-section">
+                  <div class="hero-link-head">
+                    <span class="lbl">
+                      <span class="step-badge">1</span>
+                      {{ t('storefront.editor.slider.linkedProduct') }}
                     </span>
-                    <span class="callouts-toggle__label">{{ t('storefront.editor.slider.callouts') }}</span>
-                    <span class="callouts-toggle__count">{{ item.callouts.length }}</span>
-                    <span class="callouts-toggle__hint">{{ expandedSlide() === i ? t('storefront.editor.slider.collapse') : t('storefront.editor.slider.expand') }}</span>
-                    <span class="callouts-toggle__arrow" [class.open]="expandedSlide() === i">
-                      <ap-icon name="arrowDn" [size]="13"/>
-                    </span>
-                  </button>
-                  @if (expandedSlide() === i) {
-                    <div class="callouts-body">
-                      @for (callout of item.callouts; track callout.id; let ci = $index) {
-                        <div class="callout-row">
-                          <div class="callout-row__head">
-                            <span class="callout-row__id">
-                              <ap-icon name="drag" [size]="11"/>
-                              {{ callout.id }}
-                            </span>
-                            <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeCallout(i,ci)">
-                              <ap-icon name="trash" [size]="11"/>
+                    <span class="small">{{ t('storefront.editor.slider.linkedProductHint') }}</span>
+                  </div>
+
+                  @if (item.productId && productById(item.productId); as linked) {
+                    <div class="hero-linked-row">
+                      @if (linked.image) { <img class="img-thumb" [src]="linked.image" [alt]="linked.name"/> }
+                      <div class="hero-linked-info">
+                        <strong>{{ linked.name }}</strong>
+                        <span class="small mono">{{ productColorNames(item.productId).length }} {{ t('storefront.editor.slider.coloursAvailable') }}</span>
+                      </div>
+                      <button class="btn btn-outline btn-sm" type="button"
+                              [title]="t('storefront.editor.slider.refillHint')"
+                              (click)="updateSlideProductInfo(i)">
+                        <ap-icon name="wand" [size]="11"/> {{ t('storefront.editor.slider.refill') }}
+                      </button>
+                      <button class="btn btn-outline btn-sm" type="button" (click)="productPickerSlide.set(productPickerSlide() === i ? null : i)">
+                        {{ t('storefront.editor.slider.change') }}
+                      </button>
+                      <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="clearSlideProduct(i)">
+                        <ap-icon name="trash" [size]="11"/>
+                      </button>
+                    </div>
+                  } @else if (item.productId) {
+                    <div class="hero-warn">
+                      <ap-icon name="warning" [size]="12"/>
+                      <span>{{ t('storefront.editor.slider.productMissing') }}</span>
+                      <button class="btn btn-outline btn-sm" type="button" (click)="clearSlideProduct(i)">{{ t('storefront.editor.slider.clear') }}</button>
+                    </div>
+                  } @else {
+                    <button class="btn btn-outline btn-sm" type="button" (click)="productPickerSlide.set(productPickerSlide() === i ? null : i)">
+                      <ap-icon name="plus" [size]="12"/> {{ t('storefront.editor.slider.pickProduct') }}
+                    </button>
+                  }
+
+                  @if (productPickerSlide() === i) {
+                    <div class="hero-picker">
+                      <input class="inp inp-sm" [placeholder]="t('storefront.editor.slider.searchProducts')"
+                             [ngModel]="productPickerSearch()" (ngModelChange)="productPickerSearch.set($event)"/>
+                      @if (productsLoading()) {
+                        <div class="small hero-picker__empty"><ap-spinner [size]="12"/></div>
+                      } @else if (filteredPickerProducts().length === 0) {
+                        <div class="small hero-picker__empty">{{ t('storefront.editor.slider.noProducts') }}</div>
+                      } @else {
+                        <div class="hero-picker__list">
+                          @for (p of filteredPickerProducts(); track p.id) {
+                            <button class="hero-picker__row" type="button" (click)="selectSlideProduct(i, p.id)">
+                              @if (p.image) { <img [src]="p.image" [alt]="p.name"/> }
+                              <span class="hero-picker__name">{{ p.name }}</span>
+                              <span class="small mono">{{ productColorNames(p.id).length }}</span>
                             </button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+
+                  @if (item.productId && productById(item.productId)) {
+                    <div class="hero-colors">
+                      <div class="hero-link-head">
+                        <span class="lbl">{{ t('storefront.editor.slider.featuredColours') }}</span>
+                        <span class="small">
+                          {{ item.colors.length }}/4 {{ t('storefront.editor.slider.selected') }}
+                          · {{ t('storefront.editor.slider.coloursHint') }}
+                        </span>
+                      </div>
+
+                      @if (selectableColors(item).length === 0) {
+                        <div class="hero-warn">
+                          <ap-icon name="warning" [size]="12"/>
+                          <span>{{ t('storefront.editor.slider.noColours') }}</span>
+                        </div>
+                      } @else {
+                        <div class="hero-color-grid">
+                          @for (opt of selectableColors(item); track opt.name) {
+                            <button
+                              class="hero-color-chip"
+                              type="button"
+                              [class.is-on]="slideColorSelected(i, opt.name)"
+                              [class.is-broken]="colorMissingHex(opt.name)"
+                              [class.is-offproduct]="!opt.onProduct"
+                              [disabled]="!slideColorSelected(i, opt.name) && item.colors.length >= 4"
+                              [title]="opt.onProduct ? opt.name : opt.name + ' — ' + t('storefront.editor.slider.notOnProduct')"
+                              (click)="toggleSlideColor(i, opt.name)">
+                              @if (colorSwatchImage(opt.name)) {
+                                <span class="hero-color-dot" [style.background-image]="'url(' + colorSwatchImage(opt.name) + ')'"></span>
+                              } @else if (colorHex(opt.name)) {
+                                <span class="hero-color-dot" [style.background]="colorHex(opt.name)"></span>
+                              } @else {
+                                <span class="hero-color-dot hero-color-dot--none"><ap-icon name="warning" [size]="10"/></span>
+                              }
+                              <span class="hero-color-name">{{ opt.name }}</span>
+                            </button>
+                          }
+                        </div>
+
+                        @if (slideOffProductWarnings(i).length > 0) {
+                          <div class="hero-warn">
+                            <ap-icon name="warning" [size]="12"/>
+                            <span>
+                              <strong>{{ slideOffProductWarnings(i).join(', ') }}</strong>
+                              {{ t('storefront.editor.slider.offProductWarn') }}
+                            </span>
                           </div>
-                          <div class="callout-row__fields">
-                            <label><span class="lbl">{{ t('storefront.editor.slider.labelEn') }}</span><input class="inp inp-sm" [ngModel]="callout.titleEn" (ngModelChange)="patchCallout(i,ci,'titleEn',$event)"/></label>
-                            <label><span class="lbl">{{ t('storefront.editor.slider.labelAr') }}</span><input class="inp inp-sm" dir="rtl" [ngModel]="callout.titleAr" (ngModelChange)="patchCallout(i,ci,'titleAr',$event)"/></label>
-                            <label><span class="lbl">{{ t('storefront.editor.slider.subtitleEn') }}</span><input class="inp inp-sm" [ngModel]="callout.subtitleEn" (ngModelChange)="patchCallout(i,ci,'subtitleEn',$event)"/></label>
-                            <label><span class="lbl">{{ t('storefront.editor.slider.subtitleAr') }}</span><input class="inp inp-sm" dir="rtl" [ngModel]="callout.subtitleAr" (ngModelChange)="patchCallout(i,ci,'subtitleAr',$event)"/></label>
-                            <label>
-                              <span class="lbl">{{ t('storefront.editor.slider.thumbnail') }}</span>
-                              <div class="callout-thumb-row">
-                                @if (callout.thumbnail) {
-                                  <img class="callout-thumb" [src]="callout.thumbnail" [alt]="callout.alt"/>
+                        }
+                      }
+
+                      @if (slideColorWarnings(i).length > 0) {
+                        <div class="hero-warn hero-warn--actionable">
+                          <ap-icon name="warning" [size]="12"/>
+                          <span class="hero-warn__copy">
+                            {{ t('storefront.editor.slider.missingHex') }}
+                            <strong>{{ slideColorWarnings(i).join(', ') }}</strong>
+                            {{ t('storefront.editor.slider.missingHexFix') }}
+                          </span>
+                          <span class="hero-warn__actions">
+                            @for (label of slideColorWarnings(i); track label) {
+                              <button class="hero-warn__btn" type="button" (click)="openCreateColor(label)">
+                                <ap-icon name="plus" [size]="11"/>
+                                {{ t('storefront.editor.slider.createColour') }} {{ label }}
+                              </button>
+                            }
+                          </span>
+                        </div>
+                      }
+
+                      @if (item.colors.length > 0) {
+                        <div class="hero-colorshots">
+                          <div class="hero-link-head">
+                            <span class="lbl">{{ t('storefront.editor.slider.heroShots') }}</span>
+                            <span class="small">{{ t('storefront.editor.slider.heroShotsHint') }}</span>
+                          </div>
+
+                          @for (c of item.colors; track c.slug; let ci = $index) {
+                            <div class="hero-colorshot"
+                                 draggable="true"
+                                 [class.is-dragging]="draggingColor() === i + ':' + ci"
+                                 [class.is-drop-target]="dropTargetColor() === i + ':' + ci"
+                                 (dragstart)="onColorDragStart(i, ci)"
+                                 (dragover)="onColorDragOver($event, i, ci)"
+                                 (drop)="onColorDrop($event, i, ci)"
+                                 (dragend)="onColorDragEnd()">
+                              <span class="hero-colorshot__grip" [title]="t('storefront.editor.slider.dragToReorder')">
+                                <ap-icon name="drag" [size]="12"/>
+                              </span>
+
+                              <div class="hero-colorshot__id">
+                                @if (colorSwatchImage(c.label)) {
+                                  <span class="hero-color-dot" [style.background-image]="'url(' + colorSwatchImage(c.label) + ')'"></span>
+                                } @else if (colorHex(c.label)) {
+                                  <span class="hero-color-dot" [style.background]="colorHex(c.label)"></span>
                                 } @else {
-                                  <div class="callout-thumb callout-thumb--empty">
-                                    <ap-icon name="media" [size]="16"/>
-                                  </div>
+                                  <span class="hero-color-dot hero-color-dot--none"><ap-icon name="warning" [size]="10"/></span>
                                 }
-                                <div style="flex:1;min-width:0;">
-                                  <input #ctFile type="file" accept="image/*" (change)="uploadCalloutImage(i,ci,$event)" hidden/>
-                                  <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="ctFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
-                                  <input class="inp mt-6" style="font-size:11px;" placeholder="or paste URL…" [ngModel]="callout.thumbnail" (ngModelChange)="patchCallout(i,ci,'thumbnail',$event)"/>
+                                <span class="hero-colorshot__name">{{ c.label }}</span>
+                              </div>
+
+                              <label class="hero-colorshot__default"
+                                     [class.is-on]="slideDefaultColorSlug(i) === c.slug"
+                                     [title]="t('storefront.editor.slider.defaultHint')">
+                                <input type="radio"
+                                       [name]="'default-color-' + i"
+                                       [checked]="slideDefaultColorSlug(i) === c.slug"
+                                       (change)="setSlideDefaultColor(i, c.slug)"/>
+                                <span>{{ t('storefront.editor.slider.default') }}</span>
+                              </label>
+
+                              <div class="hero-colorshot__media">
+                                @if (c.imageUrl) {
+                                  <img class="hero-colorshot__thumb" [src]="mediaUrl(c.imageUrl)" [alt]="c.label"/>
+                                } @else {
+                                  <span class="hero-colorshot__thumb hero-colorshot__thumb--none" [title]="t('storefront.editor.slider.usesDefault')">
+                                    <ap-icon name="media" [size]="14"/>
+                                  </span>
+                                }
+                                <div class="hero-colorshot__actions">
+                                  <input #shotFile type="file" accept="image/*" (change)="uploadSlideColorImage(i, ci, $event)" hidden/>
+                                  <button class="btn btn-outline btn-sm" type="button" [disabled]="uploading()" (click)="shotFile.click()">
+                                    @if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="11"/>} {{ t('storefront.editor.btn.upload') }}
+                                  </button>
+                                  <button class="btn btn-outline btn-sm" type="button" (click)="openMediaPicker('slide-color-' + i + '-' + ci)">
+                                    <ap-icon name="media" [size]="11"/> {{ t('storefront.editor.btn.media') }}
+                                  </button>
+                                  @if (c.imageUrl) {
+                                    <button class="btn btn-outline btn-sm" type="button" style="color:var(--danger);border-color:var(--danger);"
+                                            (click)="patchSlideColorImage(i, ci, '')" [title]="t('storefront.editor.slider.clearImage')">
+                                      <ap-icon name="trash" [size]="11"/>
+                                    </button>
+                                  }
                                 </div>
                               </div>
-                            </label>
-                            <label><span class="lbl">{{ t('storefront.editor.field.altText') }}</span><input class="inp inp-sm" [ngModel]="callout.alt" (ngModelChange)="patchCallout(i,ci,'alt',$event)"/></label>
-                          </div>
+                            </div>
+                          }
+
+                          @if (slideImageWarnings(i).length > 0) {
+                            <div class="hero-warn">
+                              <ap-icon name="warning" [size]="12"/>
+                              <span>
+                                {{ t('storefront.editor.slider.noImageFor') }}
+                                <strong>{{ slideImageWarnings(i).join(', ') }}</strong>
+                                {{ t('storefront.editor.slider.noImageFix') }}
+                              </span>
+                            </div>
+                          }
                         </div>
-                        @if (ci < item.callouts.length - 1) { <hr class="callout-sep"/> }
                       }
-                      <button class="btn btn-outline btn-sm mt-12" style="width:100%;" type="button" (click)="addCallout(i)">
-                        <ap-icon name="plus" [size]="12"/> {{ t('storefront.editor.slider.addCallout') }}
-                      </button>
                     </div>
                   }
                 </div>
+
+                <!-- Step 2 — Hero copy, prefilled from the product -->
+                <div class="hero-copy-section">
+                  <div class="hero-link-head">
+                    <span class="lbl">
+                      <span class="step-badge">2</span>
+                      {{ t('storefront.editor.slider.heroCopy') }}
+                    </span>
+                    <span class="small">{{ t('storefront.editor.slider.heroCopyHint') }}</span>
+                  </div>
+
+                  <div class="two-col">
+                    <label><span class="lbl">Product name (English)</span><input class="inp" [ngModel]="item.nameEn" (ngModelChange)="patchSliderItem(i,'nameEn',$event)"/></label>
+                    <label><span class="lbl">اسم المنتج (العربية)</span><input class="inp" dir="rtl" [ngModel]="item.nameAr" (ngModelChange)="patchSliderItem(i,'nameAr',$event)"/></label>
+                  </div>
+                  <div class="two-col">
+                    <label>
+                      <span class="lbl">{{ t('storefront.editor.slider.descriptionEn') }}</span>
+                      <textarea class="inp" rows="2" [ngModel]="item.descriptionEn" (ngModelChange)="patchSliderItem(i,'descriptionEn',$event)"></textarea>
+                      <span class="small">{{ t('storefront.editor.slider.descriptionHint') }}</span>
+                    </label>
+                    <label>
+                      <span class="lbl">{{ t('storefront.editor.slider.descriptionAr') }}</span>
+                      <textarea class="inp" dir="rtl" rows="2" [ngModel]="item.descriptionAr" (ngModelChange)="patchSliderItem(i,'descriptionAr',$event)"></textarea>
+                    </label>
+                  </div>
+                  <label><span class="lbl">{{ t('storefront.editor.slider.altText') }}</span><input class="inp" [ngModel]="item.alt" (ngModelChange)="patchSliderItem(i,'alt',$event)"/></label>
+                </div>
+
               </div>
             </div>
           }
@@ -338,6 +541,14 @@ interface StorefrontContent {
               </button>
             </div>
             <div class="card-pad">
+              <div class="two-col mb-16">
+                <label><span class="lbl">Header (English)</span><input class="inp" [ngModel]="content().collectionsIntro.titleEn" (ngModelChange)="patchCollectionsIntro('titleEn', $event)"/></label>
+                <label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().collectionsIntro.titleAr" (ngModelChange)="patchCollectionsIntro('titleAr', $event)"/></label>
+              </div>
+              <div class="two-col mb-16">
+                <label><span class="lbl">Description (English)</span><textarea class="inp" rows="2" [ngModel]="content().collectionsIntro.bodyEn" (ngModelChange)="patchCollectionsIntro('bodyEn', $event)"></textarea></label>
+                <label><span class="lbl">الوصف (العربية)</span><textarea class="inp" dir="rtl" rows="2" [ngModel]="content().collectionsIntro.bodyAr" (ngModelChange)="patchCollectionsIntro('bodyAr', $event)"></textarea></label>
+              </div>
               @if (featuredRefs().length > 0) {
                 <div class="featured-chips mb-16">
                   @for (ref of featuredRefs(); track ref) {
@@ -362,14 +573,14 @@ interface StorefrontContent {
                 <div class="col-picker mb-16">
                   <div class="col-picker-search">
                     <ap-icon name="search" [size]="13"/>
-                    <input class="inp with-icon" placeholder="Search…" [ngModel]="pickerSearch()" (ngModelChange)="pickerSearch.set($event)"/>
+                    <input class="inp with-icon" [placeholder]="t('common.searchPlaceholder')" [ngModel]="pickerSearch()" (ngModelChange)="pickerSearch.set($event)"/>
                   </div>
                   <div class="col-picker-list">
                     @if (collectionsLoading()) { <div class="col-picker-row muted"><ap-spinner [size]="12"/> {{ t('common.loading') }}</div> }
                     @else {
                       @for (col of filteredPickerCollections(); track col.id) {
                         <div class="col-picker-row" [class.selected]="featuredRefs().includes(col.id)" (click)="toggleFeatured(col.id)">
-                          @if (col.imageUrl) { <img [src]="col.imageUrl" [alt]="col.title" class="col-picker-img"/> }
+                          @if (col.imageUrl) { <img [src]="mediaUrl(col.imageUrl)" [alt]="col.title" class="col-picker-img"/> }
                           @else { <div class="col-picker-img-empty"><ap-icon name="collections" [size]="14"/></div> }
                           <div class="col-picker-info"><div class="col-picker-name">{{ col.title }}</div><div class="col-picker-path mono">/collection/{{ col.handle }}</div></div>
                           <div class="col-picker-check" [class.on]="featuredRefs().includes(col.id)"></div>
@@ -382,7 +593,7 @@ interface StorefrontContent {
               }
               <div class="manual-entry">
                 <span class="manual-prefix">/collection/</span>
-                <input class="inp manual-inp" [(ngModel)]="manualHandle" placeholder="type-a-handle" (keydown.enter)="addManualHandle()"/>
+                <input class="inp manual-inp" [(ngModel)]="manualHandle" [placeholder]="t('storefront.editor.collections.handlePlaceholder')" (keydown.enter)="addManualHandle()"/>
                 <button class="btn btn-outline btn-sm" type="button" (click)="addManualHandle()" [disabled]="!manualHandle.trim()">{{ t('storefront.editor.collections.add') }}</button>
               </div>
             </div>
@@ -394,7 +605,7 @@ interface StorefrontContent {
               <div class="tile-editor-grid">
                 @for (tile of content().collections; track tile.id; let ti = $index) {
                   <article class="tile-editor">
-                    <div class="tile-thumb"><img [src]="tile.imageUrl" [alt]="tile.title"/><span>{{ tile.title }}</span><span class="tile-num">{{ ti + 1 }}</span></div>
+                    <div class="tile-thumb"><img [src]="mediaUrl(tile.imageUrl)" [alt]="tile.title"/><span>{{ tile.title }}</span><span class="tile-num">{{ ti + 1 }}</span></div>
                     <div class="field-stack compact">
                       <label><span class="lbl">{{ t('storefront.editor.tiles.linkedCollection') }}</span>
                         <select class="inp inp-sm" [ngModel]="tile.collectionId || ''" (ngModelChange)="selectTileCollection(ti, $event)">
@@ -408,32 +619,41 @@ interface StorefrontContent {
                           <span class="live-badge">⟳ {{ t('storefront.editor.tiles.liveBadge') }}</span>
                           <span class="live-hint">{{ t('storefront.editor.tiles.liveHint') }}</span>
                         </div>
-                        <label><span class="lbl">{{ t('storefront.editor.tiles.titleReadonly') }}</span><input class="inp" [ngModel]="tile.title" readonly style="opacity:0.5;cursor:not-allowed;"/></label>
+                        <div class="two-col">
+                          <label><span class="lbl">Title (English)</span><input class="inp" [ngModel]="tile.titleEn" readonly style="opacity:0.5;cursor:not-allowed;"/></label>
+                          <label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="tile.titleAr" (ngModelChange)="patchTile(ti,'titleAr',$event)"/></label>
+                        </div>
                         <label><span class="lbl">{{ t('storefront.editor.tiles.imageReadonly') }}</span>
                           <div class="row gap-sm">
-                            @if (tile.imageUrl) { <img class="img-thumb" [src]="tile.imageUrl" [alt]="tile.title"/> }
+                            @if (tile.imageUrl) { <img class="img-thumb" [src]="mediaUrl(tile.imageUrl)" [alt]="tile.title"/> }
                             <input class="inp" [ngModel]="tile.imageUrl" readonly style="opacity:0.5;cursor:not-allowed;flex:1;"/>
                           </div>
                         </label>
                         <label><span class="lbl">{{ t('storefront.editor.tiles.linkReadonly') }}</span><input class="inp" [ngModel]="tile.link" readonly style="opacity:0.5;cursor:not-allowed;"/></label>
                       } @else {
-                        <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="tile.title" (ngModelChange)="patchTile(ti,'title',$event)"/></label>
+                        <div class="two-col">
+                          <label><span class="lbl">Title (English)</span><input class="inp" [ngModel]="tile.titleEn" (ngModelChange)="patchTile(ti,'titleEn',$event)"/></label>
+                          <label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="tile.titleAr" (ngModelChange)="patchTile(ti,'titleAr',$event)"/></label>
+                        </div>
                         <label><span class="lbl">{{ t('storefront.editor.tiles.imageUrl') }}</span>
                           <div class="row gap-sm">
-                            @if (tile.imageUrl) { <img class="img-thumb" [src]="tile.imageUrl" [alt]="tile.title"/> }
+                            @if (tile.imageUrl) { <img class="img-thumb" [src]="mediaUrl(tile.imageUrl)" [alt]="tile.title"/> }
                             <div style="flex:1">
                               <div class="row gap-sm mb-4">
                                 <input #tileFile type="file" accept="image/*" (change)="uploadTileImage(ti, $event)" hidden/>
                                 <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="tileFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
                                 <button class="btn btn-outline btn-sm" (click)="openMediaPicker('tile-'+ti)"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
                               </div>
-                              <input class="inp" [ngModel]="tile.imageUrl" (ngModelChange)="patchTile(ti,'imageUrl',$event)" placeholder="https://…"/>
+                              <input class="inp" [ngModel]="tile.imageUrl" (ngModelChange)="patchTile(ti,'imageUrl',$event)" [placeholder]="t('common.urlPlaceholder')"/>
                             </div>
                           </div>
                         </label>
                         <label><span class="lbl">{{ t('storefront.editor.tiles.link') }}</span><input class="inp" [ngModel]="tile.link" (ngModelChange)="patchTile(ti,'link',$event)"/></label>
                       }
-                      <label><span class="lbl">{{ t('storefront.editor.tiles.cta') }}</span><input class="inp" [ngModel]="tile.ctaText || ''" (ngModelChange)="patchTile(ti,'ctaText',$event)"/></label>
+                      <div class="two-col">
+                        <label><span class="lbl">CTA (English)</span><input class="inp" [ngModel]="tile.ctaTextEn" (ngModelChange)="patchTile(ti,'ctaTextEn',$event)"/></label>
+                        <label><span class="lbl">CTA (العربية)</span><input class="inp" dir="rtl" [ngModel]="tile.ctaTextAr" (ngModelChange)="patchTile(ti,'ctaTextAr',$event)"/></label>
+                      </div>
                     </div>
                   </article>
                 }
@@ -452,22 +672,32 @@ interface StorefrontContent {
               <div class="card-pad field-stack">
                 <label><span class="lbl">{{ t('storefront.editor.promotion.image') }}</span>
                   <div class="image-picker-row">
-                    @if (content().hero.imageUrl) { <img class="img-thumb" [src]="content().hero.imageUrl" [alt]="content().hero.title"/> }
+                    @if (content().hero.imageUrl) { <img class="img-thumb" [src]="mediaUrl(content().hero.imageUrl)" [alt]="content().hero.title"/> }
                     <div class="ip-info">
                       <div class="row gap-sm mb-4">
                         <input #heroFile type="file" accept="image/*" (change)="uploadHeroImage($event)" hidden/>
                         <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="heroFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
                         <button class="btn btn-outline btn-sm" (click)="openMediaPicker('hero')"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
                       </div>
-                      <input class="inp" placeholder="https://…" [ngModel]="content().hero.imageUrl" (ngModelChange)="patchHero('imageUrl',$event)"/>
+                      <input class="inp" [placeholder]="t('common.urlPlaceholder')" [ngModel]="content().hero.imageUrl" (ngModelChange)="patchHero('imageUrl',$event)"/>
                     </div>
                   </div>
                 </label>
-                <label><span class="lbl">{{ t('storefront.editor.promotion.header') }}</span><input class="inp" [ngModel]="content().hero.title" (ngModelChange)="patchHero('title',$event)"/></label>
-                <label><span class="lbl">{{ t('storefront.editor.promotion.body') }}</span><textarea class="inp" rows="3" [ngModel]="content().hero.body" (ngModelChange)="patchHero('body',$event)"></textarea></label>
                 <div class="two-col">
-                  <label><span class="lbl">{{ t('storefront.editor.promotion.discount') }}</span><input class="inp" [ngModel]="content().hero.discountText" (ngModelChange)="patchHero('discountText',$event)"/></label>
-                  <label><span class="lbl">{{ t('storefront.editor.promotion.btnLabel') }}</span><input class="inp" [ngModel]="content().hero.ctaText" (ngModelChange)="patchHero('ctaText',$event)"/></label>
+                  <label><span class="lbl">Kicker (English)</span><input class="inp" [ngModel]="content().hero.kickerEn" (ngModelChange)="patchHero('kickerEn',$event)"/></label>
+                  <label><span class="lbl">العنوان الصغير (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().hero.kickerAr" (ngModelChange)="patchHero('kickerAr',$event)"/></label>
+                </div>
+                <div class="two-col">
+                  <label><span class="lbl">Header (English)</span><input class="inp" [ngModel]="content().hero.titleEn" (ngModelChange)="patchHero('titleEn',$event)"/></label>
+                  <label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().hero.titleAr" (ngModelChange)="patchHero('titleAr',$event)"/></label>
+                </div>
+                <div class="two-col">
+                  <label><span class="lbl">Body (English)</span><textarea class="inp" rows="3" [ngModel]="content().hero.bodyEn" (ngModelChange)="patchHero('bodyEn',$event)"></textarea></label>
+                  <label><span class="lbl">النص (العربية)</span><textarea class="inp" dir="rtl" rows="3" [ngModel]="content().hero.bodyAr" (ngModelChange)="patchHero('bodyAr',$event)"></textarea></label>
+                </div>
+                <div class="two-col">
+                  <label><span class="lbl">CTA (English)</span><input class="inp" [ngModel]="content().hero.ctaTextEn" (ngModelChange)="patchHero('ctaTextEn',$event)"/></label>
+                  <label><span class="lbl">CTA (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().hero.ctaTextAr" (ngModelChange)="patchHero('ctaTextAr',$event)"/></label>
                 </div>
                 <label><span class="lbl">{{ t('storefront.editor.promotion.btnLink') }}</span><input class="inp" [ngModel]="content().hero.ctaLink" (ngModelChange)="patchHero('ctaLink',$event)"/></label>
               </div>
@@ -475,12 +705,11 @@ interface StorefrontContent {
             <div class="card preview-card">
               <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.promotion.preview') }}</div></div></div>
               <div class="card-pad preview-hero">
-                <img [src]="content().hero.imageUrl" [alt]="content().hero.title"/>
+                <img [src]="mediaUrl(content().hero.imageUrl)" [alt]="content().hero.title"/>
                 <div>
                   <small>Elite Collection</small>
                   <h3>{{ content().hero.title }}</h3>
                   <p>{{ content().hero.body }}</p>
-                  <strong>{{ content().hero.discountText }}</strong>
                   <span>{{ content().hero.ctaText }}</span>
                 </div>
               </div>
@@ -495,6 +724,14 @@ interface StorefrontContent {
           <div class="card">
             <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.promise.title') }}</div><div class="card-sub">{{ t('storefront.editor.promise.sub') }}</div></div></div>
             <div class="card-pad">
+              <div class="two-col mb-4">
+                <label><span class="lbl">Kicker (English)</span><input class="inp" [ngModel]="content().promise.kickerEn" (ngModelChange)="patchPromise('kickerEn',$event)"/></label>
+                <label><span class="lbl">العنوان الصغير (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().promise.kickerAr" (ngModelChange)="patchPromise('kickerAr',$event)"/></label>
+              </div>
+              <div class="two-col mb-4">
+                <label><span class="lbl">Header (English)</span><input class="inp" [ngModel]="content().promise.titleEn" (ngModelChange)="patchPromise('titleEn',$event)"/></label>
+                <label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().promise.titleAr" (ngModelChange)="patchPromise('titleAr',$event)"/></label>
+              </div>
               @for (card of content().promise.cards; track card.id; let i = $index) {
                 <div class="promise-card-editor">
                   <div class="promise-icon-wrap">
@@ -554,31 +791,31 @@ interface StorefrontContent {
             <div class="card">
               <div class="card-header"><div class="card-title">{{ t('storefront.editor.storyHero.title') }}</div></div>
               <div class="card-pad field-stack">
-                <label><span class="lbl">{{ t('storefront.editor.storyHero.kicker') }}</span><input class="inp" [ngModel]="content().story.hero.kicker" (ngModelChange)="patchStoryHero('kicker',$event)"/></label>
-                <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="content().story.hero.title" (ngModelChange)="patchStoryHero('title',$event)"/></label>
-                <label><span class="lbl">{{ t('storefront.editor.storyHero.accent') }}</span><input class="inp" [ngModel]="content().story.hero.accent" (ngModelChange)="patchStoryHero('accent',$event)"/></label>
-                <label><span class="lbl">{{ t('storefront.editor.storyHero.body') }}</span><textarea class="inp" rows="3" [ngModel]="content().story.hero.body" (ngModelChange)="patchStoryHero('body',$event)"></textarea></label>
+                <div class="two-col"><label><span class="lbl">Kicker (English)</span><input class="inp" [ngModel]="content().story.hero.kickerEn" (ngModelChange)="patchStoryHero('kickerEn',$event)"/></label><label><span class="lbl">العنوان الصغير (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.hero.kickerAr" (ngModelChange)="patchStoryHero('kickerAr',$event)"/></label></div>
+                <div class="two-col"><label><span class="lbl">Title (English)</span><input class="inp" [ngModel]="content().story.hero.titleEn" (ngModelChange)="patchStoryHero('titleEn',$event)"/></label><label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.hero.titleAr" (ngModelChange)="patchStoryHero('titleAr',$event)"/></label></div>
+                <div class="two-col"><label><span class="lbl">Accent (English)</span><input class="inp" [ngModel]="content().story.hero.accentEn" (ngModelChange)="patchStoryHero('accentEn',$event)"/></label><label><span class="lbl">النص المميز (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.hero.accentAr" (ngModelChange)="patchStoryHero('accentAr',$event)"/></label></div>
+                <div class="two-col"><label><span class="lbl">Body (English)</span><textarea class="inp" rows="3" [ngModel]="content().story.hero.bodyEn" (ngModelChange)="patchStoryHero('bodyEn',$event)"></textarea></label><label><span class="lbl">النص (العربية)</span><textarea class="inp" dir="rtl" rows="3" [ngModel]="content().story.hero.bodyAr" (ngModelChange)="patchStoryHero('bodyAr',$event)"></textarea></label></div>
                 <label><span class="lbl">{{ t('storefront.editor.storyHero.image') }}</span>
                   <div class="image-picker-row">
-                    @if (content().story.hero.imageUrl) { <img class="img-thumb" [src]="content().story.hero.imageUrl" [alt]="content().story.hero.imageAlt"/> }
+                    @if (content().story.hero.imageUrl) { <img class="img-thumb" [src]="mediaUrl(content().story.hero.imageUrl)" [alt]="content().story.hero.imageAlt"/> }
                     <div class="ip-info">
                       <div class="row gap-sm mb-4">
                         <input #shFile type="file" accept="image/*" (change)="uploadStoryHeroImage($event)" hidden/>
                         <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="shFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
                         <button class="btn btn-outline btn-sm" (click)="openMediaPicker('story-hero')"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
                       </div>
-                      <input class="inp" placeholder="https://…" [ngModel]="content().story.hero.imageUrl" (ngModelChange)="patchStoryHero('imageUrl',$event)"/>
+                      <input class="inp" [placeholder]="t('common.urlPlaceholder')" [ngModel]="content().story.hero.imageUrl" (ngModelChange)="patchStoryHero('imageUrl',$event)"/>
                     </div>
                   </div>
                 </label>
-                <label><span class="lbl">{{ t('storefront.editor.storyHero.imageAlt') }}</span><input class="inp" [ngModel]="content().story.hero.imageAlt" (ngModelChange)="patchStoryHero('imageAlt',$event)"/></label>
+                <div class="two-col"><label><span class="lbl">Image description (English)</span><input class="inp" [ngModel]="content().story.hero.imageAltEn" (ngModelChange)="patchStoryHero('imageAltEn',$event)"/></label><label><span class="lbl">وصف الصورة (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.hero.imageAltAr" (ngModelChange)="patchStoryHero('imageAltAr',$event)"/></label></div>
               </div>
             </div>
             <div class="card preview-card">
               <div class="card-header"><div class="card-title">{{ t('storefront.editor.promotion.preview') }}</div></div>
               <div class="card-pad story-preview-hero">
-                <img [src]="content().story.hero.imageUrl" [alt]="content().story.hero.imageAlt"/>
-                <div><small>{{ content().story.hero.kicker }}</small><h3>{{ content().story.hero.title }}</h3><em>{{ content().story.hero.accent }}</em></div>
+                <img [src]="mediaUrl(content().story.hero.imageUrl)" [alt]="content().story.hero.imageAlt"/>
+                <div><small>{{ content().story.hero.kickerEn }}</small><h3>{{ content().story.hero.titleEn }}</h3><em>{{ content().story.hero.accentEn }}</em></div>
               </div>
             </div>
           </div>
@@ -595,7 +832,8 @@ interface StorefrontContent {
             <div class="card-pad field-stack">
               @for (fact of content().story.heroFacts; track fact.id; let fi = $index) {
                 <div class="row gap-sm align-center">
-                  <input class="inp" style="flex:1" [placeholder]="'Fact label…'" [ngModel]="fact.label" (ngModelChange)="patchHeroFact(fi,'label',$event)"/>
+                  <input class="inp" style="flex:1" placeholder="Label (English)" [ngModel]="fact.labelEn" (ngModelChange)="patchHeroFact(fi,'labelEn',$event)"/>
+                  <input class="inp" style="flex:1" dir="rtl" placeholder="التسمية (العربية)" [ngModel]="fact.labelAr" (ngModelChange)="patchHeroFact(fi,'labelAr',$event)"/>
                   @if (content().story.heroFacts.length > 1) {
                     <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeHeroFact(fi)">
                       <ap-icon name="trash" [size]="12"/>
@@ -617,9 +855,9 @@ interface StorefrontContent {
           <div class="card">
             <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.intro.title') }}</div><div class="card-sub">{{ t('storefront.editor.intro.sub') }}</div></div></div>
             <div class="card-pad field-stack">
-              <label><span class="lbl">{{ t('storefront.editor.intro.kicker') }}</span><input class="inp" [ngModel]="content().story.intro.kicker" (ngModelChange)="patchStoryIntro('kicker',$event)"/></label>
-              <label><span class="lbl">{{ t('storefront.editor.intro.headline') }}</span><input class="inp" [ngModel]="content().story.intro.headline" (ngModelChange)="patchStoryIntro('headline',$event)"/></label>
-              <label><span class="lbl">{{ t('storefront.editor.field.body') }}</span><textarea class="inp" rows="3" [ngModel]="content().story.intro.body" (ngModelChange)="patchStoryIntro('body',$event)"></textarea></label>
+              <div class="two-col"><label><span class="lbl">Kicker (English)</span><input class="inp" [ngModel]="content().story.intro.kickerEn" (ngModelChange)="patchStoryIntro('kickerEn',$event)"/></label><label><span class="lbl">العنوان الصغير (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.intro.kickerAr" (ngModelChange)="patchStoryIntro('kickerAr',$event)"/></label></div>
+              <div class="two-col"><label><span class="lbl">Headline (English)</span><input class="inp" [ngModel]="content().story.intro.headlineEn" (ngModelChange)="patchStoryIntro('headlineEn',$event)"/></label><label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.intro.headlineAr" (ngModelChange)="patchStoryIntro('headlineAr',$event)"/></label></div>
+              <div class="two-col"><label><span class="lbl">Body (English)</span><textarea class="inp" rows="3" [ngModel]="content().story.intro.bodyEn" (ngModelChange)="patchStoryIntro('bodyEn',$event)"></textarea></label><label><span class="lbl">النص (العربية)</span><textarea class="inp" dir="rtl" rows="3" [ngModel]="content().story.intro.bodyAr" (ngModelChange)="patchStoryIntro('bodyAr',$event)"></textarea></label></div>
             </div>
           </div>
         </div>
@@ -631,7 +869,7 @@ interface StorefrontContent {
           @for (chapter of content().story.chapters; track chapter.id; let i = $index) {
             <div class="card mb-16">
               <div class="card-header">
-                <div><div class="card-title">Chapter {{ i + 1 }}</div><div class="card-sub mono">{{ chapter.id }}</div></div>
+                <div><div class="card-title">{{ chapterTitle(i + 1) }}</div><div class="card-sub mono">{{ chapter.id }}</div></div>
                 @if (content().story.chapters.length > 1) {
                   <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeChapter(i)">
                     <ap-icon name="trash" [size]="12"/> {{ t('storefront.editor.chapters.remove') }}
@@ -639,23 +877,23 @@ interface StorefrontContent {
                 }
               </div>
               <div class="card-pad field-stack">
-                <label><span class="lbl">{{ t('storefront.editor.chapters.eyebrow') }}</span><input class="inp" [ngModel]="chapter.eyebrow" (ngModelChange)="patchChapter(i,'eyebrow',$event)"/></label>
-                <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="chapter.title" (ngModelChange)="patchChapter(i,'title',$event)"/></label>
-                <label><span class="lbl">{{ t('storefront.editor.chapters.body') }}</span><textarea class="inp" rows="3" [ngModel]="chapter.body" (ngModelChange)="patchChapter(i,'body',$event)"></textarea></label>
+                <div class="two-col"><label><span class="lbl">Eyebrow (English)</span><input class="inp" [ngModel]="chapter.eyebrowEn" (ngModelChange)="patchChapter(i,'eyebrowEn',$event)"/></label><label><span class="lbl">العنوان الصغير (العربية)</span><input class="inp" dir="rtl" [ngModel]="chapter.eyebrowAr" (ngModelChange)="patchChapter(i,'eyebrowAr',$event)"/></label></div>
+                <div class="two-col"><label><span class="lbl">Title (English)</span><input class="inp" [ngModel]="chapter.titleEn" (ngModelChange)="patchChapter(i,'titleEn',$event)"/></label><label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="chapter.titleAr" (ngModelChange)="patchChapter(i,'titleAr',$event)"/></label></div>
+                <div class="two-col"><label><span class="lbl">Body (English)</span><textarea class="inp" rows="3" [ngModel]="chapter.bodyEn" (ngModelChange)="patchChapter(i,'bodyEn',$event)"></textarea></label><label><span class="lbl">النص (العربية)</span><textarea class="inp" dir="rtl" rows="3" [ngModel]="chapter.bodyAr" (ngModelChange)="patchChapter(i,'bodyAr',$event)"></textarea></label></div>
                 <label><span class="lbl">{{ t('storefront.editor.chapters.image') }}</span>
                   <div class="image-picker-row">
-                    @if (chapter.imageUrl) { <img class="img-thumb" [src]="chapter.imageUrl" [alt]="chapter.imageAlt"/> }
+                    @if (chapter.imageUrl) { <img class="img-thumb" [src]="mediaUrl(chapter.imageUrl)" [alt]="chapter.imageAlt"/> }
                     <div class="ip-info">
                       <div class="row gap-sm mb-4">
                         <input #chFile type="file" accept="image/*" (change)="uploadChapterImage(i,$event)" hidden/>
                         <button class="btn btn-outline btn-sm" [disabled]="uploading()" (click)="chFile.click()">@if(uploading()){<ap-spinner [size]="10"/>}@else{<ap-icon name="upload" [size]="12"/>} {{ t('storefront.editor.btn.upload') }}</button>
                         <button class="btn btn-outline btn-sm" (click)="openMediaPicker('chapter-'+i)"><ap-icon name="media" [size]="12"/> {{ t('storefront.editor.btn.media') }}</button>
                       </div>
-                      <input class="inp" placeholder="https://…" [ngModel]="chapter.imageUrl" (ngModelChange)="patchChapter(i,'imageUrl',$event)"/>
+                      <input class="inp" [placeholder]="t('common.urlPlaceholder')" [ngModel]="chapter.imageUrl" (ngModelChange)="patchChapter(i,'imageUrl',$event)"/>
                     </div>
                   </div>
                 </label>
-                <label><span class="lbl">{{ t('storefront.editor.chapters.imageAlt') }}</span><input class="inp" [ngModel]="chapter.imageAlt" (ngModelChange)="patchChapter(i,'imageAlt',$event)"/></label>
+                <div class="two-col"><label><span class="lbl">Image description (English)</span><input class="inp" [ngModel]="chapter.imageAltEn" (ngModelChange)="patchChapter(i,'imageAltEn',$event)"/></label><label><span class="lbl">وصف الصورة (العربية)</span><input class="inp" dir="rtl" [ngModel]="chapter.imageAltAr" (ngModelChange)="patchChapter(i,'imageAltAr',$event)"/></label></div>
               </div>
             </div>
           }
@@ -671,13 +909,13 @@ interface StorefrontContent {
           <div class="card">
             <div class="card-header"><div class="card-title">{{ t('storefront.editor.quote.title') }}</div></div>
             <div class="card-pad field-stack">
-              <label><span class="lbl">{{ t('storefront.editor.quote.text') }}</span><input class="inp" [ngModel]="content().story.quote.text" (ngModelChange)="patchQuote('text',$event)"/></label>
-              <label><span class="lbl">{{ t('storefront.editor.quote.accent') }}</span><input class="inp" [ngModel]="content().story.quote.accent" (ngModelChange)="patchQuote('accent',$event)"/></label>
-              <label><span class="lbl">{{ t('storefront.editor.quote.author') }}</span><input class="inp" [ngModel]="content().story.quote.author" (ngModelChange)="patchQuote('author',$event)"/></label>
+              <div class="two-col"><label><span class="lbl">Quote (English)</span><input class="inp" [ngModel]="content().story.quote.textEn" (ngModelChange)="patchQuote('textEn',$event)"/></label><label><span class="lbl">الاقتباس (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.quote.textAr" (ngModelChange)="patchQuote('textAr',$event)"/></label></div>
+              <div class="two-col"><label><span class="lbl">Accent (English)</span><input class="inp" [ngModel]="content().story.quote.accentEn" (ngModelChange)="patchQuote('accentEn',$event)"/></label><label><span class="lbl">النص المميز (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.quote.accentAr" (ngModelChange)="patchQuote('accentAr',$event)"/></label></div>
+              <div class="two-col"><label><span class="lbl">Author (English)</span><input class="inp" [ngModel]="content().story.quote.authorEn" (ngModelChange)="patchQuote('authorEn',$event)"/></label><label><span class="lbl">المصدر (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.quote.authorAr" (ngModelChange)="patchQuote('authorAr',$event)"/></label></div>
               <div class="quote-preview">
-                <p>"{{ content().story.quote.text }}</p>
-                <p>{{ content().story.quote.accent }}"</p>
-                <strong>— {{ content().story.quote.author }}</strong>
+                <p>"{{ content().story.quote.textEn }}</p>
+                <p>{{ content().story.quote.accentEn }}"</p>
+                <strong>— {{ content().story.quote.authorEn }}</strong>
               </div>
             </div>
           </div>
@@ -690,9 +928,9 @@ interface StorefrontContent {
           <div class="card mb-16">
             <div class="card-header"><div class="card-title">{{ t('storefront.editor.atelier.header') }}</div></div>
             <div class="card-pad field-stack">
-              <label><span class="lbl">{{ t('storefront.editor.field.kicker') }}</span><input class="inp" [ngModel]="content().story.atelier.kicker" (ngModelChange)="patchAtelier('kicker',$event)"/></label>
-              <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="content().story.atelier.title" (ngModelChange)="patchAtelier('title',$event)"/></label>
-              <label><span class="lbl">{{ t('storefront.editor.field.body') }}</span><textarea class="inp" rows="2" [ngModel]="content().story.atelier.body" (ngModelChange)="patchAtelier('body',$event)"></textarea></label>
+              <div class="two-col"><label><span class="lbl">Kicker (English)</span><input class="inp" [ngModel]="content().story.atelier.kickerEn" (ngModelChange)="patchAtelier('kickerEn',$event)"/></label><label><span class="lbl">العنوان الصغير (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.atelier.kickerAr" (ngModelChange)="patchAtelier('kickerAr',$event)"/></label></div>
+              <div class="two-col"><label><span class="lbl">Title (English)</span><input class="inp" [ngModel]="content().story.atelier.titleEn" (ngModelChange)="patchAtelier('titleEn',$event)"/></label><label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="content().story.atelier.titleAr" (ngModelChange)="patchAtelier('titleAr',$event)"/></label></div>
+              <div class="two-col"><label><span class="lbl">Body (English)</span><textarea class="inp" rows="2" [ngModel]="content().story.atelier.bodyEn" (ngModelChange)="patchAtelier('bodyEn',$event)"></textarea></label><label><span class="lbl">النص (العربية)</span><textarea class="inp" dir="rtl" rows="2" [ngModel]="content().story.atelier.bodyAr" (ngModelChange)="patchAtelier('bodyAr',$event)"></textarea></label></div>
             </div>
           </div>
           <div class="card">
@@ -708,8 +946,10 @@ interface StorefrontContent {
                       </button>
                     }
                   </div>
-                  <label><span class="lbl">{{ t('storefront.editor.field.title') }}</span><input class="inp" [ngModel]="item.title" (ngModelChange)="patchAtelierItem(i,'title',$event)"/></label>
-                  <label><span class="lbl">{{ t('storefront.editor.field.meta') }}</span><input class="inp" [ngModel]="item.meta" (ngModelChange)="patchAtelierItem(i,'meta',$event)"/></label>
+                  <label><span class="lbl">Title (English)</span><input class="inp" [ngModel]="item.titleEn" (ngModelChange)="patchAtelierItem(i,'titleEn',$event)"/></label>
+                  <label><span class="lbl">العنوان (العربية)</span><input class="inp" dir="rtl" [ngModel]="item.titleAr" (ngModelChange)="patchAtelierItem(i,'titleAr',$event)"/></label>
+                  <label><span class="lbl">Meta (English)</span><input class="inp" [ngModel]="item.metaEn" (ngModelChange)="patchAtelierItem(i,'metaEn',$event)"/></label>
+                  <label><span class="lbl">الوصف (العربية)</span><input class="inp" dir="rtl" [ngModel]="item.metaAr" (ngModelChange)="patchAtelierItem(i,'metaAr',$event)"/></label>
                 </div>
               }
             </div>
@@ -749,51 +989,108 @@ interface StorefrontContent {
                 <label><span class="lbl">{{ t('storefront.editor.contactHeader.headlineAccentAr') }}</span><input class="inp" dir="rtl" [ngModel]="content().contact.headlineAccentAr" (ngModelChange)="patchContact('headlineAccentAr',$event)"/></label>
               </div>
               <label><span class="lbl">{{ t('storefront.editor.contactHeader.subhead') }}</span><textarea class="inp" rows="2" [ngModel]="content().contact.subhead" (ngModelChange)="patchContact('subhead',$event)"></textarea></label>
+              <label><span class="lbl">{{ t('storefront.editor.contactHeader.subheadAr') }}</span><textarea class="inp" rows="2" dir="rtl" [ngModel]="content().contact.subheadAr" (ngModelChange)="patchContact('subheadAr',$event)"></textarea></label>
             </div>
           </div>
         </div>
       }
 
-      <!-- Contact: Info Blocks ─────────────────── -->
+      <!-- Contact: Branches and stockists ───────── -->
       @if (contactSubTab() === 'info') {
         <div class="tab-content">
-          @for (block of content().contact.infoBlocks; track block.id; let i = $index) {
+
+          @for (b of content().contact.branches; track b.id; let i = $index) {
             <div class="card mb-16">
               <div class="card-header">
-                <div><div class="card-title">{{ block.titleEn || 'Info Block ' + (i+1) }}</div><div class="card-sub mono">{{ block.id }}</div></div>
-                @if (content().contact.infoBlocks.length > 1) {
-                  <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeInfoBlock(i)">
-                    <ap-icon name="trash" [size]="12"/> {{ t('storefront.editor.infoBlocks.remove') }}
-                  </button>
-                }
+                <div>
+                  <div class="card-title">{{ b.nameEn || b.nameAr || t('storefront.editor.branches.untitled') }}</div>
+                  <div class="card-sub mono">{{ b.id }}</div>
+                </div>
+                <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeBranch(i)">
+                  <ap-icon name="trash" [size]="12"/> {{ t('storefront.editor.branches.remove') }}
+                </button>
               </div>
               <div class="card-pad field-stack">
-                <div class="row gap-sm align-center">
-                  <label style="width:64px"><span class="lbl">{{ t('storefront.editor.infoBlocks.icon') }}</span><input class="inp" style="text-align:center;font-size:18px;" [ngModel]="block.icon" (ngModelChange)="patchInfoBlock(i,'icon',$event)"/></label>
-                  <div class="two-col" style="flex:1">
-                    <label><span class="lbl">{{ t('storefront.editor.infoBlocks.titleEn') }}</span><input class="inp" [ngModel]="block.titleEn" (ngModelChange)="patchInfoBlock(i,'titleEn',$event)"/></label>
-                    <label><span class="lbl">{{ t('storefront.editor.infoBlocks.titleAr') }}</span><input class="inp" dir="rtl" [ngModel]="block.titleAr" (ngModelChange)="patchInfoBlock(i,'titleAr',$event)"/></label>
-                  </div>
+                <div class="two-col">
+                  <label><span class="lbl">{{ t('storefront.editor.branches.nameEn') }}</span><input class="inp" [ngModel]="b.nameEn" (ngModelChange)="patchBranch(i,'nameEn',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.branches.nameAr') }}</span><input class="inp" dir="rtl" [ngModel]="b.nameAr" (ngModelChange)="patchBranch(i,'nameAr',$event)"/></label>
                 </div>
-                @for (line of block.lines; track line; let li = $index) {
-                  <div class="row gap-sm">
-                    <input class="inp" style="flex:1" [placeholder]="'Line ' + (li+1)" [ngModel]="line" (ngModelChange)="patchInfoBlockLine(i, li, $event)"/>
-                    @if (block.lines.length > 1) {
-                      <button class="btn btn-outline btn-sm" style="color:var(--danger);" type="button" (click)="removeInfoBlockLine(i, li)">
-                        <ap-icon name="x" [size]="11"/>
-                      </button>
-                    }
-                  </div>
-                }
-                <button class="btn btn-outline btn-sm" style="align-self:flex-start;" type="button" (click)="addInfoBlockLine(i)">
-                  <ap-icon name="plus" [size]="11"/> {{ t('storefront.editor.infoBlocks.addLine') }}
-                </button>
+                <div class="two-col">
+                  <label><span class="lbl">{{ t('storefront.editor.branches.addressEn') }}</span><textarea class="inp" rows="2" [ngModel]="b.addressEn" (ngModelChange)="patchBranch(i,'addressEn',$event)"></textarea></label>
+                  <label><span class="lbl">{{ t('storefront.editor.branches.addressAr') }}</span><textarea class="inp" rows="2" dir="rtl" [ngModel]="b.addressAr" (ngModelChange)="patchBranch(i,'addressAr',$event)"></textarea></label>
+                </div>
+                <div class="card-sub">{{ t('storefront.editor.branches.addressHint') }}</div>
+
+                <div class="two-col">
+                  <label><span class="lbl">{{ t('storefront.editor.branches.phone') }}</span><input class="inp mono" dir="ltr" [ngModel]="b.phone" (ngModelChange)="patchBranch(i,'phone',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.branches.mapUrl') }}</span><input class="inp mono" dir="ltr" [ngModel]="b.mapUrl" (ngModelChange)="patchBranch(i,'mapUrl',$event)"/></label>
+                </div>
+
+                <label><span class="lbl">{{ t('storefront.editor.branches.mapEmbed') }}</span><textarea class="inp mono" rows="2" dir="ltr" [ngModel]="b.mapEmbedUrl" (ngModelChange)="patchBranch(i,'mapEmbedUrl',$event)"></textarea></label>
+                <div class="card-sub">{{ t('storefront.editor.branches.mapEmbedHint') }}</div>
+                <div class="two-col">
+                  <label><span class="lbl">{{ t('storefront.editor.branches.lat') }}</span><input class="inp mono" dir="ltr" [ngModel]="b.lat" (ngModelChange)="patchBranch(i,'lat',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.branches.lng') }}</span><input class="inp mono" dir="ltr" [ngModel]="b.lng" (ngModelChange)="patchBranch(i,'lng',$event)"/></label>
+                </div>
+                <div class="card-sub">{{ t('storefront.editor.branches.latLngHint') }}</div>
+
+                <label class="row gap-sm align-center" style="cursor:pointer">
+                  <input type="checkbox" [ngModel]="b.parking" (ngModelChange)="patchBranch(i,'parking',$event)"/>
+                  <span class="lbl" style="margin:0">{{ t('storefront.editor.branches.parking') }}</span>
+                </label>
+
+                <div class="lbl">{{ t('storefront.editor.branches.weekdays') }}</div>
+                <div class="two-col">
+                  <label><span class="lbl">{{ t('storefront.editor.branches.opens') }}</span><input class="inp mono" type="number" min="0" max="24" [ngModel]="b.weekdayOpen" (ngModelChange)="patchBranchHour(i,'weekdayOpen',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.branches.closes') }}</span><input class="inp mono" type="number" min="0" max="24" [ngModel]="b.weekdayClose" (ngModelChange)="patchBranchHour(i,'weekdayClose',$event)"/></label>
+                </div>
+                <div class="lbl">{{ t('storefront.editor.branches.weekend') }}</div>
+                <div class="two-col">
+                  <label><span class="lbl">{{ t('storefront.editor.branches.opens') }}</span><input class="inp mono" type="number" min="0" max="24" [ngModel]="b.weekendOpen" (ngModelChange)="patchBranchHour(i,'weekendOpen',$event)"/></label>
+                  <label><span class="lbl">{{ t('storefront.editor.branches.closes') }}</span><input class="inp mono" type="number" min="0" max="24" [ngModel]="b.weekendClose" (ngModelChange)="patchBranchHour(i,'weekendClose',$event)"/></label>
+                </div>
+                <div class="card-sub">{{ t('storefront.editor.branches.hoursHint') }}</div>
               </div>
             </div>
           }
-          <button class="btn btn-outline add-slide-btn" type="button" (click)="addInfoBlock()">
-            <ap-icon name="plus" [size]="14"/> {{ t('storefront.editor.infoBlocks.addBlock') }}
+          <button class="btn btn-outline add-slide-btn" type="button" (click)="addBranch()">
+            <ap-icon name="plus" [size]="14"/> {{ t('storefront.editor.branches.add') }}
           </button>
+
+          <div class="card mt-16 mb-16">
+            <div class="card-header"><div><div class="card-title">{{ t('storefront.editor.stockists.title') }}</div><div class="card-sub">{{ t('storefront.editor.stockists.hint') }}</div></div></div>
+            <div class="card-pad field-stack">
+              @for (x of content().contact.stockists; track x.id; let i = $index) {
+                <div class="card mb-16">
+                  <div class="card-header">
+                    <div><div class="card-title">{{ x.nameEn || x.nameAr || t('storefront.editor.stockists.untitled') }}</div><div class="card-sub mono">{{ x.id }}</div></div>
+                    <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" type="button" (click)="removeStockist(i)">
+                      <ap-icon name="trash" [size]="12"/> {{ t('storefront.editor.branches.remove') }}
+                    </button>
+                  </div>
+                  <div class="card-pad field-stack">
+                    <div class="two-col">
+                      <label><span class="lbl">{{ t('storefront.editor.branches.nameEn') }}</span><input class="inp" [ngModel]="x.nameEn" (ngModelChange)="patchStockist(i,'nameEn',$event)"/></label>
+                      <label><span class="lbl">{{ t('storefront.editor.branches.nameAr') }}</span><input class="inp" dir="rtl" [ngModel]="x.nameAr" (ngModelChange)="patchStockist(i,'nameAr',$event)"/></label>
+                    </div>
+                    <div class="two-col">
+                      <label><span class="lbl">{{ t('storefront.editor.stockists.locationEn') }}</span><input class="inp" [ngModel]="x.locationEn" (ngModelChange)="patchStockist(i,'locationEn',$event)"/></label>
+                      <label><span class="lbl">{{ t('storefront.editor.stockists.locationAr') }}</span><input class="inp" dir="rtl" [ngModel]="x.locationAr" (ngModelChange)="patchStockist(i,'locationAr',$event)"/></label>
+                    </div>
+                    <div class="two-col">
+                      <label><span class="lbl">{{ t('storefront.editor.stockists.hoursEn') }}</span><input class="inp" [ngModel]="x.hoursNoteEn" (ngModelChange)="patchStockist(i,'hoursNoteEn',$event)"/></label>
+                      <label><span class="lbl">{{ t('storefront.editor.stockists.hoursAr') }}</span><input class="inp" dir="rtl" [ngModel]="x.hoursNoteAr" (ngModelChange)="patchStockist(i,'hoursNoteAr',$event)"/></label>
+                    </div>
+                    <label><span class="lbl">{{ t('storefront.editor.stockists.mapUrl') }}</span><input class="inp mono" dir="ltr" [ngModel]="x.mapUrl" (ngModelChange)="patchStockist(i,'mapUrl',$event)"/></label>
+                    <div class="card-sub">{{ t('storefront.editor.stockists.mapHint') }}</div>
+                  </div>
+                </div>
+              }
+              <button class="btn btn-outline add-slide-btn" type="button" (click)="addStockist()">
+                <ap-icon name="plus" [size]="14"/> {{ t('storefront.editor.stockists.add') }}
+              </button>
+            </div>
+          </div>
         </div>
       }
 
@@ -806,11 +1103,13 @@ interface StorefrontContent {
               <label><span class="lbl">{{ t('storefront.editor.phone.email') }}</span><input class="inp" type="email" [ngModel]="content().contact.email" (ngModelChange)="patchContact('email',$event)"/></label>
               <div class="two-col">
                 <label><span class="lbl">{{ t('storefront.editor.phone.phone') }}</span><input class="inp" [ngModel]="content().contact.phone" (ngModelChange)="patchContact('phone',$event)"/></label>
-                <label><span class="lbl">{{ t('storefront.editor.phone.whatsapp') }}</span><input class="inp mono" placeholder="+974 XXXX XXXX" [ngModel]="content().contact.whatsapp" (ngModelChange)="patchContact('whatsapp',$event)"/></label>
+                <label><span class="lbl">{{ t('storefront.editor.phone.whatsapp') }}</span><input class="inp mono" [placeholder]="t('storefront.editor.phone.whatsappPlaceholder')" [ngModel]="content().contact.whatsapp" (ngModelChange)="patchContact('whatsapp',$event)"/></label>
               </div>
               <div class="hint-box">{{ t('storefront.editor.phone.whatsappHint') }}</div>
               <label><span class="lbl">{{ t('storefront.editor.phone.promise') }}</span><textarea class="inp" rows="2" [ngModel]="content().contact.promiseLine" (ngModelChange)="patchContact('promiseLine',$event)"></textarea></label>
+              <label><span class="lbl">{{ t('storefront.editor.phone.promiseAr') }}</span><textarea class="inp" rows="2" dir="rtl" [ngModel]="content().contact.promiseLineAr" (ngModelChange)="patchContact('promiseLineAr',$event)"></textarea></label>
               <label><span class="lbl">{{ t('storefront.editor.phone.signature') }}</span><input class="inp" [ngModel]="content().contact.promiseSignature" (ngModelChange)="patchContact('promiseSignature',$event)"/></label>
+              <label><span class="lbl">{{ t('storefront.editor.phone.signatureAr') }}</span><input class="inp" dir="rtl" [ngModel]="content().contact.promiseSignatureAr" (ngModelChange)="patchContact('promiseSignatureAr',$event)"/></label>
             </div>
           </div>
 
@@ -840,7 +1139,7 @@ interface StorefrontContent {
                       <option value="linkedin">LinkedIn</option>
                     </select>
                   </div>
-                  <input class="inp inp-sm" style="flex:1;" [placeholder]="link.platform === 'whatsapp' ? 'Uses phone above' : '@handle or page name'" [disabled]="link.platform === 'whatsapp'" [ngModel]="link.platform === 'whatsapp' ? content().contact.whatsapp : link.handle" (ngModelChange)="patchSocialLink(si,'handle',$event)"/>
+                  <input class="inp inp-sm" style="flex:1;" [placeholder]="link.platform === 'whatsapp' ? t('storefront.editor.social.usesPhoneAbove') : t('storefront.editor.social.handlePlaceholder')" [disabled]="link.platform === 'whatsapp'" [ngModel]="link.platform === 'whatsapp' ? content().contact.whatsapp : link.handle" (ngModelChange)="patchSocialLink(si,'handle',$event)"/>
                   <button class="toggle" [class.on]="link.enabled" type="button" (click)="toggleSocialLink(si)"></button>
                   <button class="btn btn-outline btn-sm" style="color:var(--danger);" type="button" (click)="removeSocialLink(si)">
                     <ap-icon name="trash" [size]="12"/>
@@ -854,6 +1153,65 @@ interface StorefrontContent {
     }
 
   </div><!-- /sf-shell -->
+
+  <!-- ── Create missing reference colour ─────────────────────── -->
+  @if (createColorNameEn()) {
+    <div class="color-create-backdrop" (click)="closeCreateColor()"></div>
+    <div class="color-create-modal" role="dialog" aria-modal="true"
+         [attr.aria-labelledby]="'create-colour-title'" (keydown.escape)="closeCreateColor()">
+      <form (ngSubmit)="createMissingColor()">
+        <div class="color-create-head">
+          <div>
+            <p class="mpp-eyebrow">{{ t('storefront.editor.createColour.eyebrow') }}</p>
+            <div class="card-title" id="create-colour-title">{{ t('storefront.editor.createColour.title') }}</div>
+          </div>
+          <button class="x-btn" type="button" [disabled]="createColorSaving()" (click)="closeCreateColor()"
+                  [attr.aria-label]="t('common.cancel')">
+            <ap-icon name="x" [size]="14"/>
+          </button>
+        </div>
+
+        <div class="color-create-body">
+          <p class="color-create-intro">{{ t('storefront.editor.createColour.intro') }}</p>
+
+          <label>
+            <span class="lbl">{{ t('storefront.editor.createColour.nameEn') }}</span>
+            <input class="inp" name="createColorNameEn" [ngModel]="createColorNameEn()" readonly/>
+          </label>
+
+          <label>
+            <span class="lbl">{{ t('storefront.editor.createColour.nameAr') }}</span>
+            <input class="inp" name="createColorNameAr" dir="rtl" autocomplete="off"
+                   [ngModel]="createColorNameAr()" (ngModelChange)="createColorNameAr.set($event)"
+                   [placeholder]="t('storefront.editor.createColour.nameArPlaceholder')" required/>
+          </label>
+
+          <label>
+            <span class="lbl">{{ t('storefront.editor.createColour.hex') }}</span>
+            <span class="color-create-hex">
+              <input class="color-create-swatch" type="color" name="createColorPicker"
+                     [ngModel]="createColorPickerValue()" (ngModelChange)="createColorHex.set($event)"
+                     [attr.aria-label]="t('storefront.editor.createColour.hex')"/>
+              <input class="inp mono" name="createColorHex" maxlength="7" autocomplete="off"
+                     [ngModel]="createColorHex()" (ngModelChange)="createColorHex.set($event)"
+                     placeholder="#000000" required pattern="#[0-9A-Fa-f]{6}"/>
+            </span>
+          </label>
+        </div>
+
+        <div class="color-create-foot">
+          <button class="btn btn-outline" type="button" [disabled]="createColorSaving()" (click)="closeCreateColor()">
+            {{ t('common.cancel') }}
+          </button>
+          <button class="btn btn-gold" type="submit" [disabled]="!canCreateColor() || createColorSaving()">
+            @if (createColorSaving()) { <ap-spinner [size]="11"/> }
+            @else { <ap-icon name="plus" [size]="12"/> }
+            {{ t('storefront.editor.createColour.submit') }}
+          </button>
+        </div>
+      </form>
+    </div>
+  }
 
   <!-- ── Media picker slide-in (shared) ──────────────────────── -->
   @if (mediaPickerTarget()) {
@@ -878,7 +1236,7 @@ interface StorefrontContent {
       <div class="mpp-toolbar">
         <div class="mpp-search">
           <ap-icon name="search" [size]="13"/>
-          <input class="inp" placeholder="Search files…"
+          <input class="inp" [placeholder]="t('storefront.editor.mediaPicker.searchPlaceholder')"
                  [ngModel]="mediaPickerSearch()" (ngModelChange)="mediaPickerSearch.set($event)"/>
         </div>
         <label class="btn btn-gold btn-sm mpp-upload-btn" style="cursor:pointer;flex-shrink:0;">
@@ -903,7 +1261,7 @@ interface StorefrontContent {
         } @else {
           <div class="media-picker-grid">
             @for (m of filteredMediaFiles(); track m.id) {
-              <button class="mp-item" type="button" (click)="applyMediaPick(m.preview || '')">
+              <button class="mp-item" type="button" (click)="applyMediaPick(m.storageUrl || m.preview || '')">
                 <div class="mp-item__img-wrap">
                   <img [src]="m.preview" [alt]="m.name" (error)="onMediaImgError($event)"/>
                   <div class="mp-item__overlay">
@@ -924,7 +1282,7 @@ interface StorefrontContent {
        PREVIEW MODAL — fullscreen iframe, Shopify-style
   ═══════════════════════════════════════════════════════════════ -->
   @if (previewOpen()) {
-    <div class="pv-modal" role="dialog" aria-label="Storefront preview">
+    <div class="pv-modal" role="dialog" [attr.aria-label]="t('storefront.editor.preview.ariaLabel')">
 
       <!-- Toolbar -->
       <div class="pv-toolbar">
@@ -935,14 +1293,14 @@ interface StorefrontContent {
 
         <div class="pv-device-group">
           <button class="pv-device-btn" [class.active]="previewDevice() === 'desktop'"
-                  (click)="previewDevice.set('desktop')" title="Desktop (full width)">
+                  (click)="previewDevice.set('desktop')" [title]="t('storefront.editor.preview.desktopTitle')">
             <svg width="16" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
             </svg>
             {{ t('storefront.editor.preview.desktop') }}
           </button>
           <button class="pv-device-btn" [class.active]="previewDevice() === 'mobile'"
-                  (click)="previewDevice.set('mobile')" title="Mobile (393 px — iPhone 14)">
+                  (click)="previewDevice.set('mobile')" [title]="t('storefront.editor.preview.mobileTitle')">
             <svg width="11" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18" stroke-width="2.5"/>
             </svg>
@@ -951,7 +1309,7 @@ interface StorefrontContent {
         </div>
 
         <div class="pv-toolbar-right">
-          <button class="pv-newtab" type="button" (click)="openPreviewInNewTab()" title="Open in a new browser tab">
+          <button class="pv-newtab" type="button" (click)="openPreviewInNewTab()" [title]="t('storefront.editor.preview.newTabTitle')">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
             </svg>
@@ -970,7 +1328,7 @@ interface StorefrontContent {
           <!-- Desktop: full-width iframe -->
           <iframe class="pv-iframe-desktop"
                   [src]="previewSafeUrl()"
-                  title="Storefront preview"
+                  [title]="t('storefront.editor.preview.ariaLabel')"
                   allow="same-origin"></iframe>
         }
 
@@ -991,7 +1349,7 @@ interface StorefrontContent {
               <!-- Storefront iframe -->
               <iframe class="pv-phone__iframe"
                       [src]="previewSafeUrl()"
-                      title="Storefront mobile preview"
+                      [title]="t('storefront.editor.preview.mobileIframeTitle')"
                       allow="same-origin"></iframe>
               <!-- Home indicator -->
               <div class="pv-phone__home" aria-hidden="true"></div>
@@ -1003,7 +1361,8 @@ interface StorefrontContent {
     </div>
   }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     /* Height tokens — change here and sticky tops update automatically */
     .sf-shell {
       --pubbar-h:    52px;
@@ -1328,103 +1687,192 @@ interface StorefrontContent {
     }
     .add-slide-btn:hover { color: var(--green); border-color: var(--green); }
 
-    /* ── Callout editor ─────────────────────────── */
-    .callout-editor { display: grid; grid-template-columns: 80px 1fr; gap: 16px; padding: 12px 0; }
-    .callout-id { font-family: monospace; color: var(--muted); }
-    .callout-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .callout-fields label { display: flex; flex-direction: column; gap: 4px; }
-    .callout-thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; flex-shrink: 0; border: 1px solid var(--border); }
     .callout-sep { border: none; border-top: 1px dashed var(--border); margin: 4px 0; }
 
-    /* ── Per-slide collapsible callouts ─────────── */
-    .callouts-section { margin-top: 16px; }
-
-    /* Accordion trigger button */
-    .callouts-toggle {
-      display: flex; align-items: center; gap: 8px;
-      width: 100%; padding: 10px 14px;
-      background: var(--bg);
-      border: 1.5px solid var(--border-2);
-      border-radius: 8px;
-      font-size: 13px; font-weight: 600; color: var(--ink-2);
-      cursor: pointer; text-align: start;
-      transition: background 0.15s, border-color 0.15s, color 0.15s;
-    }
-    .callouts-toggle:hover {
-      border-color: var(--gold);
-      color: var(--green);
-      background: var(--gold-3);
-    }
-    /* When open: connect visually to the body below */
-    .callouts-open .callouts-toggle {
-      border-color: var(--gold);
-      border-radius: 8px 8px 0 0;
-      border-bottom-color: transparent;
-      background: var(--gold-3);
-      color: var(--green);
-    }
-
-    .callouts-toggle__icon {
-      width: 22px; height: 22px;
+    /* ── Hero slide card ─────────────────────────────────────────────── */
+    .slide-card__title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .slide-card__num {
+      width: 26px; height: 26px; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
-      background: var(--green); color: #fff;
-      border-radius: 5px; flex-shrink: 0;
+      border-radius: 50%; background: var(--card); color: var(--muted);
+      font-size: 12px; font-weight: 700;
     }
-    .callouts-open .callouts-toggle__icon { background: var(--gold); }
-
-    .callouts-toggle__label { flex: 1; }
-
-    .callouts-toggle__count {
+    .step-badge {
       display: inline-flex; align-items: center; justify-content: center;
-      min-width: 20px; height: 20px;
-      background: var(--green); color: #fff;
-      font-size: 10px; font-weight: 700;
-      padding: 0 6px; border-radius: 99px;
+      width: 16px; height: 16px; margin-inline-end: 6px;
+      border-radius: 50%;
+      background: var(--accent, #004538); color: #fff;
+      font-size: 10px; font-weight: 700; line-height: 1;
     }
-    .callouts-open .callouts-toggle__count { background: var(--gold); }
-
-    .callouts-toggle__hint {
-      font-size: 10px; font-weight: 400;
-      color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
-    }
-
-    .callouts-toggle__arrow {
-      display: flex; transition: transform 0.22s cubic-bezier(0.22,1,0.36,1);
-    }
-    .callouts-toggle__arrow.open { transform: rotate(180deg); }
-
-    /* Accordion body — connected border */
-    .callouts-body {
-      border: 1.5px solid var(--gold);
-      border-top: none;
-      border-radius: 0 0 8px 8px;
-      padding: 14px 14px 10px;
-      background: var(--surface);
+    .hero-copy-section {
+      display: grid; gap: 10px;
+      padding: 12px; border: 1px solid var(--border); border-radius: 10px;
+      background: var(--bg);
     }
 
-    /* Individual callout rows */
-    .callout-row { padding: 10px 0; }
-    .callout-row__head {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-bottom: 10px;
+    /* ── Hero slide: linked product + colour swatches ────────────────── */
+    .hero-link-section {
+      display: grid; gap: 10px;
+      padding: 12px; margin-top: 4px;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: var(--bg);
     }
-    .callout-row__id {
-      display: flex; align-items: center; gap: 6px;
-      font-family: monospace; font-size: 11px;
-      color: var(--muted); font-weight: 600;
+    .hero-link-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .hero-link-head .small { color: var(--muted); }
+    .hero-linked-row { display: flex; align-items: center; gap: 10px; }
+    .hero-linked-row .img-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+    .hero-linked-info { flex: 1; min-width: 0; display: grid; gap: 2px; }
+    .hero-linked-info strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .hero-warn {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 8px;
+      background: color-mix(in srgb, var(--warning, #b8860b) 10%, transparent);
+      color: var(--warning, #b8860b);
+      font-size: 12px; line-height: 1.4;
     }
-    .callout-row__fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .callout-thumb-row { display: flex; align-items: flex-start; gap: 10px; }
-    .callout-thumb {
-      width: 52px; height: 52px;
-      object-fit: cover; border-radius: 7px; flex-shrink: 0;
-      border: 1px solid var(--border);
+    .hero-warn strong { font-weight: 700; }
+    .hero-warn--actionable { align-items: flex-start; flex-wrap: wrap; }
+    .hero-warn__copy { flex: 1; min-width: 220px; }
+    .hero-warn__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-inline-start: auto; }
+    .hero-warn__btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      min-height: 28px; padding: 4px 9px;
+      border: 1px solid currentColor; border-radius: 7px;
+      background: var(--surface); color: inherit;
+      font: inherit; font-weight: 700; cursor: pointer;
+      transition: transform 140ms cubic-bezier(.23,1,.32,1), background-color 140ms ease;
     }
-    .callout-thumb--empty {
+    .hero-warn__btn:active { transform: scale(.97); }
+
+    /* Missing-colour modal. Kept compact because it is a quick repair action,
+       not a second full Reference Data editor. */
+    .color-create-backdrop {
+      position: fixed; inset: 0; z-index: 450;
+      background: rgba(12, 18, 24, .48);
+      backdrop-filter: blur(2px);
+    }
+    .color-create-modal {
+      position: fixed; z-index: 451;
+      inset-block-start: 50%; inset-inline-start: 50%;
+      width: min(460px, calc(100vw - 32px));
+      max-height: calc(100vh - 32px); overflow-y: auto;
+      transform: translate(-50%, -50%);
+      border: 1px solid var(--border-2); border-radius: 14px;
+      background: var(--surface); box-shadow: 0 24px 80px rgba(0,0,0,.24);
+      opacity: 1;
+      transition: opacity 180ms cubic-bezier(.23,1,.32,1), transform 180ms cubic-bezier(.23,1,.32,1);
+      @starting-style { opacity: 0; transform: translate(-50%, -48%) scale(.97); }
+    }
+    .color-create-head {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+      padding: 18px 20px 14px; border-bottom: 1px solid var(--border-2);
+    }
+    .color-create-intro { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .color-create-body { display: grid; gap: 16px; padding: 18px 20px; }
+    .color-create-body label { display: grid; gap: 7px; }
+    .color-create-body input[readonly] { color: var(--muted); background: var(--bg); }
+    .color-create-hex { display: grid; grid-template-columns: 52px 1fr; gap: 8px; }
+    .color-create-swatch {
+      width: 52px; height: 40px; padding: 3px;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface); cursor: pointer;
+    }
+    .color-create-foot {
+      display: flex; justify-content: flex-end; gap: 8px;
+      padding: 14px 20px 18px; border-top: 1px solid var(--border-2);
+    }
+    .color-create-foot .btn { transition: transform 140ms cubic-bezier(.23,1,.32,1); }
+    .color-create-foot .btn:active:not(:disabled) { transform: scale(.97); }
+
+    .hero-picker { display: grid; gap: 8px; }
+    .hero-picker__empty { color: var(--muted); padding: 8px 0; }
+    .hero-picker__list { max-height: 240px; overflow-y: auto; display: grid; gap: 2px; }
+    .hero-picker__row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; border: 0; border-radius: 6px;
+      background: none; cursor: pointer; text-align: left; width: 100%;
+    }
+    .hero-picker__row:hover { background: var(--card); }
+    .hero-picker__row img { width: 28px; height: 28px; object-fit: cover; border-radius: 4px; }
+    .hero-picker__name { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .hero-colors { display: grid; gap: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+    .hero-color-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .hero-color-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 10px 5px 5px;
+      border: 1px solid var(--border); border-radius: 999px;
+      background: var(--surface); cursor: pointer;
+      font-size: 12px; color: var(--text);
+    }
+    .hero-color-chip:hover:not(:disabled) { border-color: var(--muted); }
+    .hero-color-chip.is-on { border-color: var(--accent, #004538); background: color-mix(in srgb, var(--accent, #004538) 8%, transparent); font-weight: 600; }
+    .hero-color-chip.is-broken { border-style: dashed; }
+    /* Colours the linked product does not carry: selectable, but visually
+       de-emphasised so the product's own colours read first. */
+    .hero-color-chip.is-offproduct { opacity: 0.72; }
+    .hero-color-chip.is-offproduct.is-on { opacity: 1; }
+    .hero-color-chip.is-offproduct .hero-color-name { font-style: italic; }
+    .hero-color-chip:disabled { opacity: 0.4; cursor: not-allowed; }
+    .hero-color-dot {
+      width: 18px; height: 18px; border-radius: 50%;
+      background-size: cover; background-position: center;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+      flex-shrink: 0;
+    }
+    .hero-color-dot--none {
       display: flex; align-items: center; justify-content: center;
-      background: var(--bg); color: var(--muted);
+      background: repeating-linear-gradient(45deg, var(--card) 0 3px, transparent 3px 6px);
+      color: var(--warning, #b8860b);
     }
-    @media (max-width: 640px) { .callout-row__fields { grid-template-columns: 1fr; } }
+    .hero-color-name { white-space: nowrap; }
+
+    /* Per-colour hero shots. These are hero-stage art owned by the slide, not
+       the product gallery images used on the product detail page. */
+    .hero-colorshots { display: grid; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--border); }
+    .hero-colorshot {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 8px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface);
+      transition: border-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+    }
+    .hero-colorshot.is-dragging { opacity: 0.45; }
+    .hero-colorshot.is-drop-target { border-color: var(--accent, #004538); transform: translateY(-1px); }
+    .hero-colorshot__grip {
+      display: flex; align-items: center; color: var(--muted);
+      cursor: grab; flex-shrink: 0;
+    }
+    .hero-colorshot__grip:active { cursor: grabbing; }
+    .hero-colorshot__id { display: flex; align-items: center; gap: 8px; min-width: 130px; flex: 1; }
+
+    .hero-colorshot__default {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px;
+      font-size: 11px; color: var(--muted); cursor: pointer; user-select: none;
+      flex-shrink: 0;
+    }
+    .hero-colorshot__default input { margin: 0; accent-color: var(--accent, #004538); }
+    .hero-colorshot__default.is-on {
+      border-color: var(--accent, #004538);
+      background: color-mix(in srgb, var(--accent, #004538) 8%, transparent);
+      color: var(--text); font-weight: 600;
+    }
+    .hero-colorshot__name {
+      flex: 1; min-width: 0; font-size: 12px; font-weight: 600;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .hero-colorshot__media { display: flex; align-items: center; gap: 8px; }
+    .hero-colorshot__thumb {
+      width: 48px; height: 48px; border-radius: 6px; object-fit: cover; display: block;
+      border: 1px solid var(--border); background: var(--card); flex-shrink: 0;
+    }
+    .hero-colorshot__thumb--none {
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted);
+      background: repeating-linear-gradient(45deg, var(--bg) 0 5px, transparent 5px 10px);
+    }
+    .hero-colorshot__actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 
     /* ── Social links editor ────────────────────── */
     .social-editor-row {
@@ -1820,7 +2268,7 @@ interface StorefrontContent {
       background: rgba(255,255,255,0.32);
       border-radius: 99px;
     }
-  `],
+  `]
 })
 export class StorefrontComponent implements OnInit, OnDestroy {
   private readonly toast          = inject(ToastService);
@@ -1829,8 +2277,11 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   private readonly collectionsApi = inject(AdminCollectionsService);
   private readonly api            = inject(ApiClient);
   private readonly mediaApi       = inject(AdminMediaService);
+  private readonly productsApi    = inject(AdminProductsService);
+  private readonly refApi         = inject(AdminRefService);
   private readonly uploadApi      = inject(MediaUploadService);
   private readonly sanitizer      = inject(DomSanitizer);
+  private readonly router         = inject(Router);
   readonly storefront             = inject(StorefrontService);
 
   readonly t = (key: string): string => this.i18n.t(key);
@@ -1897,6 +2348,207 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     return this.allCollections().find((c) => c.id === ref || c.handle === ref);
   }
 
+  // ── Hero slide product + colour swatches ──────────────────────────────
+  readonly allProducts        = signal<Product[]>([]);
+  readonly productsLoading    = signal(true);
+  readonly refColors          = signal<RefColor[]>([]);
+  readonly createColorNameEn  = signal('');
+  readonly createColorNameAr  = signal('');
+  readonly createColorHex     = signal('');
+  readonly createColorSaving  = signal(false);
+  readonly createColorPickerValue = computed(() =>
+    /^#[0-9a-f]{6}$/i.test(this.createColorHex().trim()) ? this.createColorHex().trim() : '#808080',
+  );
+  readonly canCreateColor     = computed(() =>
+    !!this.createColorNameEn().trim()
+      && !!this.createColorNameAr().trim()
+      && /^#[0-9a-f]{6}$/i.test(this.createColorHex().trim()),
+  );
+  /** Index of the slide whose product picker is open, or null. */
+  readonly productPickerSlide = signal<number | null>(null);
+  readonly productPickerSearch = signal('');
+
+  readonly filteredPickerProducts = computed(() => {
+    const s = this.productPickerSearch().trim().toLowerCase();
+    const rows = this.allProducts();
+    if (!s) return rows.slice(0, 40);
+    return rows
+      .filter((p) => p.name.toLowerCase().includes(s) || (p.sku || '').toLowerCase().includes(s))
+      .slice(0, 40);
+  });
+
+  productById(id: string): Product | undefined {
+    return id ? this.allProducts().find((p) => p.id === id) : undefined;
+  }
+
+  /**
+   * Colours offerable for a slide: only the ones the linked product actually
+   * sells.
+   *
+   * This used to append the whole Reference Data library, which let a slide
+   * advertise a colourway the product does not carry. The customer then tapped
+   * that swatch, landed on the product page and could not find it. Flagging
+   * those chips in the UI was not enough: it relied on the editor noticing every
+   * time, and in practice most featured colours drifted off-product.
+   *
+   * Legacy selections are the one exception. A colour already featured on this
+   * slide that the product no longer carries is still listed, flagged, so it
+   * stays visible and removable. Restricting the list without this would strand
+   * those rows with no way to deselect them.
+   */
+  selectableColors(item: HeroSliderItem): Array<{ name: string; onProduct: boolean }> {
+    const own = this.productColorNames(item.productId);
+    const seen = new Set(own.map((n) => n.trim().toLowerCase()));
+    const stale = (item.colors ?? [])
+      .map((color) => color.label.trim())
+      .filter((label) => label && !seen.has(label.toLowerCase()))
+      .sort((a, b) => a.localeCompare(b));
+
+    return [
+      ...own.map((name) => ({ name, onProduct: true })),
+      ...stale.map((name) => ({ name, onProduct: false })),
+    ];
+  }
+
+  /** True when a featured colour is not one the linked product actually sells. */
+  colorNotOnProduct(productId: string, label: string): boolean {
+    if (!productId) return false;
+    const key = label.trim().toLowerCase();
+    return !this.productColorNames(productId).some((n) => n.trim().toLowerCase() === key);
+  }
+
+  slideOffProductWarnings(i: number): string[] {
+    const item = this.content().heroSlider?.items?.[i];
+    if (!item?.productId) return [];
+    return (item.colors ?? [])
+      .map((c) => c.label)
+      .filter((label) => this.colorNotOnProduct(item.productId, label));
+  }
+
+  /** Distinct colour names on a product, taken from its variants. */
+  productColorNames(id: string): string[] {
+    const product = this.productById(id);
+    if (!product) return [];
+    const seen = new Map<string, string>();
+    for (const variant of product.variants ?? []) {
+      const label = String(variant.color || '').trim();
+      if (!label) continue;
+      const key = label.toLowerCase();
+      if (!seen.has(key)) seen.set(key, label);
+    }
+    return [...seen.values()].sort((a, b) => a.localeCompare(b));
+  }
+
+  /** Hex for a colour name from ref_colors, or '' when it is not defined there. */
+  colorHex(label: string): string {
+    const key = String(label || '').trim().toLowerCase();
+    const match = this.refColors().find((c) => c.name_en.trim().toLowerCase() === key);
+    return match?.hex || '';
+  }
+
+  colorSwatchImage(label: string): string {
+    const key = String(label || '').trim().toLowerCase();
+    const match = this.refColors().find((c) => c.name_en.trim().toLowerCase() === key);
+    return this.api.mediaUrl(match?.swatch_image_url || '');
+  }
+
+  /** A colour with neither hex nor swatch image cannot render, so warn in the editor. */
+  colorMissingHex(label: string): boolean {
+    return !this.colorHex(label) && !this.colorSwatchImage(label);
+  }
+
+  slideColorWarnings(i: number): string[] {
+    const item = this.content().heroSlider?.items?.[i];
+    return (item?.colors ?? []).map((c) => c.label).filter((label) => this.colorMissingHex(label));
+  }
+
+  openCreateColor(label: string): void {
+    const name = String(label || '').trim();
+    if (!name) return;
+    const existing = this.refColors().find((color) =>
+      color.name_en.trim().toLowerCase() === name.toLowerCase(),
+    );
+    this.createColorNameEn.set(name);
+    this.createColorNameAr.set('');
+    this.createColorHex.set(/^#[0-9a-f]{6}$/i.test(existing?.hex || '') ? existing!.hex : '');
+  }
+
+  closeCreateColor(): void {
+    if (this.createColorSaving()) return;
+    this.createColorNameEn.set('');
+    this.createColorNameAr.set('');
+  }
+
+  async createMissingColor(): Promise<void> {
+    if (!this.canCreateColor() || this.createColorSaving()) return;
+
+    const nameEn = this.createColorNameEn().trim();
+    const existing = this.refColors().find((color) =>
+      color.name_en.trim().toLowerCase() === nameEn.toLowerCase(),
+    );
+
+    this.createColorSaving.set(true);
+    try {
+      const nextOrder = this.refColors().reduce((max, color) => Math.max(max, color.sort_order || 0), 0) + 1;
+      const values = {
+        name_en: nameEn,
+        name_ar: this.createColorNameAr().trim(),
+        hex: this.createColorHex().trim().toUpperCase(),
+        swatch_image_url: existing?.swatch_image_url ?? null,
+        sort_order: existing?.sort_order ?? nextOrder,
+      };
+      // A legacy reference row can exist without either a hex value or swatch
+      // image. In that case the same warning is shown, so repair that row
+      // instead of creating a duplicate with the same English name.
+      const saved = existing
+        ? await this.refApi.updateColor(existing.id, values)
+        : await this.refApi.createColor(values);
+      this.refColors.update((list) => [...list.filter((color) => color.id !== saved.id), saved]
+        .sort((a, b) => a.sort_order - b.sort_order || a.name_en.localeCompare(b.name_en)));
+      this.createColorNameEn.set('');
+      this.createColorNameAr.set('');
+      this.toast.success(
+        this.t('storefront.editor.createColour.success'),
+        this.t('storefront.editor.createColour.successSub'),
+      );
+    } catch (caught) {
+      this.toast.errorFrom(caught,
+        this.t('storefront.editor.createColour.failed'),
+        this.t('storefront.editor.createColour.failedSub'),
+      );
+    } finally {
+      this.createColorSaving.set(false);
+    }
+  }
+
+  /** Featured colours on a slide with no hero shot of their own. */
+  slideImageWarnings(i: number): string[] {
+    const item = this.content().heroSlider?.items?.[i];
+    if (!item?.productId) return [];
+    return (item.colors ?? []).filter((c) => !c.imageUrl).map((c) => c.label);
+  }
+
+  /** Set the hero shot for one colourway on one slide. */
+  patchSlideColorImage(slideIdx: number, colorIdx: number, url: string): void {
+    const resolvedUrl = this.api.mediaUrl(url);
+    this.content.update((c) => {
+      const items = c.heroSlider.items.map((item, idx) => {
+        if (idx !== slideIdx) return item;
+        const colors = (item.colors ?? []).map((color, ci) =>
+          ci === colorIdx ? { ...color, imageUrl: resolvedUrl } : color);
+        return { ...item, colors };
+      });
+      return { ...c, heroSlider: { ...c.heroSlider, items } };
+    });
+    this.markDirty();
+  }
+
+  /** Upload a hero shot for one colourway straight from the slide editor. */
+  async uploadSlideColorImage(slideIdx: number, colorIdx: number, event: Event): Promise<void> {
+    const url = await this.uploadFile(event);
+    if (url) this.patchSlideColorImage(slideIdx, colorIdx, url);
+  }
+
   // ── Storefront content (home page + story + contact) ──────────────────
   readonly content           = signal<StorefrontContent>({} as StorefrontContent);
   readonly contentDirty      = signal(false);
@@ -1933,6 +2585,19 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       .then((list) => { this.allCollections.set(list); this.collectionsLoading.set(false); })
       .catch(() => this.collectionsLoading.set(false));
 
+    // Products and ref colours back the hero slide product picker and swatches.
+    void this.productsApi.list()
+      .then((list) => {
+        this.allProducts.set(list);
+        this.productsLoading.set(false);
+        this.backfillLinkedSlides();
+      })
+      .catch(() => this.productsLoading.set(false));
+
+    void this.refApi.getColors()
+      .then((list) => this.refColors.set(list))
+      .catch(() => this.refColors.set([]));
+
     // Load storefront layout draft
     try {
       const draft = await this.storefront.loadDraft();
@@ -1953,8 +2618,11 @@ export class StorefrontComponent implements OnInit, OnDestroy {
         this.content.set(live);
       }
       this.contentLoaded = true;
-    } catch {
-      this.toast.warning(this.t('storefront.editor.toast.loadWarning'), this.t('storefront.editor.toast.loadWarning.sub'));
+      // Products may have finished first, in which case their load already ran
+      // this and found no content. Whichever lands last does the work.
+      this.backfillLinkedSlides();
+    } catch (caught) {
+      this.toast.warningFrom(caught, this.t('storefront.editor.toast.loadWarning'), this.t('storefront.editor.toast.loadWarning.sub'));
     }
   }
 
@@ -1971,8 +2639,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       this.contentDirty.set(false);
       this.draftUnpublished.set(true);
       this.showPreviewHint.set(true);
-    } catch {
-      this.toast.error(this.t('storefront.editor.toast.saveFailed'), this.t('storefront.editor.toast.saveFailed.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('storefront.editor.toast.saveFailed'), this.t('storefront.editor.toast.saveFailed.sub'));
     } finally {
       this.savingDraft.set(false);
     }
@@ -1998,16 +2666,48 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       this.contentDirty.set(false);
       this.showPreviewHint.set(false);
       this.toast.success(this.t('storefront.editor.toast.draftDiscarded'), this.t('storefront.editor.toast.draftDiscarded.sub'));
-    } catch {
-      this.toast.error(this.t('storefront.editor.toast.revertFailed'), this.t('storefront.editor.toast.revertFailed.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('storefront.editor.toast.revertFailed'), this.t('storefront.editor.toast.revertFailed.sub'));
     } finally {
       this.revertingDraft.set(false);
     }
   }
 
   // ── Publish draft to live ─────────────────────────────────────────────
+  /**
+   * Featured colourways across every slide that carry no hero shot of their own.
+   *
+   * These are not a rendering fault: the storefront falls back to the slide image
+   * by design. The problem is what the customer sees. The swatch ring moves and
+   * the colour name changes while the photograph stays exactly the same, so the
+   * control reads as broken. Refill deliberately does not borrow product photos
+   * for these, so the only way one gets filled is an editor uploading it.
+   *
+   * Surfaced at publish time because the inline warning sits far down the colour
+   * section and was, in practice, published straight past.
+   */
+  private unshotColourWarnings(): string[] {
+    return (this.content().heroSlider?.items ?? []).reduce<string[]>((acc, item, i) => {
+      const labels = this.slideImageWarnings(i);
+      if (labels.length) acc.push(`${item.name || `#${i + 1}`}: ${labels.join(', ')}`);
+      return acc;
+    }, []);
+  }
+
   async publishContent(): Promise<void> {
     if (this.publishingContent()) return;
+
+    const unshot = this.unshotColourWarnings();
+    if (unshot.length) {
+      const proceed = await this.confirm.ask({
+        title: this.t('storefront.editor.confirm.unshotColours.title'),
+        message: `${this.t('storefront.editor.confirm.unshotColours.message')}\n\n${unshot.join('\n')}`,
+        confirmLabel: this.t('storefront.editor.confirm.unshotColours.confirm'),
+        cancelLabel: this.t('storefront.editor.confirm.unshotColours.cancel'),
+        variant: 'warning',
+      });
+      if (!proceed) return;
+    }
     const ok = await this.confirm.ask({
       title: this.t('storefront.editor.confirm.publish.title'),
       message: this.t('storefront.editor.confirm.publish.message'),
@@ -2021,8 +2721,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       await firstValueFrom(this.api.post<StorefrontContent>('/admin/storefront-content/publish', {}));
       this.draftUnpublished.set(false);
       this.toast.success(this.t('storefront.editor.toast.contentPublished'), this.t('storefront.editor.toast.contentPublished.sub'));
-    } catch {
-      this.toast.error(this.t('storefront.editor.toast.publishFailed'), this.t('storefront.editor.toast.publishFailed.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('storefront.editor.toast.publishFailed'), this.t('storefront.editor.toast.publishFailed.sub'));
     } finally {
       this.publishingContent.set(false);
     }
@@ -2042,8 +2742,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       this._previewUrl.set(`${base}${sep}preview=${token}&embedded=1`);
       this.previewOpen.set(true);
       this.previewDevice.set('desktop');
-    } catch {
-      this.toast.error(this.t('storefront.editor.toast.previewFailed'), this.t('storefront.editor.toast.previewFailed.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('storefront.editor.toast.previewFailed'), this.t('storefront.editor.toast.previewFailed.sub'));
     } finally {
       this.generatingToken.set(false);
     }
@@ -2070,8 +2770,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
         this.content.set(live);
       }
       this.contentDirty.set(false);
-    } catch {
-      this.toast.error(this.t('storefront.editor.toast.discardFailed'), this.t('storefront.editor.toast.discardFailed.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('storefront.editor.toast.discardFailed'), this.t('storefront.editor.toast.discardFailed.sub'));
     }
   }
 
@@ -2088,6 +2788,16 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     this.markDirty();
   }
 
+  patchPromise(key: string, value: string): void {
+    this.content.update((c) => ({ ...c, promise: { ...c.promise, [key]: value } }));
+    this.markDirty();
+  }
+
+  patchCollectionsIntro(key: string, value: string): void {
+    this.content.update((c) => ({ ...c, collectionsIntro: { ...c.collectionsIntro, [key]: value } }));
+    this.markDirty();
+  }
+
   patchSliderItem(i: number, key: string, value: string): void {
     this.content.update((c) => {
       const items = c.heroSlider.items.map((item, idx) => idx === i ? { ...item, [key]: value } : item);
@@ -2096,9 +2806,259 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     this.markDirty();
   }
 
+  /**
+   * Link a slide to a product and pull everything the slide can derive from it:
+   * copy, alt text, featured colours, and each colour's hero shot taken from the
+   * product's own gallery tagging.
+   *
+   * Linking or changing a product establishes a new slide source. Product info
+   * is refreshed and featured colours are cleared completely so the editor
+   * must make a deliberate new selection for the newly linked product.
+   */
+  selectSlideProduct(i: number, productId: string): void {
+    this.applyProductToSlide(i, productId, true);
+    this.productPickerSlide.set(null);
+    this.productPickerSearch.set('');
+  }
+
+  /** Refresh product copy while preserving the editor's colour curation. */
+  updateSlideProductInfo(i: number): void {
+    const productId = this.content().heroSlider?.items?.[i]?.productId;
+    if (!productId) {
+      this.toast.error(
+        this.t('storefront.editor.toast.linkedProductMissing'),
+        this.t('storefront.editor.toast.linkedProductMissing.sub'),
+      );
+      return;
+    }
+
+    const result = this.applyProductToSlide(i, productId, false);
+    if (result === 'updated') {
+      this.toast.success(
+        this.t('storefront.editor.toast.productInfoUpdated'),
+        this.t('storefront.editor.toast.productInfoUpdated.sub'),
+      );
+    } else if (result === 'unchanged') {
+      this.toast.info(
+        this.t('storefront.editor.toast.productInfoCurrent'),
+        this.t('storefront.editor.toast.productInfoCurrent.sub'),
+      );
+    } else {
+      this.toast.error(
+        this.t('storefront.editor.toast.linkedProductMissing'),
+        this.t('storefront.editor.toast.linkedProductMissing.sub'),
+      );
+    }
+  }
+
+  /**
+   * Fill blank fields on slides that were linked to a product before auto-fill
+   * existed. Runs once products finish loading. Only empty fields are touched,
+   * and the content is not marked dirty: this is a display-time completion, not
+   * an edit the user made, so it is persisted on their next real save.
+   */
+  private backfillLinkedSlides(): void {
+    const items = this.content().heroSlider?.items;
+    if (!items?.length) return;
+
+    let changed = false;
+    const next = items.map((item) => {
+      const product = item.productId ? this.productById(item.productId) : undefined;
+      if (!product) return item;
+
+      const fill = (current: string, derived: string) => {
+        if (current.trim() || !derived) return current;
+        changed = true;
+        return derived;
+      };
+
+      return {
+        ...item,
+        name:          fill(item.name, product.name),
+        nameEn:        fill(item.nameEn, product.name),
+        nameAr:        fill(item.nameAr, product.nameAr || ''),
+        // Seeded from the product's Hook (shortEn/shortAr); falls back to the
+        // legacy long description only if the Hook itself is empty.
+        descriptionEn: fill(item.descriptionEn, this.heroCopy(product.shortEn, product.enDesc)),
+        descriptionAr: fill(item.descriptionAr, this.heroCopy(product.shortAr, product.arDesc)),
+        alt:           fill(item.alt, product.name ? `${product.name} by ${product.brand || 'Elite'}` : ''),
+      };
+    });
+
+    if (changed) {
+      this.content.update((c) => ({ ...c, heroSlider: { ...c.heroSlider, items: next } }));
+    }
+  }
+
+  private applyProductToSlide(
+    i: number,
+    productId: string,
+    resetColors: boolean,
+  ): 'updated' | 'unchanged' | 'missing' {
+    const product = this.productById(productId);
+    if (!product) return 'missing';
+
+    let changed = false;
+    this.content.update((c) => {
+      const items = c.heroSlider.items.map((item, idx) => {
+        if (idx !== i) return item;
+        const updated = {
+          ...item,
+          productId,
+          name:          product.name || '',
+          nameEn:        product.name || '',
+          nameAr:        product.nameAr || '',
+          // Seeded from the product's Hook (shortEn/shortAr); falls back to the
+          // legacy long description only if the Hook itself is empty.
+          descriptionEn: this.heroCopy(product.shortEn, product.enDesc),
+          descriptionAr: this.heroCopy(product.shortAr, product.arDesc),
+          alt:           product.name ? `${product.name} by ${product.brand || 'Elite'}` : '',
+        };
+        const next = resetColors
+          ? { ...updated, colors: [], defaultColorSlug: '' }
+          : updated;
+
+        changed = item.productId !== next.productId
+          || item.name !== next.name
+          || item.nameEn !== next.nameEn
+          || item.nameAr !== next.nameAr
+          || item.descriptionEn !== next.descriptionEn
+          || item.descriptionAr !== next.descriptionAr
+          || item.alt !== next.alt
+          || (resetColors && ((item.colors?.length ?? 0) > 0 || !!item.defaultColorSlug));
+
+        return changed ? next : item;
+      });
+      return changed ? { ...c, heroSlider: { ...c.heroSlider, items } } : c;
+    });
+    if (changed) this.markDirty();
+    return changed ? 'updated' : 'unchanged';
+  }
+
+  /**
+   * Hero copy for a product: its Hook when set, otherwise the first sentence
+   * of the legacy long description as a stopgap. Rich-text markup is stripped
+   * because the hero renders plain text.
+   */
+  private heroCopy(short?: string, long?: string): string {
+    const direct = String(short || '').trim();
+    if (direct) return direct;
+    return this.trimCopy(String(long || '').replace(/<[^>]*>/g, ' '));
+  }
+
+  /** First sentence of a product description, kept near the hero's 18-word cap. */
+  private trimCopy(value?: string): string {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+    const sentence = text.split(/(?<=[.!؟?])\s/)[0] || text;
+    const words = sentence.split(' ');
+    return words.length <= 18 ? sentence : `${words.slice(0, 18).join(' ')}...`;
+  }
+
+  clearSlideProduct(i: number): void {
+    this.content.update((c) => {
+      const items = c.heroSlider.items.map((item, idx) => idx === i
+        ? { ...item, productId: '', colors: [] }
+        : item);
+      return { ...c, heroSlider: { ...c.heroSlider, items } };
+    });
+    this.markDirty();
+  }
+
+  slideColorSelected(i: number, label: string): boolean {
+    const key = label.trim().toLowerCase();
+    return (this.content().heroSlider?.items?.[i]?.colors ?? [])
+      .some((c) => c.label.trim().toLowerCase() === key);
+  }
+
+  /** Toggle a colour on a slide, capped at 4 featured swatches. */
+  toggleSlideColor(i: number, label: string): void {
+    const key = label.trim().toLowerCase();
+    this.content.update((c) => {
+      const items = c.heroSlider.items.map((item, idx) => {
+        if (idx !== i) return item;
+        const current = item.colors ?? [];
+        const exists = current.some((x) => x.label.trim().toLowerCase() === key);
+        if (exists) {
+          return { ...item, colors: current.filter((x) => x.label.trim().toLowerCase() !== key) };
+        }
+        if (current.length >= HERO_MAX_COLORS) return item;
+        return { ...item, colors: [...current, { label, slug: heroColorSlug(label), imageUrl: '' }] };
+      });
+      return { ...c, heroSlider: { ...c.heroSlider, items } };
+    });
+    this.markDirty();
+  }
+
+  moveSlideColor(i: number, from: number, to: number): void {
+    this.content.update((c) => {
+      const items = c.heroSlider.items.map((item, idx) => {
+        if (idx !== i) return item;
+        const colors = [...(item.colors ?? [])];
+        if (from === to || to < 0 || to >= colors.length) return item;
+        const [moved] = colors.splice(from, 1);
+        colors.splice(to, 0, moved);
+        return { ...item, colors };
+      });
+      return { ...c, heroSlider: { ...c.heroSlider, items } };
+    });
+    this.markDirty();
+  }
+
+  /** The colourway the hero opens on. Its image becomes the slide image. */
+  setSlideDefaultColor(i: number, slug: string): void {
+    this.content.update((c) => {
+      const items = c.heroSlider.items.map((item, idx) =>
+        idx === i ? { ...item, defaultColorSlug: slug } : item);
+      return { ...c, heroSlider: { ...c.heroSlider, items } };
+    });
+    this.markDirty();
+  }
+
+  /** Effective default: the stored slug, or the first colour when unset. */
+  slideDefaultColorSlug(i: number): string {
+    const item = this.content().heroSlider?.items?.[i];
+    const colors = item?.colors ?? [];
+    if (!colors.length) return '';
+    return colors.some((c) => c.slug === item.defaultColorSlug)
+      ? item.defaultColorSlug
+      : colors[0].slug;
+  }
+
+  // ── Colour row drag/drop ──────────────────────────────────────────────
+  /** "{slideIdx}:{colorIdx}" of the row being dragged. */
+  readonly draggingColor = signal<string | null>(null);
+  readonly dropTargetColor = signal<string | null>(null);
+
+  onColorDragStart(slideIdx: number, colorIdx: number): void {
+    this.draggingColor.set(`${slideIdx}:${colorIdx}`);
+  }
+
+  onColorDragOver(event: DragEvent, slideIdx: number, colorIdx: number): void {
+    // Only react to a drag that started in this slide's colour list.
+    if (!this.draggingColor()?.startsWith(`${slideIdx}:`)) return;
+    event.preventDefault();
+    this.dropTargetColor.set(`${slideIdx}:${colorIdx}`);
+  }
+
+  onColorDrop(event: DragEvent, slideIdx: number, colorIdx: number): void {
+    event.preventDefault();
+    const dragging = this.draggingColor();
+    this.onColorDragEnd();
+    if (!dragging) return;
+    const [fromSlide, fromIdx] = dragging.split(':').map(Number);
+    if (fromSlide !== slideIdx || fromIdx === colorIdx) return;
+    this.moveSlideColor(slideIdx, fromIdx, colorIdx);
+  }
+
+  onColorDragEnd(): void {
+    this.draggingColor.set(null);
+    this.dropTargetColor.set(null);
+  }
+
   addSliderItem(): void {
     const newId = `slide-${Date.now()}`;
-    const newItem: HeroSliderItem = { id: newId, name: '', subtitle: '', imageUrl: '', alt: '', callouts: [] };
+    const newItem: HeroSliderItem = { id: newId, name: '', subtitle: '', nameEn: '', nameAr: '', subtitleEn: '', subtitleAr: '', descriptionEn: '', descriptionAr: '', imageUrl: '', alt: '', productId: '', colors: [], defaultColorSlug: '' };
     this.content.update((c) => ({
       ...c,
       heroSlider: { ...c.heroSlider, items: [...c.heroSlider.items, newItem] },
@@ -2109,41 +3069,6 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   removeSliderItem(i: number): void {
     this.content.update((c) => {
       const items = c.heroSlider.items.filter((_, idx) => idx !== i);
-      return { ...c, heroSlider: { ...c.heroSlider, items } };
-    });
-    this.markDirty();
-  }
-
-  patchCallout(slideIdx: number, calloutIdx: number, key: string, value: string): void {
-    this.content.update((c) => {
-      const items = c.heroSlider.items.map((item, si) => {
-        if (si !== slideIdx) return item;
-        const callouts = item.callouts.map((cl, ci) => ci === calloutIdx ? { ...cl, [key]: value } : cl);
-        return { ...item, callouts };
-      });
-      return { ...c, heroSlider: { ...c.heroSlider, items } };
-    });
-    this.markDirty();
-  }
-
-  addCallout(slideIdx: number): void {
-    const newId = `callout-${Date.now()}`;
-    this.content.update((c) => {
-      const items = c.heroSlider.items.map((item, si) => {
-        if (si !== slideIdx) return item;
-        return { ...item, callouts: [...item.callouts, { id: newId, titleEn: '', titleAr: '', subtitleEn: '', subtitleAr: '', thumbnail: '', alt: '' }] };
-      });
-      return { ...c, heroSlider: { ...c.heroSlider, items } };
-    });
-    this.markDirty();
-  }
-
-  removeCallout(slideIdx: number, calloutIdx: number): void {
-    this.content.update((c) => {
-      const items = c.heroSlider.items.map((item, si) => {
-        if (si !== slideIdx) return item;
-        return { ...item, callouts: item.callouts.filter((_, ci) => ci !== calloutIdx) };
-      });
       return { ...c, heroSlider: { ...c.heroSlider, items } };
     });
     this.markDirty();
@@ -2166,6 +3091,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
           ...t,
           collectionId: colId || undefined,
           title: col?.title || t.title,
+          titleEn: col?.title || t.titleEn,
           imageUrl: col?.imageUrl || t.imageUrl,
           link: col ? `/collection/${col.handle}` : t.link,
         };
@@ -2196,22 +3122,25 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     this.markDirty();
   }
 
-  patchInfoBlock(i: number, key: string, value: string): void {
+  /** `value` is typed loosely because a branch mixes text, numbers and a flag. */
+  patchBranch(i: number, key: string, value: string | number | boolean): void {
     this.content.update((c) => {
-      const infoBlocks = c.contact.infoBlocks.map((b, idx) => idx === i ? { ...b, [key]: value } : b);
-      return { ...c, contact: { ...c.contact, infoBlocks } };
+      const branches = c.contact.branches.map((b, idx) => idx === i ? { ...b, [key]: value } : b);
+      return { ...c, contact: { ...c.contact, branches } };
     });
     this.markDirty();
   }
 
-  patchInfoBlockLine(blockIdx: number, lineIdx: number, value: string): void {
+  /** Hours are stored as whole hours, so the input's string needs coercing. */
+  patchBranchHour(i: number, key: string, value: string): void {
+    const n = Number(value);
+    this.patchBranch(i, key, Number.isInteger(n) && n >= 0 && n <= 24 ? n : 0);
+  }
+
+  patchStockist(i: number, key: string, value: string): void {
     this.content.update((c) => {
-      const infoBlocks = c.contact.infoBlocks.map((b, bi) => {
-        if (bi !== blockIdx) return b;
-        const lines = b.lines.map((l, li) => li === lineIdx ? value : l);
-        return { ...b, lines };
-      });
-      return { ...c, contact: { ...c.contact, infoBlocks } };
+      const stockists = c.contact.stockists.map((x, idx) => idx === i ? { ...x, [key]: value } : x);
+      return { ...c, contact: { ...c.contact, stockists } };
     });
     this.markDirty();
   }
@@ -2228,7 +3157,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   addHeroFact(): void {
     this.content.update((c) => ({
       ...c,
-      story: { ...c.story, heroFacts: [...c.story.heroFacts, { id: `fact-${Date.now()}`, label: '' }] },
+      story: { ...c.story, heroFacts: [...c.story.heroFacts, { id: `fact-${Date.now()}`, label: '', labelEn: '', labelAr: '' }] },
     }));
     this.markDirty();
   }
@@ -2246,7 +3175,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     const id = `chapter-${Date.now()}`;
     this.content.update((c) => ({
       ...c,
-      story: { ...c.story, chapters: [...c.story.chapters, { id, eyebrow: '', title: '', body: '', imageUrl: '', imageAlt: '' }] },
+      story: { ...c.story, chapters: [...c.story.chapters, { id, eyebrow: '', title: '', body: '', imageUrl: '', imageAlt: '', imageAltEn: '', imageAltAr: '', eyebrowEn: '', eyebrowAr: '', titleEn: '', titleAr: '', bodyEn: '', bodyAr: '' }] },
     }));
     this.markDirty();
   }
@@ -2264,7 +3193,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     const id = `artisan-${Date.now()}`;
     this.content.update((c) => ({
       ...c,
-      story: { ...c.story, atelier: { ...c.story.atelier, items: [...c.story.atelier.items, { id, title: '', meta: '' }] } },
+      story: { ...c.story, atelier: { ...c.story.atelier, items: [...c.story.atelier.items, { id, title: '', meta: '', titleEn: '', titleAr: '', metaEn: '', metaAr: '' }] } },
     }));
     this.markDirty();
   }
@@ -2277,41 +3206,51 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     this.markDirty();
   }
 
-  // ── Info blocks add/remove/lines ──────────────────────────────────────
-  addInfoBlock(): void {
-    const id = `block-${Date.now()}`;
+  // ── Branches and stockists ────────────────────────────────────────────
+  addBranch(): void {
+    const id = `branch-${Date.now()}`;
     this.content.update((c) => ({
       ...c,
-      contact: { ...c.contact, infoBlocks: [...c.contact.infoBlocks, { id, icon: '◆', titleEn: '', titleAr: '', lines: [''] }] },
+      contact: {
+        ...c.contact,
+        branches: [...c.contact.branches, {
+          id, nameEn: '', nameAr: '', addressEn: '', addressAr: '',
+          phone: '', mapUrl: '', mapEmbedUrl: '', lat: null, lng: null, parking: false,
+          weekdayOpen: 10, weekdayClose: 22, weekendOpen: 13, weekendClose: 22,
+        }],
+      },
     }));
     this.markDirty();
   }
 
-  removeInfoBlock(i: number): void {
+  removeBranch(i: number): void {
     this.content.update((c) => ({
       ...c,
-      contact: { ...c.contact, infoBlocks: c.contact.infoBlocks.filter((_, idx) => idx !== i) },
+      contact: { ...c.contact, branches: c.contact.branches.filter((_, idx) => idx !== i) },
     }));
     this.markDirty();
   }
 
-  addInfoBlockLine(blockIdx: number): void {
-    this.content.update((c) => {
-      const infoBlocks = c.contact.infoBlocks.map((b, bi) =>
-        bi === blockIdx ? { ...b, lines: [...b.lines, ''] } : b
-      );
-      return { ...c, contact: { ...c.contact, infoBlocks } };
-    });
+  addStockist(): void {
+    const id = `stockist-${Date.now()}`;
+    this.content.update((c) => ({
+      ...c,
+      contact: {
+        ...c.contact,
+        stockists: [...c.contact.stockists, {
+          id, nameEn: '', nameAr: '', locationEn: '', locationAr: '',
+          hoursNoteEn: '', hoursNoteAr: '', mapUrl: '',
+        }],
+      },
+    }));
     this.markDirty();
   }
 
-  removeInfoBlockLine(blockIdx: number, lineIdx: number): void {
-    this.content.update((c) => {
-      const infoBlocks = c.contact.infoBlocks.map((b, bi) =>
-        bi === blockIdx ? { ...b, lines: b.lines.filter((_, li) => li !== lineIdx) } : b
-      );
-      return { ...c, contact: { ...c.contact, infoBlocks } };
-    });
+  removeStockist(i: number): void {
+    this.content.update((c) => ({
+      ...c,
+      contact: { ...c.contact, stockists: c.contact.stockists.filter((_, idx) => idx !== i) },
+    }));
     this.markDirty();
   }
 
@@ -2351,12 +3290,6 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       return { ...c, contact: { ...c.contact, socialLinks } };
     });
     this.markDirty();
-  }
-
-  // ── Slide callout expand/collapse ─────────────────────────────────────
-  readonly expandedSlide = signal<number | null>(null);
-  toggleSlideCallouts(i: number): void {
-    this.expandedSlide.update((v) => v === i ? null : i);
   }
 
   patchStoryHero(key: string, value: string): void {
@@ -2400,6 +3333,27 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     this.blocks.update((blocks) => blocks.map((b) => b.id === id ? { ...b, visible: !b.visible } : b));
   }
 
+  // block.title/block.config (HOME_LAYOUT_BLOCKS in storefront.service.ts)
+  // are internal English fallback labels, not i18n-routed — this maps the
+  // stable block id to a translation key instead of rendering them directly.
+  blockTitleKey(blockId: string): string {
+    return `storefront.block.${blockId}.title`;
+  }
+
+  blockMetaKey(blockId: string): string {
+    return `storefront.block.${blockId}.meta`;
+  }
+
+  chapterTitle(n: number): string {
+    return this.t('storefront.editor.chapters.chapterN').replace('{n}', String(n));
+  }
+
+
+
+  lineLabel(n: number): string {
+    return this.t('storefront.editor.line.placeholder').replace('{n}', String(n));
+  }
+
   resetLayout(): void {
     this.blocks.set(HOME_LAYOUT_BLOCKS.map((b) => ({ ...b })));
   }
@@ -2409,7 +3363,7 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     if (this.publishing()) return;
     const ok = await this.confirm.ask({
       title: this.t('storefront.publishConfirm.title'),
-      message: `Publish ${this.visibleCount()} visible sections to the storefront?`,
+      message: this.t('storefront.publishConfirm.message').replace('{n}', String(this.visibleCount())),
       confirmLabel: this.t('storefront.publish'),
       cancelLabel: this.t('common.cancel'),
       variant: 'info',
@@ -2422,8 +3376,8 @@ export class StorefrontComponent implements OnInit, OnDestroy {
       await this.storefront.publishRemote();
       this.blocks.set(blocks);
       this.toast.success(this.t('storefront.publish.toast.title'), this.t('storefront.publish.toast.sub'));
-    } catch {
-      this.toast.error(this.t('storefront.editor.toast.layoutPublishFailed'), this.t('storefront.editor.toast.layoutPublishFailed.sub'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('storefront.editor.toast.layoutPublishFailed'), this.t('storefront.editor.toast.layoutPublishFailed.sub'));
     } finally {
       this.publishing.set(false);
     }
@@ -2488,13 +3442,18 @@ export class StorefrontComponent implements OnInit, OnDestroy {
   applyMediaPick(url: string): void {
     const target = this.mediaPickerTarget();
     if (!target || !url) { this.mediaPickerTarget.set(null); return; }
+    url = this.api.mediaUrl(url);
 
     if (target === 'hero') { this.patchHero('imageUrl', url); }
     else if (target === 'story-hero') { this.patchStoryHero('imageUrl', url); }
-    else if (target.startsWith('slider-item-')) {
-      const i = parseInt(target.split('-').pop()!, 10);
-      this.patchSliderItem(i, 'imageUrl', url);
-    } else if (target.startsWith('tile-')) {
+    else if (target.startsWith('slide-color-')) {
+      // slide-color-{slideIdx}-{colorIdx}
+      const [slideIdx, colorIdx] = target.replace('slide-color-', '').split('-').map(Number);
+      if (Number.isInteger(slideIdx) && Number.isInteger(colorIdx)) {
+        this.patchSlideColorImage(slideIdx, colorIdx, url);
+      }
+    }
+    else if (target.startsWith('tile-')) {
       const i = parseInt(target.split('-').pop()!, 10);
       this.patchTile(i, 'imageUrl', url);
     } else if (target.startsWith('chapter-')) {
@@ -2511,19 +3470,14 @@ export class StorefrontComponent implements OnInit, OnDestroy {
     try { return decodeURIComponent(url.split('/').pop() ?? url).slice(0, 40); } catch { return url.slice(0, 40); }
   }
 
+  /** Resolve legacy `/uploads/...` values already stored in an old draft. */
+  mediaUrl(url: string): string {
+    return this.api.mediaUrl(url);
+  }
+
   async uploadHeroImage(event: Event): Promise<void> {
     const url = await this.uploadFile(event);
     if (url) this.patchHero('imageUrl', url);
-  }
-
-  async uploadSliderImage(i: number, event: Event): Promise<void> {
-    const url = await this.uploadFile(event);
-    if (url) this.patchSliderItem(i, 'imageUrl', url);
-  }
-
-  async uploadCalloutImage(slideIdx: number, calloutIdx: number, event: Event): Promise<void> {
-    const url = await this.uploadFile(event);
-    if (url) this.patchCallout(slideIdx, calloutIdx, 'thumbnail', url);
   }
 
   async uploadTileImage(i: number, event: Event): Promise<void> {
@@ -2563,7 +3517,9 @@ export class StorefrontComponent implements OnInit, OnDestroy {
           // Server returns MediaFile[] via mapMedia() — fields are camelCase
           const list = progress.result as import('../../models').MediaFile[] | import('../../models').MediaFile | null | undefined;
           const item = Array.isArray(list) ? list[0] : list;
-          const rawUrl = item?.preview || (item as { storageUrl?: string })?.storageUrl || '';
+          // Prefer the full-resolution original: `preview` is a ~640px card
+          // variant, too small for hero art rendered at up to 940px @2x.
+          const rawUrl = item?.storageUrl || item?.preview || '';
           if (rawUrl) {
             resolve(this.api.mediaUrl(rawUrl));
           } else {
@@ -2571,9 +3527,9 @@ export class StorefrontComponent implements OnInit, OnDestroy {
             resolve(null);
           }
         },
-        error: () => {
+        error: (caught) => {
           this.uploading.set(false);
-          this.toast.error(this.t('storefront.editor.toast.uploadFailed'), this.t('storefront.editor.toast.uploadFailed.sub'));
+          this.toast.errorFrom(caught, this.t('storefront.editor.toast.uploadFailed'), this.t('storefront.editor.toast.uploadFailed.sub'));
           resolve(null);
         },
       });

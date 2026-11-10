@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, inject, signal } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
@@ -14,30 +14,22 @@ interface Suggestion {
 }
 
 @Component({
-  selector: 'ap-media-detail-drawer',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent],
-  template: `
+    selector: 'ap-media-detail-drawer',
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent],
+    template: `
     <div class="overlay" (click)="closed.emit()"></div>
     <div class="drawer">
       <div class="drawer-head">
         <div>
           <div class="card-title mono" style="font-size:15px;">{{ media.name }}</div>
-          <div class="card-sub">{{ media.kind === 'glb' ? t('media.detail.headerType3d') : t('media.detail.headerTypeImage') }} · {{ size }}{{ media.w ? ' · ' + media.w + '×' + media.h : '' }}</div>
+          <div class="card-sub">{{ t('media.detail.headerTypeImage') }} · {{ size }}{{ media.w ? ' · ' + media.w + '×' + media.h : '' }}</div>
         </div>
         <button class="x-btn" (click)="closed.emit()"><ap-icon name="x" [size]="14"/></button>
       </div>
 
       <div class="drawer-body">
         <div style="aspect-ratio:1.4/1;background:var(--bg-2);border-radius:10px;overflow:hidden;margin-bottom:20px;">
-          @if (media.kind === 'image') {
-            <img [src]="media.preview" [alt]="media.name" style="width:100%;height:100%;object-fit:cover;" (error)="onImgError($event)"/>
-          } @else {
-            <div class="glb-thumb" style="aspect-ratio:1.4/1;">
-              <ap-icon name="cube" [size]="64"/>
-              <div class="glb-thumb-label">.GLB · {{ size }}</div>
-            </div>
-          }
+          <img [src]="media.preview" [alt]="media.name" style="width:100%;height:100%;object-fit:cover;" (error)="onImgError($event)"/>
         </div>
 
         <div class="mb-24">
@@ -71,6 +63,14 @@ interface Suggestion {
                 <ap-icon name="link" [size]="12"/> {{ t('media.detail.acceptMatch') }}
               </button>
             </div>
+          } @else if (media.usedInContent) {
+            <div class="ms-block" style="margin-bottom:10px;">
+              <div class="row gap-sm">
+                <ap-icon name="info" [size]="16" style="flex-shrink:0;color:var(--muted);"/>
+                <div class="muted small">{{ t('media.detail.usedInContent') }}</div>
+                <ap-pill kind="blue"><ap-icon name="check" [size]="10"/> {{ t('media.thumb.usedInContent') }}</ap-pill>
+              </div>
+            </div>
           } @else {
             <div class="muted small mb-16" style="padding:10px 12px;background:var(--bg);border-radius:8px;">
               {{ t('media.detail.noMatch') }}
@@ -100,7 +100,7 @@ interface Suggestion {
             </div>
             <div class="ms-row" style="padding:10px 14px;">
               <span class="muted small">{{ t('media.detail.type') }}</span>
-              <span class="strong">{{ media.kind === 'glb' ? t('media.detail.type3d') : t('media.detail.typeImage') }}</span>
+              <span class="strong">{{ t('media.detail.typeImage') }}</span>
             </div>
             <div class="ms-row" style="padding:10px 14px;">
               <span class="muted small">{{ t('media.detail.size') }}</span>
@@ -153,7 +153,8 @@ interface Suggestion {
       </div>
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .default-image-section {
       padding: 14px 20px;
       border-top: 1px solid var(--border-2);
@@ -169,7 +170,7 @@ interface Suggestion {
       font-size: 12px;
       font-weight: 700;
     }
-  `],
+  `]
 })
 export class MediaDetailDrawerComponent {
   @Input({ required: true }) set media(m: MediaFile) {

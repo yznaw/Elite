@@ -1,6 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { resolveClientMediaUrl } from '../utils/media-url';
+import { API_BASE, PUBLIC_API_BASE } from '../core/api-base';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -35,10 +37,17 @@ export interface RefSizeSet {
 @Injectable({ providedIn: 'root' })
 export class ReferenceDataService {
   private readonly http = inject(HttpClient);
-  private readonly apiBase = this.resolveApiBase();
-  private readonly cacheMs = 60 * 60_000;
+  private readonly apiBase = inject(API_BASE);
+  private readonly publicApiBase = inject(PUBLIC_API_BASE);
+  // This endpoint is tiny and admin-managed. Revalidate on page navigation so
+  // a newly saved Arabic color name replaces the in-memory value promptly.
+  private readonly cacheMs = 0;
   private readonly _colorHexByName = signal<Record<string, string>>({});
   private readonly _colorSwatchImageByName = signal<Record<string, string>>({});
+  /** Arabic display name per colour, keyed by the lowercased English name that
+   *  products actually store. Empty name_ar rows are skipped so the caller can
+   *  fall back to the English name rather than render a blank label. */
+  private readonly _colorNameArByName = signal<Record<string, string>>({});
   private readonly _sizeSets = signal<RefSizeSet[]>([]);
   private colorsPromise: Promise<Record<string, string>> | null = null;
   private sizeSetsPromise: Promise<RefSizeSet[]> | null = null;
@@ -47,6 +56,7 @@ export class ReferenceDataService {
 
   readonly colorHexByName = this._colorHexByName.asReadonly();
   readonly colorSwatchImageByName = this._colorSwatchImageByName.asReadonly();
+  readonly colorNameArByName = this._colorNameArByName.asReadonly();
   readonly sizeSets = this._sizeSets.asReadonly();
 
   async ensureColors(): Promise<Record<string, string>> {
@@ -102,8 +112,15 @@ export class ReferenceDataService {
           if (name && image) acc[name] = image;
           return acc;
         }, {});
+        const nameArMap = colors.reduce<Record<string, string>>((acc, color) => {
+          const name = String(color.name_en || '').trim().toLowerCase();
+          const nameAr = String(color.name_ar || '').trim();
+          if (name && nameAr) acc[name] = nameAr;
+          return acc;
+        }, {});
         this._colorHexByName.set(map);
         this._colorSwatchImageByName.set(swatchMap);
+        this._colorNameArByName.set(nameArMap);
         this.colorsLoadedAt = Date.now();
         return map;
       })
@@ -143,23 +160,8 @@ export class ReferenceDataService {
     return this.sizeSetsPromise;
   }
 
-  private resolveApiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost'
-      || hostname === '127.0.0.1'
-      || hostname === '::1'
-      || hostname === '[::1]'
-      || /^10\./.test(hostname)
-      || /^192\.168\./.test(hostname)
-      || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 
   private resolveMediaUrl(url: string | null | undefined): string {
-    const value = (url || '').trim();
-    if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
-    if (!value.startsWith('/uploads/')) return value;
-
-    return `${this.apiBase}${value}`;
+    return resolveClientMediaUrl(url, this.publicApiBase);
   }
 }

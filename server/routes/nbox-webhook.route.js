@@ -452,9 +452,13 @@ router.post('/', asyncHandler(async (req, res) => {
   try {
     await client.query('BEGIN');
     const tenant = await ensureDefaultTenant(client);
+    if (await require('../lib/fulfillment-webhook').handle(client, tenant.id, event, req.body)) {
+      await client.query('COMMIT');
+      return res.json({ success: true, message: 'Shipment update processed.' });
+    }
     const order = await findOrder(client, tenant.id, event);
 
-    if (!order) {
+    if (!order || order.fulfillment_version) {
       await client.query('COMMIT');
       console.warn('NBOX webhook accepted but no matching order was found.', {
         event: event.event,

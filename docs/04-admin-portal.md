@@ -28,7 +28,7 @@ The **admin-portal** is a comprehensive back-office dashboard for managing the e
   </div>
 </div>
 
-<ap-toast/>              <!-- Global toast notification stack -->
+<ap-toast/>              <!-- Global toast stack: de-duplicated (×N), max 3, self-dismissing; see docs/38 -->
 <ap-confirm-dialog/>     <!-- Global confirmation modal -->
 ```
 
@@ -44,21 +44,36 @@ All pages are lazy-loaded:
 | `/forgot-password` | `ForgotPasswordComponent` | Public — collects email, calls `/api/auth/forgot`. Always shows "check your inbox" so we never leak account existence. |
 | `/reset-password` | `ResetPasswordComponent` | Public — reads `?token=…`, validates `password ≥ 8` chars + matches confirmation, then calls `/api/auth/reset`. Bounces to `/login` on success. |
 | `/dashboard` | `DashboardComponent` | Live KPIs, revenue chart, top-products-by-price heatmap, recent orders — all sourced from `/api/admin/{orders,products,customers}`. No `mock.ts` after login. **Date Range Filter** (Today / 7 Days / 30 Days / 90 Days) pill-bar above KPIs. **Low Stock KPI card** — shows count of products with stock between 1 and the configurable threshold (default: 8, set via `StoreConfigService`). Clicking the card navigates to `/catalog?stock=low`. Card shows 0 when all items are stocked. |
-| `/catalog` | `CatalogComponent` | Product grid **and list** view (toggle persisted via `StorageService` — tenant-scoped). Search (matches name, SKU, **and brand**), status quick-filter (All / Active / Hidden / **Out of Stock** (red badge) / **Low Stock** (amber badge)), sort (Name A–Z, Price ↑↓, Stock ↑↓, Newest). The **Low Stock** filter pill is pre-activated via `?stock=low` from the dashboard KPI card. Low-stock threshold from `StoreConfigService.lowStockThreshold()`. **Advanced filter panel**: collection, **brand** (auto-populated from loaded products), **color** (custom swatch picker — hex dot or texture thumbnail per color, from `ref_colors`; supports `?color=X` URL param from reference page usage badge), price range, page size (25/50/100/All). Active filters shown as dismissible chips with color swatch dot. **Bulk Select**: Select All, Set Status, Delete with confirm. **Export CSV** (SKU, Name, Brand, Price, Stock, Status, Variants). **Product drawer** section order (Shopify-style): ① Image Gallery ② Product Info (title EN/AR, brand, SKU) ③ Pricing & Stock ④ Variants ⑤ Description ⑥ Organization (collections + related) ⑦ SEO ⑧ Sync ⑨ Danger Zone. **Variant table** (compact single-row per variant, researched against Shopify / WooCommerce / BigCommerce / Etsy): always-visible columns — Photo · Color · Size · Stock · Price · SKU; collapsible columns (⌄ expand) — Material · Cost · Margin (auto-calculated). Stock input turns red when 0 / amber when < 5. Price shows inline "QAR" prefix. SKU is always visible (used for warehouse/POS daily). Color→image linking: click the photo cell in each variant row to open an image picker popover — maps `imageColors[imageUrl] = colorName` so the storefront shows the correct image per color. Image gallery thumbnails show a read-only color badge for linked images. "Generate sizes" wizard. **`ap-save-bar` component**: green sliding bar with Discard / Save changes; appears when the form is dirty, hides when idle. **Arabic Name field** (`nameAr`) stored in `product_translations`. **Cost price per variant** (`cost_price_cents`) with real-time **margin formula** (color-coded pill: green ≥ 40 %, amber 20–40 %, red < 20 %). **Stock is auto-computed** from variant sum when variants exist. **SEO fields** (`meta_title`, `meta_desc` 160-char counter, slug). **Duplicate Product**. **Bulk Import** + **Stock Update mode** (Dry-Run, Retry Failed, Import History). **Description fields** (`enDesc`, `arDesc`) are loaded from the server's `description` JSONB column and pre-filled in the rich-text editors; Arabic description is preserved on re-import. **SKU renaming** when a color group is renamed now also updates the SKU segment in all affected variants automatically. |
+| `/restock-requests` | `RestockRequestsComponent` | Authenticated Catalog access. Demand grouped by product/colour/size, request details, status/product/date filters, resend/cancel and CSV export. Linked from Catalog. Removed from the sidebar on 2026-09-26 at the client's request; the page, its route and the customer "notify me" emails are unchanged. |
+| `/catalog` | `CatalogComponent` | Product grid **and list** view (toggle persisted via `StorageService` — tenant-scoped). Search (matches name, SKU, **and brand**), status quick-filter (All / Active / Hidden / **Out of Stock** (red badge) / **Low Stock** (amber badge)), sort (Name A–Z, Price ↑↓, Stock ↑↓, Newest). The **Low Stock** filter pill is pre-activated via `?stock=low` from the dashboard KPI card. Low-stock threshold from `StoreConfigService.lowStockThreshold()`. **Advanced filter panel**: collection, **brand** (auto-populated from loaded products), **color** (custom swatch picker — hex dot or texture thumbnail per color, from `ref_colors`; supports `?color=X` URL param from reference page usage badge), price range, page size (25/50/100/All). Active filters shown as dismissible chips with color swatch dot. **Bulk Select**: Select All, Set Status, Delete with confirm. **Export CSV** (SKU, Name, Brand, Price, Stock, Status, Variants). **Product drawer** section order (Shopify-style): ① Image Gallery ② Product Info (title EN/AR, brand, SKU) ③ Pricing & Stock ④ Variants ⑤ Description ⑥ Organization (collections + related) ⑦ SEO ⑧ Sync ⑨ Danger Zone. **Variant table** (compact single-row per variant, researched against Shopify / WooCommerce / BigCommerce / Etsy): always-visible columns — Photo · Color · Size · Stock · Price · SKU; collapsible columns (⌄ expand) — Material · Cost · Margin (auto-calculated) · **Size note EN/AR** (a detail this size has and others do not, e.g. a back zipper on the small sizes; shown on the storefront beside the picked size). Stock input turns red when 0 / amber when < 5. Price shows inline "QAR" prefix. SKU is always visible (used for warehouse/POS daily). Color→image linking: click the photo cell in each variant row to open an image picker popover — maps `imageColors[imageUrl] = colorName` so the storefront shows the correct image per color. Image gallery thumbnails show a read-only color badge for linked images. "Generate sizes" wizard. **`ap-save-bar` component**: green sliding bar with Discard / Save changes; appears when the form is dirty, hides when idle. **Arabic Name field** (`nameAr`) stored in `product_translations`. **Cost price per variant** (`cost_price_cents`) with real-time **margin formula** (color-coded pill: green ≥ 40 %, amber 20–40 %, red < 20 %). **Stock is auto-computed** from variant sum when variants exist. **SEO fields** (`meta_title`, `meta_desc` 160-char counter, slug). **Duplicate Product**. **Bulk Import** (Dry-Run, Retry Failed, Import History). The Stock Update tab moved to Inventory → Add stock → Upload a sheet (2026-09-28); the dialog links there. **Description section** is split into three purpose-named fields: **Hook** (`shortEn`/`shortAr`, plain text, ~90 chars) seeds the home hero tagline when a product is linked to a slide; **Short description** (`teaserEn`/`teaserAr`, plain text, ~160 chars) shows directly under the product name on the storefront product page; **Material & Care** (`careEn`/`careAr`, rich text, stored in the `care_instructions` JSONB column) fills the Material & Care section on the storefront product page, falling back to the legacy `enDesc`/`arDesc` long description for products saved before this split existed. **SKU renaming** when a color group is renamed now also updates the SKU segment in all affected variants automatically. **Stock per location (2026-09-26):** once the switch is on (`GET /admin/inventory/per-location`), each size row's Stock cell becomes a button showing the sellable total. It opens the row's details with a "Stock by location" block: one labelled field per location, each with a "was N" note once changed, and a "held online" pill when units are held. Changed fields and the total are highlighted gold. The row stays as uncluttered as before (client feedback 2026-09-26: three fields per row was too busy). Save asks once "Why did stock change?" (preselected "Shipment received" for an increase, "Correction" otherwise) and sends `locationStock`, `expectedLocationStock` and `stockReason`. "Bulk Stock Update" is replaced by "Move stock" (→ `/inventory?tab=transfer`). With the switch off, nothing changes. **Variant lifecycle (2026-09-15):** *Add variant* and *Add size* open the target colour group, scroll the new row into view and focus it. Picking a size that already exists in the same colour, or renaming a colour group onto a colour that already has one of its sizes, is refused with a toast. Removing a saved row or a row with stock asks for confirmation (rows added this session with no stock go immediately); removing the last size of a colour also clears that colour's photo links, SKU draft and open state. Save points at the first row with a missing or duplicate SKU. **Save baseline:** `save()` snapshots the form before the request and, on success, sets `initial` from the server response (`makeFormFromProduct(saved)`). If the form changed while the request was in flight, those edits stay dirty and the save bar stays up; otherwise the form is replaced with the saved product (real variant ids, barcode defaulting to SKU). A size that was counted in a stocktake is hidden (`is_active = false`) by the server instead of deleted, and no longer loads in the drawer. **Catalog + drawer audit (2026-09-15):** the drawer receives `drawerProducts()` (the filtered list plus the open product), so a save that moves a product out of the current filter, page or sort keeps the drawer on that product; `safePage()` clamps the page when filters, page size or deletes shrink the list; *New product* resets the sort to Newest. `save()` resolves its target product once, checks name/brand/SKU and the slug before sending, sends `expectedStock` (the stock it loaded), and on `STOCK_CHANGED` reloads current stock into the form and baseline so the next save does not undo a sale; collection sync runs last with its own error toast. Image uploads only update the product they were started on and keep unsaved gallery edits; delete captures its product before the 600 ms delay and blocks prev/next meanwhile. Prices are whole QAR (inputs round). SEO title, description and slug stay empty unless typed, with the generated text shown as placeholders. A localStorage draft is only restored when it was made against the same loaded data. Single and bulk delete archive; *Undo* calls `POST /api/admin/products/:id/restore` before re-inserting the row, and a failed delete leaves the row in place. Bulk actions skip unsaved `P-NEW-` rows and roll back to a snapshot on failure. The empty state is not shown while loading, a failed load toasts, the Out of Stock badge uses the same rule as its filter, and CSV export escapes every field and guards spreadsheet formulas. Leaving with unsaved product edits is guarded: the drawer listens to `window:beforeunload`, and the `/catalog` route has a `canDeactivate` guard that calls `CatalogComponent.canLeave()` → `ProductDrawerComponent.confirmLeaveIfDirty()` (confirm dialog). The per-colour *Generate sizes* chart choice is a signal (`groupSizeSet`), so the Generate button enables as soon as a chart is picked. **New variant flow:** the footer *Add variant* creates its own highlighted group (`__new__`, keyed by `pendingVariantIds`) at the top of the list, separate from any older colourless rows, with the colour select focused and the hint "Choose a colour, then add its sizes". A second click brings that group back instead of adding another blank. Choosing a colour moves it into that colour's group, opened at the new row, where sizes are added one at a time with *+ Size* (*Generate sizes* stays optional and replaces the blank row). Every variant row needs a size: save is refused and the row highlighted when one is missing, and the API returns 422 `Variant <sku> needs a size.` Covered by `client/e2e-auth/product-variants.spec.ts`. |
 | `/reference` | `ReferenceComponent` | Reference data management — **Colors** (name EN/AR + hex, inline color picker, swatch preview), **Materials** (name EN/AR), **Size Charts** (named size sets with comma-editable size arrays). Full CRUD for each, changes immediately available as dropdowns in the product drawer and filters in the catalog. Owner/admin only. |
-| `/collections` | `CollectionsComponent` | Grouping products into collections with **sub-collection hierarchy**. Top-level collections show sub-collections as chips below their card; clicking a chip opens it. **"Add sub-collection"** quick-add button per parent. Search mode switches to flat list. **Collection drawer:** editable **URL Handle** (`/collection/{handle}` preview), **Parent Collection** selector (dropdown, self + descendants excluded, cycle-protected on server), cover image (drag/drop + URL paste). **Manage Products section:** grid/list view toggle — grid cards are draggable; list view shows explicit drag handles + ↑/↓ buttons for precise reordering (touch-friendly). Order is persisted to `collection_products.sort_order`. **Product drawer Organization section** now groups collections by parent with indented sub-collection checkboxes. DB migration: `007_sub_collections.sql` adds `parent_id` to `collections`. |
+| `/collections` | `CollectionsComponent` | Grouping products into collections with **sub-collection hierarchy**. Top-level collections show sub-collections as chips below their card; clicking a chip opens it. **"Add sub-collection"** quick-add button per parent. Search mode switches to flat list. **Collection drawer:** editable **URL Handle** (`/collection/{handle}` preview), **Parent Collection** selector (dropdown, self + descendants excluded, cycle-protected on server), cover image (drag/drop, file picker, or URL paste — a picked file is uploaded to the media library and only its `/uploads/...` path is stored; the server rejects an embedded `data:` image, see [05 – API Server](./05-api-server.md#images-are-files-never-data-urls)). **Manage Products section:** grid/list view toggle — grid cards are draggable; list view shows explicit drag handles + ↑/↓ buttons for precise reordering (touch-friendly). Order is persisted to `collection_products.sort_order`. **Product drawer Organization section** now groups collections by parent with indented sub-collection checkboxes. DB migration: `007_sub_collections.sql` adds `parent_id` to `collections`. |
 | `/media` | `MediaComponent` | Live grid from `GET /api/admin/media`, real multipart upload (drag/drop or browse, per-file progress), auto-link by SKU, detail drawer. **Google Drive import:** "Google Drive" button opens a modal — paste a file or folder URL (folder requires `GOOGLE_DRIVE_API_KEY` env var). Images are downloaded, saved to storage, and **auto-linked by SKU** via 4-tier matching: (1) folder name = SKU, (2) filename stem = SKU, (3) filename contains SKU, (4) two-segment prefix matches SKU start. Success toast reports how many were auto-linked. **Set as Default Fallback** button in the detail drawer saves the image URL to tenant config (`PATCH /api/admin/settings/store { config: { defaultImage } }`). Delete removes the DB row and the file from storage. |
-| `/storefront` | `StorefrontComponent` | **3-tab unified content editor** with sticky Publish/Preview bar. **Tab: Home Page** — sub-tabs: Section Order (drag/drop visibility), Landing Hero (heroSlider items + feature callouts, EN/AR CTA), Collections (3 tiles + featured collections picker), Promotion Section (image/title/body/CTA), Craft Promise (3 cards EN/AR), Stats Reel (4 values EN/AR). **Tab: Our Story** — sub-tabs: Hero, Intro, Chapters (4), Quote, Atelier. **Tab: Contact Us** — sub-tabs: Page Header (EN/AR headline), Info Blocks (3 blocks with lines), Phone & Promise. All image slots have Upload + Pick from Media. Save Content writes to `PATCH /api/admin/storefront-content`; Publish Layout writes to `POST /api/admin/storefront/publish`. |
+| `/storefront` | `StorefrontComponent` | **3-tab unified content editor** with sticky Publish/Preview bar. **Tab: Home Page** — sub-tabs: Section Order (drag/drop visibility), Landing Hero (heroSlider items with name, subtitle, EN/AR short description, image, alt, linked product + up to 4 colour swatches, feature callouts, EN/AR CTA), Collections (3 tiles + featured collections picker), Promotion Section (image/title/body/CTA), Craft Promise (3 cards EN/AR), Stats Reel (4 values EN/AR). **Tab: Our Story** — sub-tabs: Hero, Intro, Chapters (4), Quote, Atelier. **Tab: Contact Us** — sub-tabs: Page Header (EN/AR headline), Info Blocks (3 blocks with lines), Phone & Promise. All image slots have Upload + Pick from Media. Save Content writes to `PATCH /api/admin/storefront-content`; Publish Layout writes to `POST /api/admin/storefront/publish`. |
 | `/home-content` | — | **Redirects to `/storefront`** (deprecated — all editing moved into the Storefront tabs). |
-| `/orders` | `OrdersComponent` | Searchable order table, payment/fulfillment filters, **Date Range filter** (All Time / Today / This Week / This Month / Custom — custom shows `date from/to` inputs). Active date range displayed as a dismissible chip. `clearFilters()` resets date range along with other filters. **CSV export** of the current filtered set (UTF-8 BOM). **Production hardening (2026-06):** skeleton table/card loaders while `loading()` is true; `loadError` signal shows a red error banner with Retry button on initial load failure (silent background refresh swallows errors); 300ms RxJS search debounce via `Subject` + `takeUntil` teardown; 15s background polling syncs the list while the drawer is open; `OrderDrawerComponent` now routes all `PATCH /status` calls through `safeUpdateStatus()` which re-fetches the order from the server on API error to resync local state. Full-height drawer with status workflow stepper, tracking number, internal notes & timeline, **Print Invoice** button that opens a new browser tab with a fully formatted printable invoice. |
-| `/customers` | `CustomersComponent` | Customer table/cards view (toggle persisted), **Add Customer** create flow (synthesises a draft, discards on close without save), fully editable detail drawer with real linked-orders history (rows navigate to `/orders?id=…`). **Production hardening (2026-06):** skeleton loaders while `loading()` is true; `loadError` banner with Retry; 300ms debounced search; **Export CSV** wired (was previously a no-op button); EU size pill hidden when `sizePref` is `0` or `null`. Customer drawer fetches orders from `GET /admin/customers/:id/orders` (matches by `customer_id` OR `customer_email`), 30s polling with silent refresh + "Updated HH:MM" timestamp, `phone` field, async save that only shows "Saved" after API response and reverts to dirty on error, soft-delete that preserves order history. |
-| `/analytics` | `AnalyticsComponent` | Revenue chart, traffic sources, conversion funnel |
-| `/settings` | `SettingsComponent` | **General tab:** Store info (name, currency, timezone, language — `PATCH /api/admin/settings/store`) + **Low Stock Threshold** number input — sets `StoreConfigService.lowStockThreshold()`, persisted tenant-scoped via `StorageService`, consumed by catalog and dashboard. **Team tab:** team members (list, role change, status toggle — `GET/PATCH /api/admin/settings/team/:id`). **Team Invitations** — invite by email + role (`POST /api/admin/settings/invitations`), shows generated invite link in a copy-able input, lists pending invitations with revoke button. **Integrations tab.** Owner/admin only. |
+| `/orders` | `OrdersComponent` | Searchable order table, payment/fulfillment filters, **Date Range filter** (All Time / Today / This Week / This Month / Custom — custom shows `date from/to` inputs). Active date range displayed as a dismissible chip. `clearFilters()` resets date range along with other filters. **CSV export** of the current filtered set (UTF-8 BOM). **Production hardening (2026-06):** skeleton table/card loaders while `loading()` is true; `loadError` signal shows a red error banner with Retry button on initial load failure (silent background refresh swallows errors); 300ms RxJS search debounce via `Subject` + `takeUntil` teardown; 15s background polling syncs the list while the drawer is open; `OrderDrawerComponent` now routes all `PATCH /status` calls through `safeUpdateStatus()` which re-fetches the order from the server on API error to resync local state. Full-height drawer with status workflow stepper, tracking number, internal notes & timeline, **Print Invoice** button. **Invoice hardening (2026-09):** renders into a hidden same-page `<iframe>` and calls `print()`, so pop-up and ad blockers no longer kill it (the old `window.open` + `document.write` was silently blocked); honours `lang`/`dir` from `LocaleService` so the Arabic invoice lays out RTL; and prints a **Delivery** block (carrier, service, tracking number, shipped/delivered dates, carrier ETA) from `order.delivery`, omitted entirely when no shipment exists. No PDF library is used: the browser's own print engine is the only one here that shapes Arabic correctly, and the button was already labelled "Print / Save as PDF". **Correctness (2026-09):** `seedTimeline()` — which fabricated history containing hardcoded `2026-04-27` / `2026-04-29` dates whenever the timeline was empty — is deleted; an undefined `timeline` renders a skeleton until `GET /admin/orders/:id` resolves, and a failed detail fetch raises a retryable toast instead of being swallowed. Column sorting and CSV export are both server-side over the full result set. The list's **Mark Fulfilled** now requires a tracking number and a confirm dialog, matching the drawer's own rule. `?id=` deep links fetch by id instead of searching only the loaded page. **Website order approval (2026-09-27, stock per location on):** a "Needs approval" chip with a count (`needsApprovalCount`, `?needsApproval=1`) and a gold "Awaiting approval" pill on held orders. The drawer shows `OrderApprovalPanelComponent` above the workflow: one card per location, "All N items here" or "N missing" with each missing size, what the location has and where else it is, plus a "Move stock" link (→ `/inventory?tab=transfer`) when no location has everything. The only complete location is preselected. "Approve order" asks for confirmation, then shows "Approved · ships from X" (staff only; the customer email never names it). Ship/deliver buttons stay hidden until then (`canTransitionTo`). A 409 reloads the cards. Cashiers cannot approve (server 403). `ConfirmDialogComponent` now sits at z-index 1000/1001, above drawers (it used to open behind the order drawer, which also affected cancel and refund). |
+| `/customers` | `CustomersComponent` | Customer table/cards view (toggle persisted), **Add Customer** create flow (synthesises a draft, discards on close without save), fully editable detail drawer with real linked-orders history (rows navigate to `/orders?id=…`). **Production hardening (2026-06):** skeleton loaders while `loading()` is true; `loadError` banner with Retry; 300ms debounced search; **Export CSV** wired (was previously a no-op button); EU size pill hidden when `sizePref` is `0` or `null`. Customer drawer fetches orders from `GET /admin/customers/:id/orders` (matches by `customer_id` OR `customer_email`), 30s polling with silent refresh + "Updated HH:MM" timestamp, `phone` field, async save that only shows "Saved" after API response and reverts to dirty on error, soft-delete that preserves order history. **Correctness (2026-09):** the parent's duplicate `create()`/`update()` call is removed — saving previously fired two HTTP requests plus a stray `PATCH` against a just-created id; the delete success toast now fires only after the server confirms, keeps the row on failure, and offers **Undo** via the previously-dead `restore()` endpoint. The list is server-paginated, server-searched and server-sorted (`GET /admin/customers` returns `{ customers, total, page, limit, pages }`); CSV export walks every page rather than dumping the current one; `?highlight=` deep links from an order now actually resolve. Both drawers are `role="dialog" aria-modal="true"` and close on Escape (the customer drawer shakes the save bar instead when dirty). |
+| `/analytics` | `AnalyticsComponent` | Revenue chart, traffic sources, conversion funnel, per-product cost/margin table, a **Shipping Costs by Product** report (`GET /admin/analytics/shipping-costs`) listing every active product with its shipping-cost coverage, missing ones first, with search and an "only incomplete" filter, and an **Expenses & Net Profit** section (`GET /admin/analytics/profit-summary`) showing revenue - COGS - operating expenses as a waterfall plus an expenses-by-category donut. COGS here is computed from what actually sold, not averaged catalogue margin; a warning shows when sold line items have no cost recorded. |
+| `/expenses` | `ExpensesComponent` + `ExpenseDrawerComponent` | **Operating expense ledger.** Date-range/category/search filters, totals strip (grand total + top 3 categories), ledger table with category pills and per-row receipt indicator, CSV export, and POS cash-out import. Drawer handles amount/date/category/vendor/payment method/note/receipt upload and a `none/monthly/yearly` recurrence. Recurring bills are stored once and projected forward on read, shown with an "Upcoming" pill; editing a projected occurrence materialises just that period. Creating closes the drawer so a second Save cannot file a duplicate. Owner/admin only. |
+| `/settings` | `SettingsComponent` | **General tab:** Store info (name, currency, timezone, language — `PATCH /api/admin/settings/store`) + **Low Stock Threshold** number input — sets `StoreConfigService.lowStockThreshold()`, persisted tenant-scoped via `StorageService`, consumed by catalog and dashboard. **Team tab:** team members (list, role change, status toggle, **branch** — `GET/PATCH /api/admin/settings/team/:id`). The Branch column appears once the tenant has more than one branch and sets `admin_users.pos_branch_id`, which scopes the POS "which till is this?" picker to that branch's registers; "All branches" clears it and is the right default for owners and admins. See [12 – POS System](./12-pos-system.md). **Notifications tab** (`pages/settings/notification-settings.component.ts`, 2026-09-26): the new-order email recipients (chip input, up to 10, validated like the server, pasted lists split on comma/space; own save bar; "Send test email" sends to the list on screen, saved or not, and a missing SMTP comes back as a readable message instead of a generic server error) a **reminder delay** for website orders not yet approved (15-1440 min, default 120; one email + bell reminder per order), and this browser's alert preferences (sound, desktop alerts with their permission state). Recipients are owner/admin only on read as well as write, and GET /store strips them from `config`. **Warehouse name** (`WarehouseNameComponent`, under Branches): renames the warehouse location. Stores take their branch name. **Team Invitations** — invite by email + role (`POST /api/admin/settings/invitations`), shows generated invite link in a copy-able input, lists pending invitations with revoke button. **Integrations tab.** Owner/admin only. |
 | `/accept-invite` | `AcceptInviteComponent` | Public — reads `?token=` query param, validates via `GET /api/invitations/validate`, shows name/password/confirm form. On submit calls `POST /api/invitations/accept`. Redirects to login on success. Invitation token is single-use and expires after 48 h. |
-| `/pos` | `PosComponent` | **Point of Sale** *(planned — not yet built)*. Full-screen dark-theme cashier interface. Touch-optimized product grid, live cart panel, USB + camera barcode scanning, Cash / Card / Split checkout, ESC/POS thermal receipt printing (Bixolon 80mm via WebUSB/TCP), automated cash drawer trigger (RJ12), barcode label generation (Code 128/EAN-13 30×20mm), Park & Resume multi-session carts, offline-first PWA with IndexedDB queue, X Report (mid-shift read), Z Report (end-of-day close with cash float & variance), full/partial returns & refunds, Manager PIN role-based security. Hides sidebar/topbar — renders standalone full-width. See [`docs/pos-system-plan.html`](./pos-system-plan.html) for acceptance criteria. |
+| `/pos` | `PosComponent` | **Point of Sale.** Full-screen cashier interface with product/SKU/barcode search, customer link/walk-in, cash, manual-card and manual-Sadad checkout (Sadad needs the transaction ID from the Sadad merchant app, see docs/12), reserved receipt numbers, persistent QZ hardware with automatic reconnect, IndexedDB offline queue/freshness guard, parked carts, refunds, voids, morning shift recovery, shift summary/Z close, live shared-stock events, and manager PIN approvals. Owner/admin/manager/cashier. See [12 – POS System and Integration](./12-pos-system.md). |
+| `/inventory` | `InventoryComponent` + `AddStockComponent` + `StockEntryComponent` + `StockFileComponent` | **Stock per location** (owner/admin/manager; cashiers have no access). Before the switch is on, it shows a card explaining it, with "Turn on" (owner/admin, confirm dialog) that seeds everything into the warehouse. Three tabs (`?tab=receive\|transfer`):
+- **Stock:** a column per location, then "Held online" and "Available to sell". Search by name, SKU or barcode, a location filter, and Low/Out chips (on the chosen location). Rows are grouped by product, sizes in numeric order, "Load more" pages of 50. Row actions are Add, Move and Remove (a dialog with location, quantity capped at what the location holds, and a reason).
+- **Add stock** (`AddStockComponent`, merged with the stock file upload 2026-09-28), three numbered steps:
+  1. **Where is the stock?** Large cards per location with its type and units on hand. It is chosen on purpose each time (not remembered). Afterwards a green banner "Adding stock to **X** / Only X changes" stays on screen with "Change location".
+  2. **How do you want to add it?** Two cards: **Scan or search items** (tag "+ Adds to the stock": a delivery or a few items) or **Upload a sheet** (tag "= Replaces the count": counting many sizes).
+  3. Scan: the reason chips ("Why is it being added?") and the scan/search list below. Sheet (`StockFileComponent`, embedded): step 3 "Download all sizes for X" (plus "Empty template"), step 4 upload, then a review with "N will change / N same as now / N left empty / N need fixing", now → new → change per size, problems first, and a warning on sizes that changed since the download. "Update X stock" asks for confirmation, then shows a summary with "View in History". A sheet for another location is refused in place (no toast; `http-error.interceptor.ts` skips 409/422 from `/stock-file/`).
+
+  A stock table row's **Add** opens this tab at step 1 with that size ready in the scan list. `?tab=file` and `?tab=receive&method=file` open it on "Upload a sheet". With the switch off, the page shows the stock file card under the "Turn on" card, working on the single shared number.
+- **Transfers:** from, swap, to, then a history list.
+
+Add stock and Transfers share one scan/search field. An exact barcode or SKU plus Enter (a scanner's trailing Enter) adds the item at once with a short beep, and a repeat scan adds one more. Anything else lists matches. In a transfer, a quantity over what the source holds is flagged and blocks the move. **History** tab (`StockHistoryComponent`): every stock change with when, item, location, signed change, reason (and note, order number or transfer route) and the person. Filters: search, location, person, date range, and kind of change (sales, returns, added, removed, transfers, stocktakes, product editor/imports). |
+| `/stocktake` | `StocktakeComponent` | **Per-location expected (2026-09-26):** when a count starts with stock per location on, each line's "Expected" (and the per-location export) shows what the selected location should hold (`expectedByLocation`), not the combined figure. **Shared-inventory operations.** Owner/admin only. Start open ("Show expected", the default since 2026-09-23) or blind counts, **counts autosave** on Enter or leaving the field (`utils/stocktake-autosave.ts`: per-row Not saved / Saving / Saved / Retry, one request in flight per row with last value winning, a "N counts not saved" bar with Save all, and a guard before export, import, switching location, completing, posting or leaving the page), **Export this location** (saved counts, plus Expected when not blind; re-importing skips unchanged rows) and **Export all locations** (a column per location, total, Expected and Difference; review only, refused on import), lines sorted by product, colour and numeric size, count/recount variants, block unresolved disagreements, post race-safe discrepancies without undoing sales made during counting, and review immutable history. Physical replenishment between the two shops and stock room is deliberately not entered here because it does not change the shared total. |
+| `/diagnostics` | `DiagnosticsComponent` | **Errors & audit trail.** Owner/admin only. **Errors tab:** application errors grouped by fingerprint (repeats increment a count instead of adding rows) from three sources — the server, the register/admin browsers via `POST /api/client-logs`, and CSP violation reports. Filter by source/severity/open-resolved, search by message, code, route **or the reference code the cashier reads off an error toast**, expand for stack + context, and mark resolved (a recurrence then opens a new entry, so regressions stay visible). **Audit tab:** `audit_events` — the audit trail has existed since migration 001 and had no UI at all before this; filter by action, date range, or `requestId` to see exactly what a given request did. Nav entry appears for owner/admin only, in both the sidebar and the mobile bottom-nav. See [24 – Logging & Observability](./24-logging-observability-plan.md). |
 | `**` | — | Redirects to `/dashboard` |
 
-> Every route except `/login`, `/forgot-password`, `/reset-password`, and `/accept-invite` is gated by `authGuard` (`canMatch`). `/settings` and `/reference` are additionally gated by `roleGuard(['owner','admin'])`. `/pos` will be gated by `roleGuard(['owner','admin','cashier'])` when built. See [08 – Database & API Implementation › Authentication](./08-database-api-implementation.md#authentication-session-based) for the server side and the full reset-password flow.
+> Every route except `/login`, `/forgot-password`, `/reset-password`, and `/accept-invite` is gated by `authGuard` (`canMatch`). `/settings`, `/reference`, `/stocktake`, and `/diagnostics` are additionally gated by `roleGuard(['owner','admin'])`. `/pos` is gated by `roleGuard(['owner','admin','manager','cashier'])`. See [08 – Database & API Implementation › Authentication](./08-database-api-implementation.md#authentication-session-based) for the server side and the full reset-password flow.
 
 ---
 
@@ -87,7 +102,7 @@ Located in `app/shared/`:
 | `AvatarComponent` | `avatar/` | User avatar with initials |
 | `TriggerBadgeComponent` | `trigger-badge/` | Shows who triggered an action (manual vs auto) |
 | `EmptyStateComponent` | `empty-state/` | Empty data state with icon and message |
-| `IconsComponent` | `icons/` | Centralized SVG icon library. Available icon names: `dash`, `catalog`, `collections` (envelope stack — sidebar nav for Collections, collection empty states), `store`, `orders`, `users`, `chart`, `sync`, `settings`, `media`, `search`, `bell`, `plus`, `x`, `drag`, `edit`, `trash`, `eye`, `upload`, `download`, `cube`, `link`, `unlink`, `wand`, `check`, `arrow`, `arrowUp`, `arrowDn`, `csv`, `clock`, `spinner`, `list`, `filter`, `grid`, `rows`, `copy`, `print`, `warning`, `mail`, `info`, `team`, `reference` (tag/label — sidebar nav for Reference data), `hierarchy` (nested-list — sub-collection tree). See `icon.component.ts` for SVG definitions. |
+| `IconsComponent` | `icons/` | Centralized SVG icon library. Available icon names: `dash`, `catalog`, `collections` (envelope stack — sidebar nav for Collections, collection empty states), `store`, `orders`, `users`, `chart`, `sync`, `settings`, `media`, `search`, `barcode` (vertical bars — variant "Print Label" action), `bell`, `plus`, `x`, `drag`, `edit`, `trash`, `eye`, `upload`, `download`, `cube`, `link`, `unlink`, `wand`, `check`, `arrow`, `arrowUp`, `arrowDn`, `csv`, `clock`, `spinner`, `list`, `filter`, `grid`, `rows`, `copy`, `print`, `warning`, `mail`, `info`, `team`, `reference` (tag/label — sidebar nav for Reference data), `hierarchy` (nested-list — sub-collection tree), `expenses` (receipt with a torn bottom edge — sidebar nav for Expenses, distinct from `scale` for Reconciliation and `csv` for Reports). See `icon.component.ts` for SVG definitions. |
 | `RichTextComponent` | `rich-text/` | Lightweight `contenteditable` editor with bold/italic/underline/list/link/clear toolbar. Honours `dir` for RTL editing. Used for product descriptions (EN + AR). |
 
 ### Feedback
@@ -122,6 +137,36 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
 
 - **File:** `services/auth.service.ts`
 - **Purpose:** Login, logout, session user — wraps `/api/auth/*` endpoints and exposes the current user signal
+- **`me()`** clears the cached user only when the server rejects the session (401/403). On a network drop or a 5xx it keeps the cached user, so waking a laptop no longer bounces a valid session to `/login` and back. `LoginComponent` passes `{ keepCachedOnError: false }` because its "already signed in" bounce must only follow a server-confirmed session.
+
+### Session expiry & new builds (2026-09)
+
+- **Session:** 12h rolling idle timeout on the server (`SESSION_MAX_AGE_MS`). Any API call or route change after expiry sends the operator to `/login?returnUrl=…` with the *Session expired* toast (`sendToLoginAfterSessionExpiry()` in `http-error.interceptor.ts`, one redirect per 10s).
+- **Resume check:** `AppComponent` listens to `visibilitychange`. When a shell page comes back after more than 5 minutes in the background it calls `auth.me()` and, if the session is gone, runs the same redirect straight away instead of waiting for a click to fail. The POS and the auth pages are skipped.
+- **Service worker reloads are POS-only:** `pos-sw.js` is registered on every page, but the `controllerchange` reload in `pos-service-worker.service.ts` now runs only on `/pos`, and waits until the till is idle (`setPosServiceWorkerUpdateSafe(true)`). It used to reload any admin page after a deploy, including `/login` while someone was typing.
+- **Stale chunks after a deploy:** a deploy deletes the old hashed page chunks, so a tab opened before it got a 404 on its next lazy page and the click did nothing. `withNavigationErrorHandler(reloadOnStaleBuild)` (`services/stale-build.ts`) turns a failed dynamic import into one full reload of the target URL (at most once per URL per 10s) and shows *Updated to the latest version* after the reload.
+
+### Product price vs variant prices
+
+The shop sells at the **variant's** price: that is what the storefront shows, what the bag
+charges and what the till rings up. The product's own price is a fallback for variants that
+carry none, plus a sorting key.
+
+**The product price is derived, not typed.** While a product has variants, the server sets
+`base_price_cents` to the cheapest active variant price on every save and every catalog
+import, exactly as it already re-sums the stock total — and the drawer shows the field
+read-only with "the cheapest size price, kept in step automatically", beside the stock total
+that reads the same way. Migration `042_base_price_from_variants.sql` is the one-time
+catch-up for rows written before that.
+
+It was editable, and it drifted: three live products carried a price no size actually had,
+which fed the default price of every size added afterwards, the admin price filter and the
+dashboard's price chart. A product with no variants keeps its own typed price, since that is
+what its single line is sold at.
+
+The catalog list shows `priceMin – priceMax` rather than one number, because a product's
+sizes can be priced differently and one number would read as a selling price the shop may
+not have.
 
 ### `AdminProductsService`
 
@@ -157,13 +202,14 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
 
 - **File:** `services/admin-customers.service.ts`
 - **Purpose:** Customer list, detail, create, update, soft-delete, restore, and linked order history — wraps `/api/admin/customers/*`
-- **Methods:** `list()`, `get(id)`, `getOrders(id)` → `Order[]`, `create(payload)`, `update(id, payload)`, `remove(id)` (soft-delete), `restore(id)`
+- **Methods:** `list(params?)` → `{ customers, total, page, limit, pages }` (params: `page`, `limit`, `q`, `sort`, `dir`), `get(id)`, `getOrders(id)` → `Order[]`, `create(payload)`, `update(id, payload)`, `remove(id)` (soft-delete), `restore(id)`
 - `getOrders()` fetches from `GET /admin/customers/:id/orders` — matches orders by both `customer_id` FK and `customer_email` for full history attribution
 
 ### `AdminMediaService` / `MediaUploadService`
 
 - **Files:** `services/admin-media.service.ts`, `services/media-upload.service.ts`
 - **Purpose:** `AdminMediaService` fetches the media list and handles deletes. `MediaUploadService` wraps the multipart upload to `POST /api/admin/media` with per-file progress reporting via RxJS.
+- **`validate(file, maxBytes = 50 MB)`:** local pre-flight check (type + size) shared by every upload call site, so mismatches are rejected before a round-trip. `maxBytes` is a parameter, not hard-coded — the product drawer's pre-save gallery (see below) calls it with a much lower cap, since that path doesn't hit this multipart endpoint at all.
 
 ### `AdminRefService`
 
@@ -186,6 +232,9 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
   - `getInvitations()` → `Invitation[]` — calls `GET /admin/settings/invitations`
   - `sendInvitation({ email, role })` → `{ email, inviteLink }` — generates token, returns shareable link
   - `revokeInvitation(id)` → `void` — calls `DELETE /admin/settings/invitations/:id`
+  - `getPosPolicy()` / `updatePosPolicy({ selfCloseShiftEnabled?, emergencySelfApprovalEnabled? })` → `PosPolicy` — calls `GET`/`PUT /admin/pos-security/policy`. Backs the two switches in the **Approvals** card on the Devices & Security tab: self-close of one's own shift, and letting a manager approve refunds/voids with their own PIN. Either field may be sent alone. Read is owner/admin, write is owner-only. See [12 – POS System › The Approvals card](./12-pos-system.md).
+
+> **Devices & Security lists show live rows only.** Revoked registers and used/expired/revoked setup codes are filtered out of both tables (`visibleRegisters` / `visibleTokens` computed signals) — nothing on the page can act on them and they buried the real devices. The rows are still stored server-side for the audit trail; this is a display filter, not a delete.
 
 ### `StorageService`
 
@@ -216,6 +265,67 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
   - `buildPreviewLink()` — Generates a one-time preview link with token
   - `reset()` — Clear both draft and published
 
+### Hero Slide: Linked Product & Colour Swatches
+
+In **Storefront → Home Page → Landing Hero**, each slide can be linked to a product and given up to 4 featured colourways. These render as tappable swatches under the mobile hero.
+
+**Editing flow**
+
+Each slide card is ordered as three steps, so the product is linked *before* the copy it fills in:
+
+| Step | Section | What it does |
+|---|---|---|
+| 1 | Linked Product | Pick the product; everything below fills in from it |
+| 2 | Hero Copy | Name, subtitle, EN/AR description, alt text |
+| 3 | Feature Callouts | Desktop-only annotation pills (collapsed by default) |
+
+**Linking a product fills the slide automatically.** From the product it derives:
+
+- **Name** from the product name
+- **Subtitle** as `Arabic name / Brand`, the bilingual shape the hero splits on
+- **Descriptions** from the product's **short description**. If that is empty it falls back to the first sentence of the long description with markup stripped, capped near 18 words
+- **Alt text** as `Name by Brand`
+- **Featured colours**, up to 4, preferring ones with a colour defined in Reference Data so the swatch row works immediately
+- **Each colour's hero shot**, seeded from the product's gallery colour tagging as a starting point
+
+**Your edits are never overwritten.** Fields you have already filled in are left alone when a product is linked or changed. **Refill** re-pulls everything from the product and does overwrite, for when the product has been updated and you want the slide to match.
+
+Slides that were linked to a product before auto-fill existed are backfilled when the editor loads: any blank derivable field is filled from the product. Only empty fields are touched and the content is not marked dirty, so it persists on the next real save. The backfill runs from whichever of the products or content request finishes last, since either order is possible.
+**Choosing the featured colours**
+
+The colour grid lists the product's own colours first, then the rest of the Reference Data library. Click to toggle; the cap is 4 and further chips disable once reached. Library colours the product does not carry are dimmed and italicised, and selecting one raises a warning, since the "+" link opens that product where the colourway will not be found.
+
+**Colour source and the missing-hex warning**
+
+Swatch colours come from `ref_colors` (**Reference Data → Colors**), never from the slide itself. One colour edited there updates every swatch across the app.
+
+A colour with no `ref_colors` entry **cannot render and is hidden on the storefront**. The editor surfaces this in two places: the chip shows a hatched dot with a warning icon, and a warning line lists the affected colour names. Fix it by adding the colour under Reference Data, where the existing editor provides a colour picker, hex field, and optional swatch image.
+
+This matters because the catalog uses far more colour names than `ref_colors` currently defines, so linking a product whose colours are undefined produces an empty swatch row until they are added.
+
+**Hero image per colour**
+
+Each featured colour gets its own hero shot, set under **Hero Image Per Colour**. Upload directly or pick from the media library (the same modal used elsewhere in this editor). Tapping that colour on the storefront swaps the hero image to this shot.
+
+Rows are reordered by **dragging the grip handle**; the order here is the swatch order on mobile.
+
+**There is no separate slide-image field.** Mark one colour as **Default** and its hero shot becomes the slide image, so the hero always opens on a real colourway that the visitor can switch away from and back to. If no colour is marked, the first one is used. A default colour with no image of its own falls back to whatever slide image was previously stored.
+
+These are **not** the product's gallery images. Two distinct datasets with different jobs:
+
+| | Hero image per colour | Product gallery colour images |
+|---|---|---|
+| Set in | Storefront → Landing Hero | Catalog → product → gallery |
+| Stored as | `colors[].imageUrl` on the slide | `product_color_images` |
+| Used by | The home hero only | The product detail page gallery |
+| Typical art | Cutout styled for the hero stage | Standard product photography |
+
+A colour with no hero shot keeps the slide's default image. That is legitimate, and the editor lists those colours in a warning so it stays a deliberate choice rather than an oversight.
+
+For visual consistency, hero shots should match the slide image's angle, crop, and background treatment, or the product appears to jump as a visitor taps between colours.
+
+**Data shape** — the slide stores `productId` and `colors: [{ label, slug, imageUrl }]`. `slug` is generated with the same rule the storefront product page uses to read its `?color=` param, so the "+" link always resolves correctly. Colour *values* (hex, swatch dot) are still never copied onto the slide; they resolve from `ref_colors` at render time.
+
 ### `ToastService`
 
 - **File:** `services/toast.service.ts`
@@ -226,9 +336,10 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
 ### `NotificationService`
 
 - **File:** `services/notification.service.ts`
-- **Purpose:** Manages global notification state and unread counts
-- **Features:** Supports `push()`, `dismiss()`, `markRead()`, `markAllRead()`, and time-ago formatting
-- **Current State:** Seeded with mock data, ready to be wired to Server-Sent Events (SSE) or WebSockets
+- **Purpose:** The top-bar bell. Real data from `GET /api/admin/notifications` (rows written by `server/lib/staff-notify.js` when a website order is paid). The hard-coded seed list it used to render (fake orders such as "ORD-1049") was removed on 2026-09-26.
+- **Polling:** starts and stops with `AuthService.isAuthenticated()` (never on the login page; a sign-out clears the feed because read state is per user). Every 20 s while the tab is visible, 60 s while hidden, immediately when the tab becomes visible again.
+- **New order alert:** a short synthesized chime (WebAudio, no audio file) and a desktop notification (Notification API, `tag: elite-order-<id>` so the OS keeps one per order). A shared `localStorage` key (`elite.notif.alertedId`) stops two open tabs from both alerting. Sound is a per-browser preference (`elite.notif.sound`); desktop alerts need the browser permission, requested only from a click ("Turn on" in the bell footer or Settings → Notifications). Both work only while the admin is open in a tab; the order email covers the closed-browser case.
+- **Read state:** opening the dropdown marks everything as seen (`POST /api/admin/notifications/read`, a per-user high-water mark). Items unread at open stay highlighted until the dropdown closes.
 
 ### `ConfirmService`
 
@@ -257,8 +368,11 @@ All admin services inject `ApiClient` and call `firstValueFrom()` to return Prom
 
 - **File:** `interceptors/http-error.interceptor.ts`
 - **Purpose:** Global HTTP error interceptor
-- **Features:** Catches all failed HTTP requests globally and displays contextual toasts via `ToastService` based on status code (401, 403, 404, 422, etc.).
-- **401 handling:** Uses `toast.error` (not warning) and redirects to `/login?returnUrl=<current-path>` so the admin lands back on the same page after re-authenticating. Skipped when the request is the `/auth/me` auth probe or when already on `/login`.
+- **Features:** Catches all failed HTTP requests globally and displays contextual toasts via `ToastService` based on status code (401, 403, 404, 413, 422, 429, etc.).
+- **401 handling:** Uses `toast.error` (not warning) and redirects to `/login?returnUrl=<current-path>` so the admin lands back on the same page after re-authenticating. Skipped when the request is the `/auth/me` auth probe, a manager-PIN verify, a POS register-binding call (`/pos/registers/(check-in|claim|enroll|release)`), when already on `/login`, or when a redirect already fired in the last 10 seconds.
+- **Login-bounce loop breaker:** redirecting to `/login` only helps when signing in changes the outcome. `LoginComponent.ngOnInit` calls `auth.me()` and, finding a perfectly valid session, sends the operator straight back to `returnUrl` — so a 401 that was *not* an expired login ping-ponged between `/pos` and `/login` forever, one "Session expired" toast per lap, escapable only by clearing cookies. That was a real production incident: a POS terminal whose register had been deleted got `401 REGISTER_CREDENTIAL_INVALID` from `/pos/registers/check-in`. Both halves are fixed — the server no longer answers 401 there (see [12 – POS System](./12-pos-system.md)), and the interceptor caps `/login` redirects at one per 10 seconds so any future misclassified 401 costs a single bounce instead of an endless one.
+- **403, 404, 413, 429 handling:** each shows a status-appropriate title, but the sub-text prefers the server's JSON `message` over the fixed generic copy, falling back to the generic string only when the response has none (e.g. a proxy-level block with no parseable body). Every `PosError` and rate-limit response already carries a specific, actionable reason — "Only owners and admins can enroll POS terminals.", "This POS register is disabled or revoked.", "No active product uses barcode 6291041500213." — and showing the fixed sub-text instead threw that away. This is what a raw `413 — Request Entity Too Large` and a flat "Access denied — You don't have permission for this action" both turned out to be: the specific reason existed, the toast just wasn't showing it.
+- **Fallback branch (any status with no dedicated case):** same preference — the server's JSON `message` over the raw `${status} — ${statusText}` line, which is now only shown when there's truly no parseable body to explain what happened.
 
 ---
 
@@ -282,7 +396,8 @@ The admin portal has its own i18n dictionary with **640+ keys** covering all adm
 | `orders.*` | Orders page |
 | `customers.*` | Customer CRM |
 | `media.*` | Media library (40+ keys including auto-link) |
-| `analytics.*` | Analytics page |
+| `analytics.*` | Analytics page (includes `analytics.profit.*` for the net-profit section) |
+| `expenses.*` | Expenses ledger, categories, payment methods, recurrence |
 | `settings.*` | Settings page |
 | `dash.*` | Dashboard KPIs and charts |
 | `orderModal.*` | Order detail modal |
@@ -354,7 +469,8 @@ All models are defined in `app/models/index.ts`:
 | `Product` | id, name, nameAr?, sku, brand, price, stock, hidden, image, images[]?, variants[]?, metaTitle?, metaDesc?, slug?, enDesc?, arDesc? | Catalog, Dashboard |
 | `ProductVariant` | id, sku, size, color, material, price, stock, costPrice? | Product drawer (Variants section) |
 | `MediaFile` | id, name, kind (image/glb), size, linkedTo, preview | Media Library |
-| `Order` | id, date, customer, total, payment, fulfillment, items[], trackingNumber?, timeline[]?, notes[]? | Orders |
+| `Order` | id, date, customer, total, payment, fulfillment, items[], trackingNumber?, delivery?, timeline[]?, notes[]? | Orders |
+| `OrderDelivery` | carrier?, service?, trackingNumber?, trackingUrl?, shippedAt?, deliveredAt?, eta? | Orders · invoice |
 | `OrderTimelineEntry` | id, ts, kind, detail?, actor? | Order drawer timeline |
 | `OrderNote` | id, ts, author, initials, body | Order drawer internal notes |
 | `Customer` | id, name, email, city, orders, ltv, sizePref, notes, phone?, joined?, lastOrder? | Customers |
@@ -388,8 +504,57 @@ The variant table column order was researched against Shopify, WooCommerce, BigC
 | **Price** | ✅ | Core commercial field; inline "QAR" prefix |
 | **SKU** | ✅ | All platforms keep it visible — warehouse, POS, barcodes |
 | Material | ⌄ collapsible | Set once at setup, never changed day-to-day |
+| Barcode | ⌄ collapsible | Defaults to the variant's own SKU on save unless overridden — see "Barcode & label printing" below |
 | Cost | ⌄ collapsible | Finance input entered once; drives margin |
 | Margin | ⌄ collapsible | Read-only calculated output; "set cost to calculate" hint |
+| Size note EN / AR | ⌄ collapsible | Copy shown on the storefront when this size is picked — see "Per-variant size note" below |
+
+### Barcode & label printing (2026-07)
+
+Every variant now carries a `barcode` (`product_variants.barcode`), scanned by POS (`GET /api/pos/products/barcode/:barcode`, see [12 — POS System](./12-pos-system.md)). There is no separate barcode-numbering scheme — barcode defaults to the variant's own SKU (encoded as Code128, which handles arbitrary alphanumeric strings), editable per-variant in the collapsible detail row if a real supplier-issued barcode exists instead.
+
+- **Server default:** `replaceVariants()` in `admin-products.route.js` resolves `barcode = trim(variant.barcode) || sku` for every row before insert, and rejects (400) a save where two variants would resolve to the same barcode (`product_variants` has `UNIQUE(tenant_id, barcode)` partial index from `015_pos_foundation.sql`).
+- **Existing catalog backfill:** `ensure-migrations.js` runs `UPDATE product_variants SET barcode = sku WHERE barcode IS NULL OR blank` on every server boot (idempotent), so pre-existing variants become scannable without being re-saved.
+- **Size dropdown grouping:** the per-variant size field is a `<select>` grouped by Reference Size Set (`<optgroup>` per set) rather than one flattened list — prevents picking a value from the wrong set (e.g. a Belts-cm size on a shoe variant).
+- **Label printing:** `LabelPrinterService` (`services/label-printer.service.ts`) renders Code128 barcodes via `jsbarcode` into a print-ready popup window (same `window.open` + `window.print()` pattern as the order invoice), showing brand, product name, variant, barcode, and price. Triggered per-variant ("Print barcode label" icon) or in bulk for the whole product ("Print Labels" in the variants footer).
+  - **Price in both languages, one row.** The label's price line is a two-column flex row: `QAR 1299.50` on the left, the same number read in Arabic on the right (`١٬٢٩٩٫٥٠ ر.ق`). The Arabic form comes from `Intl.NumberFormat('ar-QA-u-nu-arab', …)` — the `-u-nu-arab` extension is what asks for Arabic-Indic digits, rather than transliterating them by hand — exported as `arabicPrice()` so the on-page sheet and the printed sticker cannot drift. The Arabic column carries its own `direction: rtl` and a font stack with real Arabic glyphs, because Helvetica alone renders these as boxes on a Windows till.
+  - **On-page barcode sheet.** "Show barcodes" in the variants footer renders every variant's code on the page — the same JsBarcode output the printer gets, laid out in the same order (brand, name, variant, bars, code, both prices). Barcodes previously existed only inside the print popup, so checking a code meant printing a label and looking at the paper; a code can now be scan-tested straight off the screen. `ap-barcode` (`shared/barcode/barcode.component.ts`) is the shared renderer, also used live under the barcode field in each variant's expanded row so a typo is visible where it is made.
+
+### Product note and per-variant size note (2026-08)
+
+Two fields, deliberately separate, that stack into one panel on the storefront:
+
+| | Edited in | Applies to | Shows |
+|---|---|---|---|
+| **Product note** (`noteEn` / `noteAr`) | ⑤ Description section, under Short description | The whole product | Always, from page load |
+| **Size note** (`noteEn` / `noteAr` on the variant) | ④ Variants → size row → ⌄ detail | One size + colour combination | Only when that size is selected |
+
+On the product page the two render as one dark glass panel mounted **inside the gallery frame, bottom-inline-start**, over the photo itself: the product note on the first row, a hairline, then the size note prefixed by a gold size badge. Placing it on the image is deliberate — a note below the gallery can be scrolled past, and the photo is exactly where the question it answers gets asked.
+
+The image counter moves into that same bar rather than floating beside it, so the frame carries one composed element instead of two competing chips. Two rules keep that from disturbing anything that already worked:
+
+- **The counter does not mirror.** It holds the bottom-right corner in Arabic as well as English — it is a UI landmark people look for in a fixed spot, not prose. The bar reverses under RTL so the note falls on the free side instead. The note itself still inherits the document direction, so its Arabic text and gold size badge lay out right-to-left correctly.
+- **The scrim appears only when a note is present.** With just the counter the photo is left undarkened, at the same 15px inset it always had.
+
+The size picker column repeats only the size note, as a plain line under the size buttons (`aria-live="polite"` so a screen reader announces it on selection). The product note is not repeated there — it is permanent on the frame.
+
+### Per-variant size note (2026-08)
+
+`product_variants.note_en` / `note_ar` (migration `031_variant_notes.sql`) carry one short line describing a construction detail that belongs to some sizes and not others — the case that prompted it was a garment whose 2-4 sizes ship with a back zipper while the 6-10 sizes do not. Without it the only ways to state the difference were re-shooting the gallery per size range or splitting one product into two, both of which cost far more than a sentence.
+
+- **Where it is edited:** the collapsible detail row of each variant, on its own full-width line below the Material / Barcode / Cost / Shipping / Total / Margin grid, because a note is a sentence rather than a figure. The Arabic input is `dir="rtl"`.
+- **Where it surfaces:** the storefront product page, twice — as a line directly under the size options (`aria-live="polite"`, so screen readers announce it when the size changes), and again as a chip under the gallery carrying the size number, since by the time the customer has scrolled to the photos the size picker is out of view.
+- **Scoping:** the note is read from the variant matching both the selected size and the selected colour, the same rule `availableSizes` uses. A note set on the sage variant never shows while the customer is looking at the navy one.
+- **Empty is empty:** a blank note renders nothing at all — no placeholder line, no empty chip. Clearing the field in the admin clears the stored value rather than leaving the previous one behind.
+- **Fallback:** if only one language is filled in, the other locale shows that one rather than nothing (same shape as `productTeaser` / `productDescription`).
+
+### Bilingual policy pages (2026-08)
+
+`policies.title_ar` / `content_ar` (migration `032_policy_arabic.sql`) hold an optional Arabic title and rich-text body for legal pages — Privacy Policy, Shipping Policy, etc. Before this the table had one English title/content pair, so the storefront's Arabic locale showed English legal copy with no way to fix it from the admin.
+
+- **Where it is edited:** `policy-drawer.component.ts`, directly under the existing English title and content fields — a "Title (Arabic)" text input (`dir="rtl"`), and a second `ap-rich-text` editor for the Arabic body. Both optional; leaving them blank is the supported way to keep a policy English-only.
+- **Fallback:** empty is not an error state. The storefront's Arabic locale shows `titleAr`/`contentAr` when set, otherwise falls back to the English `title`/`content` — the same shape `productTeaser` / `productDescription` and the per-variant notes already use, so a policy saved before this feature existed still renders instead of going blank.
+- **Where it surfaces:** `policy.component.ts` (the `/policy/:handle` page) and the footer's policy link list (`footer.component.ts`), both locale-aware.
 
 ### CSS Grid
 
@@ -398,13 +563,32 @@ The variant table column order was researched against Shopify, WooCommerce, BigC
 Photo Color                 Size   Stock   Price   SKU                  Actions
 ```
 
+### Which gallery image the storefront shows
+
+The product drawer's Image Gallery is the only place the card image is chosen:
+
+- **Drag thumbnails** to reorder, or click the ✓ action on a thumbnail ("Set as primary") to move it
+  to position 1. Position 1 carries the `Primary` badge.
+- That order is saved to `media_links.sort_order`, and the storefront reads it in the same order, so
+  **the first thumbnail is the image on the collections card and the first frame of the PDP gallery**.
+- Per-colour images (below) only override the card when a colour was **explicitly** linked to an
+  image. An unlinked colour shows the primary image.
+
+Before September 2026 neither half of that held: the API ranked locally-uploaded media above
+externally-hosted media before honouring `sort_order` (so a gallery mixing an upload with a Google
+Drive link ignored the drag order), and the storefront guessed an unlinked colour's image from its
+position in the gallery. See [05 – API Server](./05-api-server.md#which-image-the-storefront-shows-image-ordering).
+
 ### Color → Image Linking
 
-Each color variant can be linked to one gallery image via the photo cell in the row:
-- Click the photo cell → image picker popover opens (to the right)
-- Selecting an image stores `imageColors[imageUrl] = colorName` in the product form
-- The storefront uses this map to show the correct image for each color
-- Gallery thumbnails display a read-only color badge for linked images
+Each color can hold several gallery images (2026-10-02), with one of them as its **card cover**:
+- Click the photo button on the color's row → a centered **dialog** opens ("Link photo for Black"). Large tiles (~120px) show every gallery image; tap the ones that show this color (selected = gold outline + check). The color's own photos come first (order fixed when the dialog opens, so tiles do not jump while picking; after a save they are first next time), the rest follow in gallery order. Photos used by another color are dimmed with that color's name; tapping one moves it here. "Clear all" removes the color's photos. Esc, the overlay, ✕ or **Done** close it; the dashed **Add more photos / Browse media library** tile is the last item of the grid (same size as the photos) and opens the media library, then reopens the dialog. State: `pickerGroup` computed from `variantPickerOpenId`; classes are namespaced `.cp-*`.
+- **Order within a color:** drag the selected tiles onto each other (`moveColorImage`). The color's photos swap among the gallery slots they already hold, so no other photo moves and no new field is stored; the storefront shows them in that order (cover first). If the color's first photo changes and no star was picked, the new first photo is the card cover. Only selected tiles are draggable.
+- Each selected tile has a **star**; the starred one is the **card cover** and shows a "Card cover" pill under the tile. Without a pick, the color's first image in gallery order is the cover.
+- Selecting stores `imageColors[imageUrl] = colorName` and `colorCovers[colorName] = imageUrl` in the product form (`colorCovers` is sent on save; the server ignores a cover whose image is no longer tagged with that color).
+- The photo count ("4 photos") shows beside each color's photo cell.
+- The storefront shows only the picked color's images (cover first) plus untagged images. A color with no photos keeps the old behaviour (full gallery, product image first).
+- Gallery thumbnails display a read-only color badge for linked images, with "(Card cover)" on the cover
 - A transparent full-screen backdrop closes the picker on outside click
 
 ### Collapsible Detail
@@ -645,73 +829,17 @@ See [08 – Database & API Implementation](./08-database-api-implementation.md) 
 
 ## POS System
 
-> **Status: Planned — not yet built.** The architecture below is the target design. Implementation follows the acceptance criteria in [`docs/pos-system-plan.html`](./pos-system-plan.html). The server route (`admin-pos.route.js`), Angular page (`pages/pos/`), and POS services do not yet exist in the codebase.
+> **Status: Implemented baseline.** The `/pos` route is a standalone full-screen Angular page backed by authenticated `/api/pos/*` routes, PostgreSQL POS records, IndexedDB offline state, a service-worker app shell, and QZ Tray hardware integration.
 
-The `/pos` route will be a standalone full-screen page that hides the sidebar and topbar. It is designed as a **Progressive Web App (PWA)** with offline support.
+The implemented workflow covers register selection (the "which till is this?" picker, with setup tokens as the remote-setup fallback), shift open/close, catalog and barcode lookup, cash, manual-card and manual-Sadad checkout (Sadad needs the transaction ID from the Sadad merchant app, see docs/12), offline synchronization, parked carts, receipt printing, refunds, same-shift voids, manager approvals, live stock events, and conflict reconciliation.
 
-### Target Architecture
+**Payment methods across back-office pages.** Sadad is the third tender next to cash and card, and it is carried everywhere money is counted. The current-shift panel and printed Z-report show cash, card and Sadad sales separately; the Z-history CSV has a Sadad Sales column. Reports show the method by name (Cash / Card / Sadad, EN + AR via `payment.method.*`). The **Settlements** tab (formerly Card Settlement) has an All / Card / Sadad filter and a Method column. **Z-report Excel.** Each closing has a readable number (`Z-DDMM-YYYY-NNN`) shown in the POS Z-history dialog and in a Z Number column on Reports → Z-Reports. Both lists have an **Excel** button per closing that downloads the team's "Daily Sales Report (Z-Report)" sheet: header block, one line per SKU / color / size / price / method with sold, returned and net quantity, totals, and the cash / card / Sadad split. The Reconciliation page has a Card / Sadad switch at the top: each tender is reconciled separately (`pos_card_reconciliation.method`, one row per register, day and method), card against the bank export and Sadad against the Sadad merchant panel settlement.
 
-```
-pages/pos/                          (planned)
-├── pos.component.ts                ← Main layout (left grid + right cart, full-width dark theme)
-├── pos-product-grid.component.ts   ← Scrollable 3-col product grid, tap-to-add
-├── pos-cart.component.ts           ← Live order panel with qty controls, discount field
-├── pos-checkout.component.ts       ← Cash / Card / Split payment modals + change calculator
-├── pos-receipt.component.ts        ← ESC/POS receipt overlay (print + email + new sale)
-├── pos-scanner.component.ts        ← Camera viewfinder via @zxing/browser
-├── pos-refund.component.ts         ← Returns flow (scan receipt QR or lookup by order ID)
-├── pos-z-report.component.ts       ← X Report (mid-shift) and Z Report (end-of-day close)
-├── pos-label-print.component.ts    ← Barcode label generation (Code 128/EAN-13, 30×20mm)
-└── pos-manager-pin.component.ts    ← Manager PIN overlay for restricted actions
+**QNB card machine (integrated tills, 2026-10-01).** A till cabled to the branch's QNB terminal is set to **Linked to this till** in the POS Hardware dialog (owner/admin; `PUT /api/admin/pos-security/registers/:id/card`, persisted in `pos_registers.card_mode`). Its card tender then charges the terminal through the local Elite Card Bridge (`PosCardTerminalService`, `127.0.0.1:8183`), mirrors the terminal screen, completes the sale on approval, prints the bank's slip, and runs voids, card-present refunds, logon and CloseBatch on the terminal. Terminal operations are stored in `pos_card_attempts` (migration 047); unresolved ones appear as a "Card payments to check" banner on the till. Other tills stay **Manual** (typed approval code). Details: [12 – POS](./12-pos-system.md#card-terminal-qnb-ecr), [39 – QNB card terminal](./39-qnb-card-terminal-integration.md).
 
-services/                           (planned)
-├── pos.service.ts                  ← Cart state (Angular signals), scan logic, transaction API
-├── pos-sync.service.ts             ← Offline IndexedDB queue + background sync on reconnect
-└── escpos.service.ts               ← ESC/POS byte stream builder, WebUSB/TCP printer + cash drawer
-```
+Printing uses QZ Tray with authenticated server-side signing and a loopback device signer for offline operation. It does not use the older proposed WebUSB or direct TCP printer design.
 
-### Scanner Input
-
-**USB Barcode Scanner** (HID keyboard emulation) — zero config. The search input detects ≥ 6 keystrokes arriving within 100ms and treats the sequence as a scan, not manual typing. Auto-looks up `product_variants.barcode`.
-
-**Camera Scanner** — `@zxing/browser`, triggered by the "📷 Camera Scan" button. Uses `facingMode: 'environment'` (rear camera). Supports EAN-13, EAN-8, Code 128, QR.
-
-### ESC/POS Thermal Printing
-
-Receipts are sent as raw ESC/POS byte streams to a Bixolon 80mm thermal printer via:
-- **WebUSB** — direct USB connection from the browser (Chrome/Edge on Windows)
-- **TCP Socket** — server calls `POST /api/pos/print/receipt`, which opens a TCP socket to the printer on port 9100
-
-After each cash sale the server sends an RJ12 cash drawer pulse (`ESC p 0x00 0x19 0xFA`) through the printer.
-
-### Offline PWA
-
-Service Worker caches the app shell and product catalog. Sales made offline are queued to **IndexedDB** via `pos-sync.service.ts` and auto-posted to `POST /api/pos/transactions` when connectivity is restored. A banner shows pending queue count.
-
-### Park & Resume
-
-Up to 5 carts can be suspended simultaneously. Parked carts are stored in `pos_parked_carts` (server, 4-hour TTL) and also in IndexedDB for offline access.
-
-### Role-Based Security (Manager PIN)
-
-| Action | Cashier | Manager |
-|---|---|---|
-| Apply discount > 10% | ✗ | ✔ (PIN) |
-| Void transaction | ✗ | ✔ (PIN) |
-| Process refund | ✗ | ✔ (PIN) |
-| Run Z Report (close day) | ✗ | ✔ (PIN) |
-| Manual cash drawer open | ✗ | ✔ (PIN) |
-
-PINs are stored as bcrypt hashes in `admin_users.pos_pin_hash`. The PIN overlay does not log out the active cashier session.
-
-### X Report & Z Report
-
-- **X Report** — read-only mid-shift snapshot. Any role can run it. Does not reset counters.
-- **Z Report** — end-of-day close. Manager PIN required. Saves an immutable signed record to `pos_z_reports`. Includes: gross sales, refunds, net sales, cash/card breakdown, opening float, expected cash, physical cash count, and over/short variance.
-
-### Barcode Label Printing
-
-Labels are generated client-side using `bwip-js`. Format: Code 128 (alphanumeric SKU) or EAN-13 (numeric). Size: 30×20mm. Compatible with Dymo LabelWriter 450 and Zebra ZD220. Bulk print is available from the Catalog page (select variants → "Print Labels").
+For architecture, data flow, current limitations, API behavior, setup, testing, and operations, use [12 – POS System and Integration](./12-pos-system.md). For physical terminal installation and acceptance, use the [POS Hardware Runbook](./pos-hardware-runbook.md).
 
 ---
 
@@ -721,3 +849,19 @@ Labels are generated client-side using `bwip-js`. Format: Code 128 (alphanumeric
 - [05 – API Server](./05-api-server.md) — Express API details
 - [06 – White-Label Guide](./06-white-label-guide.md) — Rebranding the admin
 - [08 – Database & API Implementation](./08-database-api-implementation.md) — PostgreSQL schema and endpoint map
+
+### Storefront editor: Contact
+
+The **Info Blocks** sub-tab is now **Branches and stockists**.
+
+- **Branches** carry name, address, phone, map link, Google Maps embed URL, coordinates, parking, and opening hours as whole 24h hours for the Sunday-Thursday and Friday-Saturday bands. Those hours drive the `Open now` badge on the storefront and the opening hours sent to Google, so they are numbers rather than free text.
+- **Stockists** are for shops that carry Elite but are not Elite premises. Their map link points at the host store and is never published as an Elite location.
+- The embed URL is checked against `google.com/maps/embed` on the server and again in the storefront before it is bound to an `iframe src`, so content editing cannot frame a third-party page.
+- Arabic fields were added for the subhead, promise line and signature. Previously those were single fields, which is why the Arabic contact page showed English copy.
+
+
+### Restock demand (2026-09-14)
+
+`RestockRequestsService` uses `/api/admin/restock-requests`, `/summary`, `/:id/resend`, `/:id/cancel`, and `/export.csv`. Requests are tenant-scoped and use the same session access as Catalog. Detail lists use pages of 100; grouped summaries return up to 1,000 combinations. Resend schedules a due request; it still waits for stock and valid email configuration. Cancelled requests cannot be reactivated by resend.
+
+The Catalog editor reads waiting counts beside each variant. The dashboard reads the five most-requested sold-out combinations. The underlying table is `restock_notifications` (migration 039); all page text is English/Arabic. See [the stock plan](./35-stock-availability-and-restock-plan.md) for dispatch, retention and deployment details.

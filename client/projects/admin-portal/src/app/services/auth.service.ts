@@ -3,7 +3,7 @@ import { firstValueFrom, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { ApiClient } from './api-client.service';
 
-export type UserRole = 'owner' | 'admin' | 'manager' | 'viewer';
+export type UserRole = 'owner' | 'admin' | 'manager' | 'cashier' | 'viewer';
 
 export interface AuthUser {
   id: string;
@@ -33,17 +33,29 @@ export class AuthService {
   readonly isAuthenticated = computed(() => this._user() !== null);
   readonly role = computed<UserRole | null>(() => this._user()?.role ?? null);
 
-  /** Hit `/api/auth/me`. Returns the user on success, `null` on 401. */
-  me(): Promise<AuthUser | null> {
+  /**
+   * Hit `/api/auth/me`. Returns the user on success and `null` when the server
+   * rejects the session (401/403). A network drop or a server error says
+   * nothing about the session, so it keeps the cached user instead of
+   * bouncing a signed-in operator to /login (e.g. right after a laptop wakes).
+   * Every API call is still authorized server-side, so a truly expired session
+   * reaches /login through the interceptor's 401 handling.
+   * Pass `keepCachedOnError: false` where only a confirmed session will do.
+   */
+  me({ keepCachedOnError = true } = {}): Promise<AuthUser | null> {
+    const cachedUser = this._user();
     return firstValueFrom(
       this.api.get<AuthUser>('/auth/me').pipe(
         map((u) => {
           this.setUser(u);
           return u;
         }),
-        catchError(() => {
-          this.setUser(null);
-          return of(null);
+        catchError((error: { status?: number }) => {
+          if (error?.status === 401 || error?.status === 403) {
+            this.setUser(null);
+            return of(null);
+          }
+          return of(keepCachedOnError ? cachedUser : null);
         }),
       ),
     );

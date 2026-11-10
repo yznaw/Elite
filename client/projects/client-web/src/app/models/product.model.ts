@@ -1,17 +1,49 @@
 export interface ProductVariant {
+  isActive?: boolean;
   id?: string;
   sku?: string;
   size?: number;
   color?: string;
   material?: string;
+  /** Detail that applies to this size/colour only, e.g. a back zipper on the
+   *  small sizes. Shown next to the size picker so one gallery can cover a
+   *  range whose construction is not identical throughout. */
+  noteEn?: string;
+  noteAr?: string;
   price?: number;
   stock: number;
 }
 
 export interface Product {
   id: string;
+  /**
+   * The product's public URL segment (`/product/<slug>`), generated from the
+   * name when the admin saves and unique per tenant. Empty on a product saved
+   * before slugs existed; `ProductsService.productKey()` falls back to the id,
+   * which the storefront and API both still resolve.
+   */
+  slug?: string;
   name: string;
+  nameAr?: string;
   brand?: string;
+  /** Legacy long copy. No longer editable in the admin; kept only as a
+   *  fallback for the Material & Care section on products saved before it
+   *  existed. May contain rich-text markup. */
+  descriptionEn?: string;
+  descriptionAr?: string;
+  /** Hook: one-line copy for compact surfaces such as the home hero. */
+  shortDescriptionEn?: string;
+  shortDescriptionAr?: string;
+  /** Short description shown directly under the product name on the PDP. */
+  teaserEn?: string;
+  teaserAr?: string;
+  /** Product-wide note. Shown on the PDP whether or not a size is selected;
+   *  a per-variant note stacks under it once a size that has one is picked. */
+  noteEn?: string;
+  noteAr?: string;
+  /** Material & Care copy, its own PDP section. May contain rich-text markup. */
+  careInstructionsEn?: string;
+  careInstructionsAr?: string;
   price: number;
   tag: string;
   leather: string;
@@ -28,6 +60,8 @@ export interface Product {
   images?: string[];
   imageVariants?: Record<string, Record<string, { url: string; width?: number; mimeType?: string }>>;
   colorImages?: Record<string, string>;
+  /** Every image of each colour, cover first. Keys are lower-cased colour names. */
+  colorGalleries?: Record<string, string[]>;
   variants?: ProductVariant[];
   relatedProductIds?: string[];
 }
@@ -43,4 +77,6 @@ export interface CartItem {
   color?: string | null;
   size: number;
   qty: number;
+  /** Units still in stock for this variant, from the server cart. null when the line has no variant to check. */
+  available?: number | null;
 }

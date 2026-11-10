@@ -1,7 +1,9 @@
 require('dotenv').config();
+const { startRestockDispatchJob } = require('./lib/restock-dispatch-job');
 const express = require('express');
 const cors = require('cors');
-const morgan = require('morgan');
+const helmet = require('helmet');
+const pinoHttp = require('pino-http');
 const session = require('express-session');
 const PgSimple = require('connect-pg-simple')(session);
 
@@ -13,9 +15,23 @@ const { ensureDefaultTenant } = require('./db/tenant');
 const { ensureReferenceSchema } = require('./db/reference-schema');
 const { ensureProductRecommendationsSchema } = require('./db/product-recommendations-schema');
 const { ensureRestockNotificationsSchema } = require('./db/restock-notifications-schema');
+const { ensurePosSchema } = require('./db/pos-schema');
 const { ensureAllMigrations } = require('./db/ensure-migrations');
 const { uploadsDir, publicBase: uploadsPublicBase } = require('./lib/storage');
 const { startPendingOrderCleanup } = require('./lib/pending-order-cleanup');
+const { startInventoryConsistencyJob } = require('./lib/pos/inventory-consistency-job');
+const { startPaidOrderStockSweep } = require('./lib/order-stock');
+const { startApprovalReminderJob } = require('./lib/staff-notify');
+const { assertProductionEnv, DEV_SESSION_SECRET } = require('./config/assert-env');
+const { csrfProtection } = require('./middleware/csrf');
+const { isSadadCallback } = require('./lib/payment-callback');
+const { requestId } = require('./middleware/request-id');
+const { logger, httpLoggerOptions } = require('./lib/logger');
+const { recordError, serverErrorSurge, SURGE_THRESHOLD } = require('./lib/error-log');
+const { sendAlert } = require('./lib/alerts');
+const { startQueueWatchJob } = require('./lib/pos/queue-watch-job');
+
+assertProductionEnv();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -43,10 +59,14 @@ function originFromUrl(value) {
 }
 
 const configuredOrigins = csv(process.env.CORS_ORIGINS);
-const defaultAllowedOrigins = ['http://localhost:4200', 'http://localhost:4300'];
+// Dev-only convenience defaults — never trusted in production, where
+// CORS_ORIGINS must be set explicitly (enforced by assertProductionEnv above).
+const defaultAllowedOrigins = isProd ? [] : ['http://localhost:4200', 'http://localhost:4300'];
 const sadadAllowedOrigins = new Set([
   'https://sadadqa.com',
   'https://www.sadadqa.com',
+  // The legacy checkout endpoint forwards the browser to this payment host.
+  'https://payment.sadadqa.com',
   originFromUrl(process.env.SADAD_ENDPOINT || 'https://sadadqa.com/webpurchase'),
   ...csv(process.env.SADAD_CORS_ORIGINS),
 ].filter(Boolean));
@@ -72,19 +92,68 @@ function isAllowedOrigin(origin) {
 if (isProd) app.set('trust proxy', 1);
 
 // ─── Middleware ──────────────────────────────────────────────────────────────
+// First in the chain: every log line, error row, audit row and cashier-facing
+// reference code downstream shares this one id (docs/24, Phase A).
+app.use(requestId());
+
 app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. curl, Postman)
-      if (!origin || isAllowedOrigin(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS blocked: origin ${origin} not allowed`));
-      }
+  helmet({
+    // Report-only for the first rollout window (docs/15 Phase 1) — flips to
+    // enforcing via CSP_REPORT_ONLY=false once violation reports are clean.
+    contentSecurityPolicy: {
+      reportOnly: process.env.CSP_REPORT_ONLY !== 'false',
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        fontSrc: ["'self'"],
+        connectSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        frameAncestors: ["'self'"],
+        // Report-only mode was previously emitting reports to nowhere, which
+        // made docs/15 Phase 1's "review violation reports before enforcing"
+        // gate impossible to satisfy. Reports now land in app_errors with
+        // source='csp' and are visible on the Diagnostics page.
+        reportUri: ['/api/client-logs/csp'],
+      },
     },
-    credentials: true,
-  })
+    // The admin portal loads uploaded images/media cross-origin in dev.
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }),
 );
+
+const corsMiddleware = cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g. curl, Postman)
+    if (!origin || isAllowedOrigin(origin)) {
+      callback(null, true);
+    } else {
+      const error = new Error(`CORS blocked: origin ${origin} not allowed`);
+      // An untrusted client is a 403, not an API fault. In particular, do
+      // not count these rejections toward server-error surge alerts.
+      error.status = 403;
+      error.code = 'CORS_ORIGIN_DENIED';
+      callback(error);
+    }
+  },
+  credentials: true,
+  // The admin portal is cross-origin in dev (4300 → 3000). Without this the
+  // browser cannot read the correlation id off a response, so the client
+  // log shipper would have nothing to tie its entries to a server request.
+  // Content-Disposition carries a download's file name (the stock sheet is
+  // named after its location).
+  exposedHeaders: ['X-Request-Id', 'Content-Disposition'],
+});
+
+app.use((req, res, next) => {
+  // A payment form redirected through an opaque/sandboxed document can carry
+  // the literal Origin: null. Let only this signed callback reach checksum
+  // validation. Do not grant null origins CORS access or credentials.
+  if (req.get('origin') === 'null' && isSadadCallback(req)) return next();
+  return corsMiddleware(req, res, next);
+});
 
 function captureRawBody(req, _res, buf) {
   if (buf && buf.length > 0) req.rawBody = Buffer.from(buf);
@@ -92,13 +161,16 @@ function captureRawBody(req, _res, buf) {
 
 app.use(express.json({ limit: '10mb', verify: captureRawBody }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(morgan('dev'));
+// Structured request logging. Replaces morgan('dev'), which carried no
+// timestamp, request id, user or tenant and so could not be used to
+// reconstruct an incident after the fact (docs/24, Phase B).
+app.use(pinoHttp(httpLoggerOptions));
 
 // ─── Sessions (cookie + Postgres-backed store) ───────────────────────────────
 app.use(
   session({
     name: process.env.SESSION_COOKIE_NAME || 'elite.sid',
-    secret: process.env.SESSION_SECRET || 'dev-session-secret-change-me-in-production',
+    secret: process.env.SESSION_SECRET || DEV_SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     rolling: true,
@@ -116,12 +188,38 @@ app.use(
   }),
 );
 
+// ─── CSRF (Origin/Sec-Fetch-Site + double-submit cookie) ─────────────────────
+// Behind a flag for the initial rollout per docs/15 Phase 1; defaults on.
+if (process.env.CSRF_ENFORCE !== 'false') {
+  app.use(csrfProtection({ allowedOriginCheck: isAllowedOrigin }));
+}
+
 // ─── Static uploads ──────────────────────────────────────────────────────────
 // Served at both /uploads/ (legacy, direct host access) AND /api/uploads/
 // (via the /api proxy so admin.example.com/api/uploads/… always resolves).
-const staticOpts = { maxAge: '1y', immutable: true, fallthrough: false };
-app.use(uploadsPublicBase, express.static(uploadsDir, staticOpts));
-app.use('/api/uploads', express.static(uploadsDir, staticOpts));
+const staticOpts = {
+  maxAge: '1y',
+  immutable: true,
+  fallthrough: false,
+  setHeaders: (res, filePath) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    // Express's mime table predates AVIF, so an .avif upload goes out as
+    // application/octet-stream. Chrome sniffs and renders it anyway; Safari
+    // does not, and neither does anything that trusts the header (link
+    // previews, image CDNs). The uploader already accepts image/avif.
+    if (filePath.toLowerCase().endsWith('.avif')) res.type('image/avif');
+  },
+};
+// Old uploads may predate validation. Never serve active file types.
+function imageOnly(req, res, next) {
+  let pathname;
+  try { pathname = decodeURIComponent(req.path); } catch { return res.sendStatus(404); }
+  if (!/\.(?:jpe?g|png|webp|gif|avif)$/i.test(pathname)) return res.sendStatus(404);
+  return next();
+}
+app.use(uploadsPublicBase, imageOnly, express.static(uploadsDir, staticOpts));
+app.use('/api/uploads', imageOnly, express.static(uploadsDir, staticOpts));
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 app.use('/webhooks/nbox', nboxWebhookRouter);
@@ -138,7 +236,7 @@ app.use((err, req, res, _next) => {
   if (err && err.type === 'entity.too.large') {
     return res.status(413).json({
       success: false,
-      message: 'Request body is too large. Upload images through the media uploader instead of saving large inline data URLs.',
+      message: 'This file is too large to save here. Use the media uploader for images instead — it supports files up to 50 MB.',
     });
   }
 
@@ -156,41 +254,169 @@ app.use((err, req, res, _next) => {
     return res.status(415).json({ success: false, message: err.message });
   }
 
-  console.error(err.stack);
-  res.status(err.status || 500).json({
+  const status = err.status || 500;
+  const isServerFault = status >= 500;
+
+  // Structured, correlated, and searchable. The raw message and stack always
+  // go here even when the client response hides them (see below).
+  (req.log || logger)[isServerFault ? 'error' : 'warn'](
+    { err: { message: err.message, code: err.code, stack: err.stack }, status, requestId: req.requestId },
+    'request failed',
+  );
+
+  // Persist to app_errors: 5xx always; 4xx only for POS routes, where a
+  // cashier hitting INSUFFICIENT_STOCK or a rejected receipt number is
+  // exactly the forensic trail we want. Other 4xx are ordinary client
+  // validation noise and would drown the table.
+  const isPosRoute = String(req.originalUrl || '').startsWith('/api/pos');
+  if (isServerFault || isPosRoute) {
+    void recordError({
+      source: 'server',
+      severity: isServerFault ? 'error' : 'warn',
+      code: err.code || null,
+      message: err.message || 'Internal Server Error',
+      stack: err.stack || null,
+      route: `${req.method} ${req.originalUrl}`,
+      httpStatus: status,
+      requestId: req.requestId,
+      tenantId: req.user?.tenantId,
+      userId: req.user?.id,
+      registerId: req.session?.posRegisterId,
+      context: { role: req.user?.role, details: err.details ?? undefined },
+    }).then(() => {
+      if (!isServerFault) return;
+      const surge = serverErrorSurge();
+      if (!surge.surging) return;
+      void sendAlert(
+        'server-error-surge',
+        `${surge.count} server errors in ${surge.windowMinutes} minutes`,
+        `The API recorded ${surge.count} 5xx responses in the last ${surge.windowMinutes} minutes `
+        + `(threshold ${SURGE_THRESHOLD}).\nMost recent: ${req.method} ${req.originalUrl}\n`
+        + `Reference: ${req.requestId}\n\nCheck the Diagnostics page in the admin portal.`,
+      );
+    });
+  }
+
+  // Do not leak internal detail on a 500 in production: err.message can carry
+  // SQL text, file paths, or connection strings. Deliberately-modelled errors
+  // (PosError and anything with an explicit status < 500) keep their message,
+  // because those are written to be read by a cashier.
+  // NODE_ENV is read here rather than via the module-level `isProd` so this
+  // branch is testable without spawning a second process.
+  const message = isServerFault && process.env.NODE_ENV === 'production'
+    ? 'Something went wrong on our side. Please try again.'
+    : err.message || 'Internal Server Error';
+
+  res.status(status).json({
     success: false,
-    message: err.message || 'Internal Server Error',
+    message,
+    ...(err.code ? { code: err.code } : {}),
+    // Field-level validation detail carried by PosError. Preserved here
+    // because the POS/reconciliation routers used to shape their own error
+    // responses and no longer do — see the note on those routers.
+    ...(err.details ? { details: err.details } : {}),
+    // Shown to the cashier as a short reference code, and the key an
+    // investigator greps for in the logs / Diagnostics page.
+    requestId: req.requestId,
   });
 });
 
 // ─── Boot: seed default tenant + admin user, then start ──────────────────────
-async function bootstrap() {
+
+// One arbitrary but fixed key, so every process doing boot-time schema work
+// queues on the same lock.
+const SCHEMA_LOCK_KEY = 8150025;
+
+/**
+ * Applies schema/bootstrap work, one process at a time.
+ *
+ * `CREATE TABLE IF NOT EXISTS` is not safe against *itself* running
+ * concurrently: two processes can both pass the existence check and then race
+ * on `pg_type`/`pg_class`, and the loser gets a duplicate-key error. The
+ * migration files wrap their statements in `BEGIN … COMMIT`, so that error
+ * aborts the rest of the file and the next query on that connection returns
+ * `25P02 current transaction is aborted` — leaving the schema half-applied,
+ * silently, because the catch below only warns.
+ *
+ * The lock has to cover **all** the ensure* calls, not just one of them. An
+ * earlier attempt that guarded only `ensurePosSchema` made things worse: that
+ * process held the advisory lock while waiting for a table lock held by a
+ * second process, which was itself waiting for the advisory lock — a textbook
+ * deadlock, and the suite started failing with `40P01`.
+ *
+ * This is not only a test concern, though that is where it surfaced. The same
+ * race exists whenever two API processes start together, or a deploy restarts
+ * one instance while another is still booting.
+ */
+async function prepareDatabase() {
   if (process.env.DATABASE_URL) {
     const client = await db.pool.connect();
     try {
-      const tenant = await ensureDefaultTenant(client);
-      await ensureAllMigrations(client);           // migrations 002 – 015
-      await ensureReferenceSchema(client, tenant.id);
-      await ensureProductRecommendationsSchema(client);
-      await ensureRestockNotificationsSchema(client);
+      await client.query('SELECT pg_advisory_lock($1)', [SCHEMA_LOCK_KEY]);
+      try {
+        const tenant = await ensureDefaultTenant(client);
+        // Migration 010 adds columns/FKs to ref_* tables, so the reference
+        // tables must exist first on a genuinely fresh database. Production
+        // already had them, which hid this ordering bug from normal deploys.
+        await ensureReferenceSchema(client, tenant.id);
+        await ensureAllMigrations(client);
+        await ensureProductRecommendationsSchema(client);
+        await ensureRestockNotificationsSchema(client);
+        await ensurePosSchema(client);
+      } finally {
+        await client.query('SELECT pg_advisory_unlock($1)', [SCHEMA_LOCK_KEY]).catch(() => undefined);
+      }
     } catch (err) {
-      console.warn('Tenant bootstrap failed (the server will still start):', err.message);
+      // Never serve a new binary against a partially migrated schema.
+      console.error('Database preparation failed; refusing to start:', err);
+      throw err;
     } finally {
       client.release();
     }
   } else {
     console.warn('DATABASE_URL not set — skipping tenant + admin-user bootstrap.');
   }
+}
 
-  startPendingOrderCleanup();
-
-  app.listen(PORT, () => {
-    console.log(`✅  Elite API running at http://localhost:${PORT}/api`);
-    console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+async function startServer(port = PORT) {
+  await prepareDatabase();
+  const stopInventoryConsistencyJob = startInventoryConsistencyJob();
+  const stopRestockDispatchJob = startRestockDispatchJob();
+  // Watches pos_sync_states for a register whose offline queue has stopped
+  // draining — unsynced money sitting in a browser is the top offline risk
+  // (docs/24, Phase E).
+  const stopQueueWatchJob = startQueueWatchJob();
+  // Paid website orders whose stock deduction was missed (a webhook that
+  // crashed after setting the paid flag).
+  const stopAutomaticFulfillment = require('./lib/automatic-fulfillment').startWorker();
+  const stopPaidOrderStockSweep = startPaidOrderStockSweep();
+  // Stock per location: reminds staff about paid website orders nobody has approved.
+  const stopApprovalReminderJob = startApprovalReminderJob();
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, () => {
+      const address = server.address();
+      const activePort = typeof address === 'object' && address ? address.port : port;
+      console.log(`Elite API running at http://localhost:${activePort}/api`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      resolve(server);
+    });
+    server.once('close', () => {
+      stopInventoryConsistencyJob();
+      stopRestockDispatchJob();
+      stopQueueWatchJob();
+      stopPaidOrderStockSweep();
+      stopAutomaticFulfillment();
+      stopApprovalReminderJob();
+    });
+    server.once('error', reject);
   });
 }
 
-bootstrap().catch((err) => {
-  console.error('Fatal startup error:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  startServer().catch((err) => {
+    console.error('Fatal startup error:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = { app, prepareDatabase, startServer };

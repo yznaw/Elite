@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -12,15 +12,15 @@ import { PaginationComponent } from '../../shared/pagination/pagination.componen
 import { OrderDrawerComponent } from './order-drawer.component';
 import { fulfillmentPillKind, paymentPillKind } from '../../shared/pill/status-pill';
 import { ToastService } from '../../services/toast.service';
+import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
 import { AdminOrdersService, OrderListParams } from '../../services/admin-orders.service';
 import { Order, QAR } from '../../models';
 
 @Component({
-  selector: 'ap-orders',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SortableTableComponent, CellTplDirective, SpinnerComponent, EmptyStateComponent, PaginationComponent, OrderDrawerComponent],
-  template: `
+    selector: 'ap-orders',
+    imports: [CommonModule, FormsModule, IconComponent, PillComponent, SortableTableComponent, CellTplDirective, SpinnerComponent, EmptyStateComponent, PaginationComponent, OrderDrawerComponent],
+    template: `
     <div class="page-fade">
       <!-- Row 1: search + export -->
       <div class="row gap-sm mb-10">
@@ -28,7 +28,7 @@ import { Order, QAR } from '../../models';
           <ap-icon name="search" [size]="14"/>
           <input class="inp with-icon" [placeholder]="t('orders.search.placeholder')" [ngModel]="search()" (ngModelChange)="onSearchChange($event)"/>
         </div>
-        <button class="btn btn-outline" [disabled]="exporting()" (click)="exportCsv()" title="Export CSV">
+        <button class="btn btn-outline" [disabled]="exporting()" (click)="exportCsv()" [title]="t('common.exportCsv')">
           @if (exporting()) {
             <ap-spinner/> <span class="btn-lbl">{{ t('common.exporting') }}</span>
           } @else {
@@ -53,6 +53,13 @@ import { Order, QAR } from '../../models';
           <option value="delivered">{{ t('pill.delivered') }}</option>
           <option value="returned">{{ t('pill.returned') }}</option>
         </select>
+        @if (needsApprovalCount() > 0 || needsApprovalOnly()) {
+          <!-- Stock per location: paid website orders waiting for a pickup location. -->
+          <button type="button" class="chip approval-chip" [class.active]="needsApprovalOnly()" (click)="toggleNeedsApproval()">
+            {{ t('orders.needsApproval') }}
+            <span class="chip-count">{{ needsApprovalCount() }}</span>
+          </button>
+        }
       </div>
 
       <!-- Date range filter -->
@@ -108,7 +115,13 @@ import { Order, QAR } from '../../models';
               <button class="btn btn-outline btn-sm" (click)="clearFilters()">{{ t('common.clearFilters') }}</button>
             </ap-empty-state>
           } @else {
-            <ap-sortable-table [columns]="columns" [rows]="_orders()" [rowClick]="openOrder">
+            <ap-sortable-table
+              [columns]="columns"
+              [rows]="_orders()"
+              [rowClick]="openOrder"
+              [serverSort]="true"
+              (sortChange)="onSortChange($event)"
+            >
               <ng-template apCellTpl="id" let-r>
                 <span class="strong mono" style="color:var(--green);">{{ r.id }}</span>
               </ng-template>
@@ -122,19 +135,23 @@ import { Order, QAR } from '../../models';
                 <div class="row gap-sm" style="align-items:center;">
                   <ap-pill [kind]="paymentPill(r.payment).kind">{{ t(paymentPill(r.payment).labelKey) }}</ap-pill>
                   @if (isStalePayment(r)) {
-                    <span class="stale-warn" title="Payment pending for over 30 minutes">
+                    <span class="stale-warn" [title]="t('orders.payment.stalePendingTooltip')">
                       <ap-icon name="warning" [size]="12"/>
                     </span>
                   }
                 </div>
               </ng-template>
               <ng-template apCellTpl="fulfillment" let-r>
-                <ap-pill [kind]="fulfillmentPill(r.fulfillment).kind">{{ t(fulfillmentPill(r.fulfillment).labelKey) }}</ap-pill>
+                @if (r.needsApproval) {
+                  <ap-pill kind="gold">{{ t('orders.awaitingApproval') }}</ap-pill>
+                } @else {
+                  <ap-pill [kind]="fulfillmentPill(r.fulfillment).kind">{{ r.deliveryProgress ? t('fulfillment.' + r.deliveryProgress.label) : t(fulfillmentPill(r.fulfillment).labelKey) }}</ap-pill>
+                }
               </ng-template>
               <ng-template apCellTpl="actions" let-r>
                 <div class="row gap-sm" style="justify-content:flex-end;">
                   <button class="btn btn-ghost btn-sm" (click)="$event.stopPropagation(); openOrder(r)">{{ t('common.view') }}</button>
-                  @if (r.fulfillment === 'awaiting' || r.fulfillment === 'processing') {
+                  @if (!r.automaticFulfillment && (r.fulfillment === 'awaiting' || r.fulfillment === 'processing')) {
                     <button class="btn btn-outline btn-sm" [disabled]="fulfillingId() === r.id"
                       (click)="$event.stopPropagation(); markFulfilled(r)">
                       @if (fulfillingId() === r.id) {
@@ -181,10 +198,14 @@ import { Order, QAR } from '../../models';
                 <div class="oc-row3">
                   <span class="oc-items muted">{{ o.itemsCount }} {{ o.itemsCount !== 1 ? t('orders.items') : t('orders.item') }}</span>
                   <span class="oc-total">{{ QAR(o.total) }}</span>
-                  <ap-pill [kind]="fulfillmentPill(o.fulfillment).kind">{{ t(fulfillmentPill(o.fulfillment).labelKey) }}</ap-pill>
+                  @if (o.needsApproval) {
+                    <ap-pill kind="gold">{{ t('orders.awaitingApproval') }}</ap-pill>
+                  } @else {
+                    <ap-pill [kind]="fulfillmentPill(o.fulfillment).kind">{{ o.deliveryProgress ? t('fulfillment.' + o.deliveryProgress.label) : t(fulfillmentPill(o.fulfillment).labelKey) }}</ap-pill>
+                  }
                   <ap-pill [kind]="paymentPill(o.payment).kind">{{ t(paymentPill(o.payment).labelKey) }}</ap-pill>
                   @if (isStalePayment(o)) {
-                    <span class="stale-warn" title="Payment pending for over 30 minutes"><ap-icon name="warning" [size]="12"/></span>
+                    <span class="stale-warn" [title]="t('orders.payment.stalePendingTooltip')"><ap-icon name="warning" [size]="12"/></span>
                   }
                 </div>
                 <div class="oc-cta">{{ t('orders.cta.view') }} →</div>
@@ -208,13 +229,15 @@ import { Order, QAR } from '../../models';
       <ap-order-drawer [value]="o" (closed)="active.set(null)" (updated)="onOrderUpdated($event)"/>
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .orders-filter-sel { width: auto; flex: 1; }
     .mb-10 { margin-bottom: 10px; }
     @media (max-width: 480px) { .orders-export-lbl { display: none; } }
     .date-range-pills { display: flex; gap: 2px; background: var(--bg-2); border-radius: 8px; padding: 3px; flex-shrink: 0; }
     .dr-pill { border: none; background: none; padding: 5px 12px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; color: var(--muted); transition: all 0.13s; }
     .dr-pill.active { background: var(--surface); color: var(--green); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .approval-chip { align-self: center; }
     .filter-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(2,70,56,.09); color: var(--green); border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
     .filter-chip button { background: none; border: none; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 0 0 2px; opacity: .6; }
     .filter-chip button:hover { opacity: 1; }
@@ -272,10 +295,11 @@ import { Order, QAR } from '../../models';
     .oc-items { font-size: 12px; }
     .oc-total { font-size: 14px; font-weight: 700; color: var(--gold); font-family: var(--ff-mono); margin-inline-end: auto; }
     .oc-cta { font-size: 12px; color: var(--muted); text-align: end; margin-top: 8px; }
-  `],
+  `]
 })
 export class OrdersComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
+  private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
   private readonly route = inject(ActivatedRoute);
   private readonly ordersApi = inject(AdminOrdersService);
@@ -300,9 +324,21 @@ export class OrdersComponent implements OnInit, OnDestroy {
 
     // Deep-link from customer drawer: ?id=EC-26-1042 auto-opens that order.
     const id = this.route.snapshot.queryParamMap.get('id');
-    if (id) {
-      const target = this._orders().find((o) => o.id === id);
-      if (target) void this.openOrder(target);
+    if (id) void this.openOrderById(id);
+  }
+
+  /** A deep-linked order is usually not on the first page of the default
+      filter. Previously this only searched the rows already loaded and failed
+      in complete silence. */
+  private async openOrderById(id: string): Promise<void> {
+    const loaded = this._orders().find((o) => o.id === id);
+    if (loaded) { this.openOrder(loaded); return; }
+
+    try {
+      const full = await this.ordersApi.get(id);
+      this.active.set(full);
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('orders.deepLink.notFound.title'), id);
     }
   }
 
@@ -328,8 +364,12 @@ export class OrdersComponent implements OnInit, OnDestroy {
         fulfillment: this.fulfillmentFilter() !== 'all' ? this.fulfillmentFilter() : undefined,
         from:        from || undefined,
         to:          to || undefined,
+        sort:        this.sort() ?? undefined,
+        dir:         this.sortDir(),
+        needsApproval: this.needsApprovalOnly() || undefined,
       });
       this._ordersSignal.set(resp.orders);
+      this.needsApprovalCount.set(resp.needsApprovalCount ?? 0);
       this._serverTotal.set(resp.total);
       const active = this.active();
       if (active) {
@@ -338,17 +378,42 @@ export class OrdersComponent implements OnInit, OnDestroy {
           this.active.set({
             ...active,
             ...updated,
+            // Summary responses may omit shipments or carry an empty legacy
+            // placeholder. Only a full order response can replace this list.
+            deliveries: active.deliveries,
             items: active.items.length ? active.items : updated.items,
             timeline: active.timeline?.length ? active.timeline : updated.timeline,
             notes: active.notes?.length ? active.notes : updated.notes,
           });
         }
+        // Keep shipment booking/tracking and drawer history current, including
+        // when the open order is outside the filtered list. Retain the last
+        // detail payload if this background request fails.
+        const current = this.active();
+        if (current) {
+          try {
+            const full = await this.ordersApi.get(current.id);
+            if (this.active() === current) this.active.set(full);
+          } catch {
+            // The next poll can retry without clearing the open drawer.
+          }
+        }
       }
     } catch {
-      if (!silent) this.loadError.set('Could not load orders. Check your connection and try again.');
+      if (!silent) this.loadError.set(this.t('orders.loadError'));
     } finally {
       if (!silent) this.loading.set(false);
     }
+  }
+
+  /** Sorting is applied by the server so it covers the whole result set, not
+      just the rows currently on screen. Reset to page 1: the row that sorts
+      first is meaningless if we stay on page 4. */
+  onSortChange(e: { sort: string | null; dir: 'asc' | 'desc' }): void {
+    this.sort.set(e.sort);
+    this.sortDir.set(e.dir);
+    this.page.set(0);
+    void this.refreshOrders();
   }
 
   private effectiveDateRange(): { from: string; to: string } {
@@ -366,8 +431,14 @@ export class OrdersComponent implements OnInit, OnDestroy {
   readonly search = signal('');
   readonly loadError = signal<string | null>(null);
   readonly paymentFilter = signal('all');
+  readonly needsApprovalOnly = signal(false);
+  readonly needsApprovalCount = signal(0);
+  toggleNeedsApproval(): void { this.needsApprovalOnly.update((v) => !v); this.page.set(0); void this.refreshOrders(); }
   readonly fulfillmentFilter = signal('all');
   readonly dateRange = signal<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
+  /** null = the server's default order (newest first). */
+  readonly sort = signal<string | null>(null);
+  readonly sortDir = signal<'asc' | 'desc'>('desc');
   readonly dateFrom = signal('');
   readonly dateTo = signal('');
   readonly fulfillingId = signal<string | null>(null);
@@ -408,9 +479,16 @@ export class OrdersComponent implements OnInit, OnDestroy {
     void this.ordersApi.get(o.id)
       .then((full) => {
         this._ordersSignal.update((all) => all.map((x) => (x.id === full.id ? { ...x, ...full } : x)));
-        this.active.set(full);
+        if (this.active()?.id === o.id) this.active.set(full);
       })
-      .catch(() => {});
+      .catch(() => {
+        // The interceptor's generic toast does not name the order, and without
+        // the detail payload the timeline and notes stay stuck on their skeleton.
+        this.toast.error(this.t('orders.detailFailed.title'), o.id, {
+          label: this.t('common.retry'),
+          run: () => this.openOrder(o),
+        });
+      });
   };
 
   onOrderUpdated(updated: Order): void {
@@ -449,6 +527,7 @@ export class OrdersComponent implements OnInit, OnDestroy {
     this.search.set('');
     this.paymentFilter.set('all');
     this.fulfillmentFilter.set('all');
+    this.needsApprovalOnly.set(false);
     this.dateRange.set('all');
     this.dateFrom.set('');
     this.dateTo.set('');
@@ -462,14 +541,34 @@ export class OrdersComponent implements OnInit, OnDestroy {
     void this.refreshOrders();
   }
 
+  /** The drawer refuses to mark an order shipped without a tracking number.
+      This button used to jump straight to `shipped` with no tracking and no
+      confirmation, so the same rule and a confirm step apply here. */
   async markFulfilled(o: Order): Promise<void> {
     if (this.fulfillingId() === o.id) return;
+
+    if (!o.trackingNumber) {
+      this.toast.warning(this.t('orders.markFulfilled.needsTracking.title'), `${o.id} · ${o.customer}`, {
+        label: this.t('orders.toast.viewOrder'),
+        run: () => this.openOrder(o),
+      });
+      return;
+    }
+
+    const ok = await this.confirm.ask({
+      title: this.t('orders.markFulfilled.confirm.title'),
+      message: `${this.t('orders.markFulfilled.confirm.message')} ${o.id} · ${o.customer}`,
+      confirmLabel: this.t('orders.markFulfilled'),
+      cancelLabel: this.t('common.cancel'),
+    });
+    if (!ok) return;
+
     this.fulfillingId.set(o.id);
     try {
       const updated = await this.ordersApi.updateStatus(o.id, {
         fulfillment: 'shipped',
         timelineKind: 'shipped',
-        detail: 'Marked shipped from list view',
+        detail: this.t('orders.timeline.markedShippedFromList'),
       });
       this._ordersSignal.update((all) => all.map((x) => (x.id === o.id ? { ...x, ...updated } : x)));
       this.toast.success(this.t('orders.toast.shipped'), `${o.id} · ${o.customer}`, {
@@ -483,12 +582,36 @@ export class OrdersComponent implements OnInit, OnDestroy {
     }
   }
 
-  exportCsv(): void {
+  /** Exports every order matching the current filters, not just the page on
+      screen. The toast previously reported the page count as the full total. */
+  async exportCsv(): Promise<void> {
     if (this.exporting()) return;
     this.exporting.set(true);
     try {
-      const orders = this._orders();
-      const headers = ['Order ID', 'Date', 'Customer', 'Items', 'Total (QAR)', 'Payment', 'Fulfillment'];
+      const { from, to } = this.effectiveDateRange();
+      const base: OrderListParams = {
+        q:           this.search() || undefined,
+        payment:     this.paymentFilter() !== 'all' ? this.paymentFilter() : undefined,
+        fulfillment: this.fulfillmentFilter() !== 'all' ? this.fulfillmentFilter() : undefined,
+        from:        from || undefined,
+        to:          to || undefined,
+        sort:        this.sort() ?? undefined,
+        dir:         this.sortDir(),
+      };
+
+      const PAGE = 200;
+      const orders: Order[] = [];
+      for (let page = 0; ; page++) {
+        const resp = await this.ordersApi.list({ ...base, page, limit: PAGE });
+        orders.push(...resp.orders);
+        if (orders.length >= resp.total || resp.orders.length === 0) break;
+      }
+
+      const headers = [
+        this.t('orders.col.id'), this.t('orders.col.date'), this.t('orders.col.customer'),
+        this.t('orders.col.items'), this.t('orders.col.total'),
+        this.t('orders.col.payment'), this.t('orders.col.fulfillment'),
+      ];
       const rows = orders.map((o) => [
         o.id, o.date, o.customer, o.itemsCount,
         o.total.toFixed(2), o.payment, o.fulfillment,
@@ -496,7 +619,7 @@ export class OrdersComponent implements OnInit, OnDestroy {
       const csv = [headers, ...rows]
         .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
         .join('\r\n');
-      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -505,7 +628,12 @@ export class OrdersComponent implements OnInit, OnDestroy {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      this.toast.success(this.t('orders.toast.exportDone'), `${orders.length} ${orders.length !== 1 ? this.t('orders.items') : this.t('orders.item')} · CSV`);
+      this.toast.success(
+        this.t('orders.toast.exportDone'),
+        `${orders.length} ${orders.length !== 1 ? this.t('orders.items') : this.t('orders.item')} · CSV`,
+      );
+    } catch {
+      // Global error interceptor raises the toast.
     } finally {
       this.exporting.set(false);
     }

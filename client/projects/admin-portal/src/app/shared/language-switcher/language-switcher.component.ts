@@ -1,13 +1,12 @@
-import { Component, HostListener, ElementRef, inject, signal } from '@angular/core';
+import { Component, HostListener, ElementRef, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { LocaleService, Locale } from '../../services/locale.service';
 import { I18nService } from '../../services/i18n.service';
 
 @Component({
-  selector: 'ap-language-switcher',
-  standalone: true,
-  imports: [CommonModule],
-  template: `
+    selector: 'ap-language-switcher',
+    imports: [CommonModule],
+    template: `
     <div class="lang-switch" #root>
       <button class="lang-trigger" (click)="toggleOpen()" [attr.aria-label]="i18n.t('topbar.language')" [attr.aria-expanded]="open()">
         <span class="lang-code">{{ locale.locale().toUpperCase() }}</span>
@@ -39,7 +38,8 @@ import { I18nService } from '../../services/i18n.service';
       }
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .lang-switch { position: relative; }
     .lang-trigger {
       display: inline-flex; align-items: center; gap: 6px;
@@ -86,7 +86,7 @@ import { I18nService } from '../../services/i18n.service';
     .lang-option:hover { background: var(--bg); color: var(--ink); }
     .lang-option.active { background: var(--gold-3); color: var(--green); font-weight: 600; }
     .lang-check { color: var(--gold); font-weight: 700; }
-  `],
+  `]
 })
 export class LanguageSwitcherComponent {
   readonly locale = inject(LocaleService);

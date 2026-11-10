@@ -3,15 +3,62 @@
 
 <head>
   <meta charset="utf-8" />
-  <title>Elite Collection — Arabic Leather Artisans</title>
+  <title>Elite Collection | Qatari Design, Crafted in Italy</title>
   <base href="/" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <meta name="description" content="Elite Collection — handcrafted Arabic leather shoes from Doha since 1962." />
+  <!-- `maximum-scale=1.0` was here to stop the hero double-tap zooming the page.
+       It never actually did that: it also removed deliberate pinch zoom for
+       every visitor, which is an accessibility regression, and iOS ignores it
+       for accessibility-driven zoom anyway. Accidental double-tap zoom is now
+       suppressed where it happens, by the touch contract on the hero controls
+       (see home.component.scss). Focus zoom is handled by the 16px control
+       floor in styles.scss. Do not reintroduce a scale cap here. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="Qatari-designed footwear and accessories, custom-crafted in Italy. Founded in Qatar, 2018." />
+
+  <!-- Social/link-preview tags, deliberately duplicated here as static markup.
+       SeoService rewrites all of these per route, but it runs after hydration
+       and no social crawler executes JavaScript: WhatsApp, Facebook, X,
+       LinkedIn and iMessage read this file and stop. Without these, every
+       shared link previewed with no image at all. These are the site-level
+       fallback. On server-rendered routes SeoService overwrites them in the
+       HTML itself, so crawlers get the per-page values. They stay for the
+       routes that are still client-rendered (see app.routes.server.ts) and for
+       nginx's fallback shell when the SSR process is down, which is this
+       file served as-is. Do not remove them while either still exists.
+       Keep in sync with seo.* in i18n/strings.ts and with brand.config.json.
+
+       No static canonical or og:url here on purpose. Both are per-URL values,
+       and a hardcoded one would tell every crawler that does not run JS that
+       /collection and every product page are duplicates of the homepage, which
+       is worse than having none. SeoService creates both at runtime, and with
+       og:url absent the social platforms fall back to the URL that was
+       actually shared, which is the right answer anyway. -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Elite Collection" />
+  <meta property="og:title" content="Elite Collection | Qatari Design, Crafted in Italy" />
+  <meta property="og:description" content="Qatari-designed footwear and accessories, custom-crafted in Italy. Founded in Qatar, 2018." />
+  <meta property="og:image" content="https://elitecollections.qa/assets/brand/og-default.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Elite Collection leather sandals" />
+  <meta property="og:locale" content="en_QA" />
+  <meta property="og:locale:alternate" content="ar_QA" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Elite Collection | Qatari Design, Crafted in Italy" />
+  <meta name="twitter:description" content="Qatari-designed footwear and accessories, custom-crafted in Italy. Founded in Qatar, 2018." />
+  <meta name="twitter:image" content="https://elitecollections.qa/assets/brand/og-default.jpg" />
+  <meta name="theme-color" content="#b8924a" />
+
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-  <link rel="preload" as="image" type="image/webp" href="/assets/hero-scroll/elite-hero-sandals-cutout.webp" fetchpriority="high" />
+  <!-- No hero preload here. The one that used to sit on this line named a
+       static asset from before the hero became CMS-driven, so it fetched
+       227 kB at fetchpriority=high that the page then never painted, ahead of
+       the image that actually is the LCP. A preload here can only be right if
+       it names the URL the page renders, and that comes from the API.
+       home.component.ts preloads the real one once it knows it. -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Vazirmatn:wght@300;500;700&display=swap" rel="stylesheet" />
 </head>
 
 <body>

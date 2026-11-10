@@ -1,6 +1,7 @@
 import {
-  Component, ContentChildren, Directive, Input, QueryList,
+  Component, ContentChildren, Directive, EventEmitter, Input, Output, QueryList,
   TemplateRef, computed, inject, signal,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { I18nService } from '../../services/i18n.service';
@@ -27,10 +28,10 @@ export class CellTplDirective {
 }
 
 @Component({
-  selector: 'ap-sortable-table',
-  standalone: true,
-  imports: [CommonModule],
-  template: `
+    selector: 'ap-sortable-table',
+    imports: [CommonModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     <div class="tbl-scroll">
     <table class="tbl">
       <thead>
@@ -67,7 +68,7 @@ export class CellTplDirective {
       </tbody>
     </table>
     </div>
-  `,
+  `
 })
 export class SortableTableComponent {
   private readonly i18n = inject(I18nService);
@@ -76,6 +77,14 @@ export class SortableTableComponent {
   @Input({ required: true }) columns: TableColumn<any>[] = [];
   @Input({ required: true }) set rows(v: Row[]) { this._rows.set(v); }
   @Input() defaultSort?: string;
+  /**
+   * Opt in when the caller pages through data server-side. Sorting locally then
+   * would only reorder the current page while the header arrow implies the
+   * whole result set, so in this mode the component emits `sortChange` and
+   * renders `rows` exactly as given.
+   */
+  @Input() serverSort = false;
+  @Output() sortChange = new EventEmitter<{ sort: string | null; dir: 'asc' | 'desc' }>();
   @Input() rowClick?: (r: any) => void;
   @Input() trackBy: (r: Row) => string | number = (r) => (r['id'] as string | number) ?? JSON.stringify(r);
 
@@ -95,6 +104,7 @@ export class SortableTableComponent {
 
   readonly sorted = computed<Row[]>(() => {
     const rows = this._rows();
+    if (this.serverSort) return rows;
     const key = this.sortBy() ?? this.defaultSort ?? null;
     if (!key) return rows;
     const col = this.columns.find((c) => c.key === key);
@@ -127,6 +137,7 @@ export class SortableTableComponent {
       this.sortBy.set(c.key);
       this.dir.set('desc');
     }
+    if (this.serverSort) this.sortChange.emit({ sort: this.sortBy(), dir: this.dir() });
   }
 
   onRowClick(r: Row): void {

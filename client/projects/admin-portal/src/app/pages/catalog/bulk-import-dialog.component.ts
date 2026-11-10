@@ -3,12 +3,12 @@ import {
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { ApiClient } from '../../services/api-client.service';
-import { StorageService } from '../../services/storage.service';
+import { RouterLink } from '@angular/router';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { I18nService } from '../../services/i18n.service';
 import { ToastService } from '../../services/toast.service';
 
-type Step = 'upload' | 'importing' | 'results' | 'stock-results' | 'history';
+type Step = 'upload' | 'importing' | 'results' | 'history';
 
 interface HistoryRecord {
   id: string;
@@ -16,6 +16,9 @@ interface HistoryRecord {
   filename: string;
   summary: Summary;
   log: LogEntry[];
+  createdBy?: string;
+  kind?: 'products' | 'stock';
+  status?: string;
   expanded?: boolean;
 }
 
@@ -30,13 +33,11 @@ interface LogEntry {
 }
 
 interface Summary { total: number; created: number; updated: number; failed: number; }
-
 @Component({
-  selector: 'ap-bulk-import-dialog',
-  standalone: true,
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, DatePipe, IconComponent],
-  template: `
+    selector: 'ap-bulk-import-dialog',
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    imports: [CommonModule, DatePipe, IconComponent, RouterLink],
+    template: `
     <div class="modal-overlay" (click)="onOverlayClick($event)">
       <div class="modal-panel" (click)="$event.stopPropagation()">
 
@@ -53,13 +54,10 @@ interface Summary { total: number; created: number; updated: number; failed: num
         <!-- Tabs — always visible except during import -->
         @if (step() !== 'importing') {
           <div class="mode-tabs">
-            <button class="mode-tab" [class.active]="step() === 'upload' && !stockMode()" (click)="switchMode(false)">
+            <button class="mode-tab" [class.active]="step() === 'upload'" (click)="showUpload()">
               <ap-icon name="upload" [size]="13"/> {{ t('bulkImport.tab.products') }}
             </button>
-            <button class="mode-tab" [class.active]="step() === 'upload' && stockMode()" (click)="switchMode(true)">
-              <ap-icon name="csv" [size]="13"/> {{ t('bulkImport.tab.stock') }}
-            </button>
-            <button class="mode-tab" [class.active]="step() === 'history'" (click)="step.set('history')" style="margin-inline-start:auto;">
+            <button class="mode-tab" [class.active]="step() === 'history'" (click)="openHistory()" style="margin-inline-start:auto;">
               <ap-icon name="clock" [size]="13"/> {{ t('bulkImport.tab.history') }}
               @if (importHistory().length) { <span class="hist-badge">{{ importHistory().length }}</span> }
             </button>
@@ -67,8 +65,14 @@ interface Summary { total: number; created: number; updated: number; failed: num
         }
 
         <!-- ── UPLOAD: Products ── -->
-        @if (step() === 'upload' && !stockMode()) {
+        @if (step() === 'upload') {
           <div class="modal-body">
+            <!-- Stock numbers moved to Inventory → Update from file (2026-09-28). -->
+            <div class="stock-moved">
+              <ap-icon name="info" [size]="14"/>
+              <span>{{ t('bulkImport.stockMoved') }}</span>
+              <a routerLink="/inventory" [queryParams]="{ tab: 'receive', method: 'file' }" (click)="close()">{{ t('bulkImport.stockMovedLink') }}</a>
+            </div>
             <div class="info-box">
               <div class="info-title">{{ t('bulkImport.howTitle') }}</div>
               <div class="how-grid">
@@ -103,7 +107,7 @@ interface Summary { total: number; created: number; updated: number; failed: num
               } @else {
                 <ap-icon name="upload" [size]="30"/>
                 <div class="drop-label">{{ t('bulkImport.drop.label') }}</div>
-                <div class="sub">{{ t('bulkImport.drop.sub.stock') }}</div>
+                <div class="sub">{{ t('bulkImport.drop.sub.products') }}</div>
               }
             </div>
             @if (uploadError()) { <div class="err-banner">{{ uploadError() }}</div> }
@@ -113,6 +117,14 @@ interface Summary { total: number; created: number; updated: number; failed: num
             <label class="dry-run-toggle" title="Preview changes without writing to the database" style="margin-inline-end:auto;">
               <input type="checkbox" [checked]="dryRun()" (change)="dryRun.set(!dryRun())"/>
               <span>{{ t('bulkImport.dryRun') }}</span>
+            </label>
+            <label class="dry-run-toggle">
+              <span>Images</span>
+              <select class="inp inp-sm" [value]="imageMode()" (change)="imageMode.set($any($event.target).value)">
+                <option value="ignore">Ignore</option>
+                <option value="append">Append</option>
+                <option value="replace">Replace</option>
+              </select>
             </label>
             <button class="btn btn-outline btn-sm" [disabled]="repairingColors()" (click)="repairColors()"
                     title="Fix variants with missing color by inferring from their SKU">
@@ -127,50 +139,6 @@ interface Summary { total: number; created: number; updated: number; failed: num
             </a>
             <button class="btn btn-gold" [disabled]="!csvFile()" (click)="startImport()">
               <ap-icon name="upload" [size]="14"/> {{ dryRun() ? t('bulkImport.btn.previewImport') : t('bulkImport.btn.importProducts') }}
-            </button>
-          </div>
-        }
-
-        <!-- ── UPLOAD: Stock ── -->
-        @if (step() === 'upload' && stockMode()) {
-          <div class="modal-body">
-            <div class="info-box">
-              <div class="info-title">{{ t('bulkImport.howTitle') }}</div>
-              <div class="how-grid">
-                <div class="how-step"><span class="how-n">1</span> {{ t('bulkImport.step.s1') }}</div>
-                <div class="how-step"><span class="how-n">2</span> {{ t('bulkImport.step.s2') }}</div>
-                <div class="how-step"><span class="how-n">3</span> {{ t('bulkImport.step.s3') }}</div>
-              </div>
-            </div>
-
-            <div class="drop-zone" [class.has-file]="csvFile()" [class.drag-over]="dragOver()"
-                 (dragover)="onDragOver($event)" (dragleave)="dragOver.set(false)" (drop)="onDrop($event)"
-                 (click)="si.click()">
-              <input #si type="file" accept=".csv,text/csv" style="display:none" (change)="onFileChange($event)"/>
-              @if (csvFile()) {
-                <div class="file-row">
-                  <ap-icon name="csv" [size]="26"/>
-                  <div>
-                    <div class="fname">{{ csvFile()!.name }}</div>
-                    <div class="sub">{{ fmtBytes(csvFile()!.size) }}</div>
-                  </div>
-                  <button class="x-btn sm" (click)="removeFile($event)"><ap-icon name="x" [size]="13"/></button>
-                </div>
-              } @else {
-                <ap-icon name="upload" [size]="30"/>
-                <div class="drop-label">{{ t('bulkImport.drop.label') }}</div>
-                <div class="sub">{{ t('bulkImport.drop.sub.stock') }}</div>
-              }
-            </div>
-            @if (uploadError()) { <div class="err-banner">{{ uploadError() }}</div> }
-          </div>
-
-          <div class="modal-ft">
-            <button class="btn btn-outline btn-sm" (click)="downloadStockTemplate()">
-              <ap-icon name="download" [size]="13"/> {{ t('bulkImport.template') }}
-            </button>
-            <button class="btn btn-gold" [disabled]="!csvFile()" (click)="startStockImport()">
-              <ap-icon name="upload" [size]="14"/> {{ t('bulkImport.btn.updateStock') }}
             </button>
           </div>
         }
@@ -222,6 +190,7 @@ interface Summary { total: number; created: number; updated: number; failed: num
                 </div>
               }
             </div>
+            @if (uploadError()) { <div class="err-banner">{{ uploadError() }}</div> }
           </div>
         }
 
@@ -266,6 +235,7 @@ interface Summary { total: number; created: number; updated: number; failed: num
                 </tbody>
               </table>
             </div>
+            @if (uploadError()) { <div class="err-banner">{{ uploadError() }}</div> }
           </div>
           <div class="modal-ft">
             @if ((summary()?.failed ?? 0) > 0) {
@@ -287,32 +257,6 @@ interface Summary { total: number; created: number; updated: number; failed: num
           </div>
         }
 
-        <!-- ── STOCK RESULTS ── -->
-        @if (step() === 'stock-results') {
-          @if (stockResult(); as r) {
-            <div class="sum-bar">
-              <div class="chip green">{{ r.updated }} {{ t('bulkImport.chip.updated') }}</div>
-              @if (r.notFound.length) { <div class="chip red">{{ r.notFound.length }} {{ t('bulkImport.chip.notFound') }}</div> }
-              <div class="sub" style="margin-inline-start:auto;">{{ r.updated + r.notFound.length }} {{ t('bulkImport.chip.rowsProcessed') }}</div>
-            </div>
-          }
-          <div class="modal-body" style="padding-top:0">
-            @if (stockResult()?.notFound?.length) {
-              <div class="err-banner">
-                <strong>{{ t('bulkImport.stock.unmatchedSKUs') }}</strong> {{ stockResult()!.notFound.join(', ') }}
-              </div>
-            } @else if (stockResult()?.updated === 0) {
-              <div class="empty-state">{{ t('bulkImport.stock.noMatch') }}</div>
-            } @else {
-              <div class="empty-state" style="color:var(--green,#16a34a);">{{ t('bulkImport.stock.allProcessed') }}</div>
-            }
-          </div>
-          <div class="modal-ft">
-            <button class="btn btn-outline" (click)="reset()">{{ t('bulkImport.btn.importAnother') }}</button>
-            <button class="btn btn-gold" (click)="done()">{{ t('common.done') }}</button>
-          </div>
-        }
-
         <!-- ── HISTORY ── -->
         @if (step() === 'history') {
           <div class="modal-body" style="padding-top:8px;">
@@ -325,6 +269,7 @@ interface Summary { total: number; created: number; updated: number; failed: num
                     <div class="hist-info">
                       <div class="hist-file">{{ h.filename }}</div>
                       <div class="sub">{{ h.ts | date:'MMM d, yyyy · HH:mm' }} · {{ h.summary.total }} {{ t('bulkImport.chip.products') }}</div>
+                      @if (h.createdBy) { <div class="sub">{{ h.createdBy }}</div> }
                     </div>
                     <div class="hist-chips">
                       <span class="chip green sm">{{ h.summary.created }} {{ t('bulkImport.chip.created') }}</span>
@@ -334,6 +279,11 @@ interface Summary { total: number; created: number; updated: number; failed: num
                     <button class="icon-btn" type="button" title="Download report" (click)="$event.stopPropagation(); downloadHistoryReport(h)">
                       <ap-icon name="download" [size]="13"/>
                     </button>
+                    @if (h.summary.failed && h.kind !== 'stock') {
+                      <button class="icon-btn" type="button" title="Retry original failed rows" (click)="$event.stopPropagation(); retryHistory(h.id)">
+                        <ap-icon name="sync" [size]="13"/>
+                      </button>
+                    }
                     <ap-icon [name]="h.expanded ? 'arrowUp' : 'arrowDn'" [size]="12" style="opacity:.35;flex-shrink:0;"/>
                   </div>
                   @if (h.expanded) {
@@ -351,22 +301,19 @@ interface Summary { total: number; created: number; updated: number; failed: num
               }
             }
           </div>
-          <div class="modal-ft">
-            @if (importHistory().length > 0) {
-              <button class="btn btn-outline btn-sm" style="color:var(--danger);margin-inline-end:auto;" (click)="clearHistory()">
-                <ap-icon name="trash" [size]="13"/> {{ t('bulkImport.history.clearHistory') }}
-              </button>
-            }
-          </div>
+          <div class="modal-ft"><button class="btn btn-outline btn-sm" (click)="loadHistory()">Refresh</button></div>
         }
 
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
+    .stock-moved { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; padding: 10px 12px; border-radius: 10px; background: var(--gold-3); color: var(--ink); font-size: 13px; }
+    .stock-moved a { color: var(--green); font-weight: 700; white-space: nowrap; }
+
     /* Layout */
     .modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:20px;}
-    .modal-panel{background:var(--surface,#fff);border:1px solid var(--border,#e4e4e7);border-radius:16px;width:100%;max-width:660px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.15);}
+    .modal-panel{background:var(--surface,#fff);border:1px solid var(--border,#e4e4e7);border-radius:16px;width:100%;max-width:920px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.15);}
 
     /* Header */
     .modal-hd{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;border-bottom:1px solid var(--border,#e4e4e7);gap:12px;flex-shrink:0;}
@@ -414,6 +361,11 @@ interface Summary { total: number; created: number; updated: number; failed: num
     /* Dry-run */
     .dry-run-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted,#888);}
     .dry-run-toggle input{accent-color:#c9a84c;cursor:pointer;}
+    /* .inp sets width:100%, which collapses to min-content inside this
+       auto-sized flex label (only enough to show "I" of "Ignore") instead of
+       the full option text. This is a compact dropdown, not a full-width
+       field, so it needs an explicit width here. */
+    .dry-run-toggle select.inp-sm{width:auto;min-width:96px;flex-shrink:0;}
     .dry-run-banner{display:flex;align-items:center;gap:8px;background:rgba(245,158,11,.08);border-top:2px solid rgba(245,158,11,.35);padding:9px 20px;font-size:12px;color:#92400e;flex-shrink:0;}
 
     /* Progress */
@@ -489,7 +441,7 @@ interface Summary { total: number; created: number; updated: number; failed: num
     .hist-chips{display:flex;gap:4px;flex-shrink:0;}
     .chip.sm{font-size:10px;padding:2px 7px;}
     .hist-detail{border-top:1px solid var(--border,#e4e4e7);max-height:180px;overflow-y:auto;}
-  `],
+  `]
 })
 export class BulkImportDialogComponent {
   @Output() closed   = new EventEmitter<void>();
@@ -498,7 +450,6 @@ export class BulkImportDialogComponent {
 
   private readonly api  = inject(ApiClient);
   private readonly zone = inject(NgZone);
-  private readonly storage = inject(StorageService);
   private readonly i18n = inject(I18nService);
   private readonly toast = inject(ToastService);
   readonly t = (k: string): string => this.i18n.t(k);
@@ -513,31 +464,45 @@ export class BulkImportDialogComponent {
   readonly currentVariantCount = signal(0);
   readonly log                = signal<LogEntry[]>([]);
   readonly summary            = signal<Summary | null>(null);
-  readonly stockMode          = signal(false);
-  readonly stockResult        = signal<{ updated: number; notFound: string[] } | null>(null);
   readonly dryRun             = signal(false);
   readonly wasLastDryRun      = signal(false);
   readonly lastFile           = signal<File | null>(null);
-  readonly importHistory      = signal<HistoryRecord[]>(this.loadHistory());
+  readonly importHistory      = signal<HistoryRecord[]>([]);
   readonly repairingColors    = signal(false);
+  readonly imageMode          = signal<'ignore' | 'append' | 'replace'>('ignore');
+  readonly currentJobId       = signal<string | null>(null);
 
   readonly pct = () => this.total() ? Math.round((this.current() / this.total()) * 100) : 0;
 
   readonly templateUrl = this.api.url('/admin/bulk-import/template');
 
   readonly columns = [
-    { n: 'New SKU',        req: true  },
-    { n: 'English Name',   req: true  },
-    { n: 'Size',           req: false },
-    { n: 'Description',    req: false },
-    { n: 'English Color',  req: false },
-    { n: 'Arabic Name',    req: false },
-    { n: 'Selling Price',  req: false },
-    { n: 'Cost-QAR',       req: false },
-    { n: 'Shipping cost',  req: false },
-    { n: 'quantity',       req: false },
-    { n: 'collections',    req: false },
-    { n: 'Picture',        req: false },
+    { n: 'Product SKU',          req: true  },
+    { n: 'Variant SKU',          req: true  },
+    { n: 'English Name',         req: true  },
+    { n: 'Selling Price',        req: true  },
+    { n: 'Quantity',             req: true  },
+    { n: 'Barcode',              req: false },
+    { n: 'Arabic Name',          req: false },
+    { n: 'Brand',                req: false },
+    { n: 'Status',               req: false },
+    { n: 'POS Status',           req: false },
+    { n: 'Hook EN / AR',         req: false },
+    { n: 'Short Description',    req: false },
+    { n: 'Description EN / AR',  req: false },
+    { n: 'Product Note EN / AR', req: false },
+    { n: 'Material Care EN / AR', req: false },
+    { n: 'Variant Note EN / AR', req: false },
+    { n: 'Size',                 req: false },
+    { n: 'English Color',        req: false },
+    { n: 'Material',             req: false },
+    { n: 'Cost-QAR',             req: false },
+    { n: 'Shipping Cost',        req: false },
+    { n: 'Collections',          req: false },
+    { n: 'Picture',              req: false },
+    { n: 'Meta Title / Desc',    req: false },
+    { n: 'Slug',                 req: false },
+    { n: 'Related Product SKUs', req: false },
   ];
 
   onOverlayClick(_e: MouseEvent) { if (this.step() !== 'importing') this.close(); }
@@ -549,14 +514,13 @@ export class BulkImportDialogComponent {
     this.log.set([]); this.summary.set(null);
     this.current.set(0); this.total.set(0);
     this.currentName.set(''); this.currentVariantCount.set(0);
-    this.stockResult.set(null);
     this.wasLastDryRun.set(false);
     this.lastFile.set(null);
+    this.currentJobId.set(null);
     this.step.set('upload');
   }
 
-  switchMode(toStock: boolean): void {
-    this.stockMode.set(toStock);
+  showUpload(): void {
     this.step.set('upload');
     this.csvFile.set(null);
     this.uploadError.set('');
@@ -581,20 +545,24 @@ export class BulkImportDialogComponent {
     this.uploadError.set(''); this.csvFile.set(file);
   }
 
-  async startImport() {
-    const file = this.csvFile(); if (!file) return;
-    this.lastFile.set(file);
-    this.wasLastDryRun.set(this.dryRun());
+  async startImport(options: { reviewId?: string; retryId?: string } = {}) {
+    const file = this.csvFile();
+    if (!file && !options.reviewId && !options.retryId) return;
+    if (file && !options.reviewId && !options.retryId) this.lastFile.set(file);
+    this.wasLastDryRun.set(!options.reviewId && !options.retryId && this.dryRun());
     this.step.set('importing');
     this.log.set([]); this.current.set(0); this.total.set(0);
     this.currentName.set(''); this.currentVariantCount.set(0);
 
     const form = new FormData();
-    form.append('csv', file, file.name);
+    if (file && !options.reviewId && !options.retryId) form.append('csv', file, file.name);
 
-    const url = this.dryRun()
-      ? this.api.url('/admin/bulk-import?dryRun=true')
-      : this.api.url('/admin/bulk-import');
+    const params = new URLSearchParams();
+    if (this.dryRun() && !options.reviewId && !options.retryId) params.set('dryRun', 'true');
+    if (options.reviewId) params.set('reviewId', options.reviewId);
+    if (options.retryId) params.set('retryId', options.retryId);
+    params.set('imageMode', this.imageMode());
+    const url = this.api.url(`/admin/bulk-import?${params.toString()}`);
 
     try {
       const resp = await fetch(url, {
@@ -663,11 +631,10 @@ export class BulkImportDialogComponent {
         break;
 
       case 'done':
+        this.currentJobId.set(evt.jobId || null);
         this.summary.set(evt.summary);
         this.currentName.set(''); this.currentVariantCount.set(0);
-        if (!this.wasLastDryRun()) {
-          this.saveHistory(evt.summary);
-        }
+        void this.loadHistory();
         this.step.set('results');
         break;
     }
@@ -699,16 +666,6 @@ export class BulkImportDialogComponent {
     return `${(b/1048576).toFixed(1)} MB`;
   }
 
-  downloadStockTemplate(): void {
-    const csv = '﻿SKU,Stock\n"EXAMPLE-SKU-001",50\n"EXAMPLE-SKU-002",25\n';
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'stock-import-template.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   async repairColors(): Promise<void> {
     if (this.repairingColors()) return;
     this.repairingColors.set(true);
@@ -735,114 +692,62 @@ export class BulkImportDialogComponent {
         }
       });
     } catch (err: any) {
-      this.zone.run(() => this.toast.error('Color repair failed', err.message || 'Network error'));
+      this.zone.run(() => this.toast.errorFrom(err, 'Color repair failed', err.message || 'Network error'));
     } finally {
       this.repairingColors.set(false);
     }
   }
 
-  async startStockImport(): Promise<void> {
-    const file = this.csvFile();
-    if (!file) return;
-    this.step.set('importing');
-    this.uploadError.set('');
-
-    try {
-      const text = await file.text();
-      const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if (lines.length < 2) {
-        this.zone.run(() => { this.uploadError.set(this.t('bulkImport.error.csvEmpty')); this.step.set('upload'); });
-        return;
-      }
-      const header = lines[0].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase());
-      const skuIdx = header.indexOf('sku');
-      const stockIdx = header.indexOf('stock');
-      if (skuIdx < 0 || stockIdx < 0) {
-        this.zone.run(() => { this.uploadError.set(this.t('bulkImport.error.missingColumns')); this.step.set('upload'); });
-        return;
-      }
-      const updates = lines.slice(1).map(line => {
-        const cols = line.split(',');
-        return {
-          sku: (cols[skuIdx] ?? '').replace(/"/g, '').trim(),
-          stock: Math.max(0, parseInt((cols[stockIdx] ?? '0').replace(/"/g, '').trim(), 10) || 0),
-        };
-      }).filter(u => u.sku);
-
-      this.zone.run(() => { this.total.set(updates.length); this.current.set(updates.length); });
-
-      const resp = await fetch(this.api.url('/admin/products/bulk-stock'), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ updates }),
-      });
-
-      const json = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        this.zone.run(() => { this.uploadError.set(json.message || this.t('bulkImport.error.stockFailed')); this.step.set('upload'); });
-        return;
-      }
-
-      const data = json.data ?? json;
-      this.zone.run(() => {
-        this.stockResult.set({ updated: data.updated ?? 0, notFound: data.notFound ?? [] });
-        this.step.set('stock-results');
-      });
-    } catch (err: any) {
-      this.zone.run(() => { this.uploadError.set(err.message || this.t('bulkImport.error.networkError')); this.step.set('upload'); });
-    }
-  }
-
   retryFailed(): void {
-    const failedRows = this.log().filter(e => e.status === 'error' || e.status === 'skipped');
-    if (!failedRows.length) return;
-    const header = 'English Name,SKU,Status\n';
-    const rows = failedRows.map(e => `"${e.name.replace(/"/g, '""')}","",""`).join('\n');
-    const blob = new Blob(['﻿' + header + rows], { type: 'text/csv;charset=utf-8;' });
-    const fakeFile = new File([blob], `retry-${Date.now()}.csv`, { type: 'text/csv' });
-    this.csvFile.set(fakeFile);
-    this.step.set('upload');
-    this.log.set([]); this.summary.set(null);
-    this.current.set(0); this.total.set(0);
+    const jobId = this.currentJobId();
+    if (jobId) void this.startImport({ retryId: jobId });
   }
 
   commitDryRun(): void {
+    const reviewId = this.currentJobId();
+    if (!reviewId) return;
     this.dryRun.set(false);
     this.wasLastDryRun.set(false);
-    void this.startImport();
+    void this.startImport({ reviewId });
   }
 
-  private saveHistory(summary: Summary): void {
-    const file = this.lastFile();
-    const rec: HistoryRecord = {
-      id: Date.now().toString(36),
-      ts: new Date().toISOString(),
-      filename: file?.name ?? 'import.csv',
-      summary,
-      log: this.log(),
-    };
-    const hist = [rec, ...this.importHistory()].slice(0, 20);
-    this.importHistory.set(hist);
-    this.storage.set('import-history', JSON.stringify(hist));
+  openHistory(): void {
+    this.step.set('history');
+    void this.loadHistory();
   }
 
-  private loadHistory(): HistoryRecord[] {
+  async loadHistory(): Promise<void> {
     try {
-      const raw = this.storage.get('import-history');
-      return raw ? JSON.parse(raw) : [];
-    } catch { return []; }
+      const resp = await fetch(this.api.url('/admin/bulk-import/history'), { credentials: 'include' });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) return;
+      const rows = (json.data ?? json) as any[];
+      this.zone.run(() => this.importHistory.set(rows.map(row => ({
+        id: row.id,
+        ts: row.createdAt,
+        filename: row.filename,
+        summary: {
+          total: row.summary?.total ?? 0,
+          created: row.summary?.created ?? 0,
+          updated: row.summary?.updated ?? row.summary?.valid ?? 0,
+          failed: row.summary?.failed ?? 0,
+        },
+        log: row.log ?? [],
+        createdBy: row.createdBy,
+        kind: row.kind,
+        status: row.status,
+      }))));
+    } catch { /* history is non-blocking */ }
+  }
+
+  retryHistory(id: string): void {
+    void this.startImport({ retryId: id });
   }
 
   toggleHistory(id: string): void {
     this.importHistory.update(hist =>
       hist.map(h => h.id === id ? { ...h, expanded: !h.expanded } : h),
     );
-  }
-
-  clearHistory(): void {
-    this.importHistory.set([]);
-    this.storage.remove('import-history');
   }
 
   downloadHistoryReport(h: HistoryRecord): void {

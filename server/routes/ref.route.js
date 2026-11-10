@@ -6,7 +6,9 @@ const { asyncHandler, ok } = require('./lib');
 const router = Router();
 
 router.get('/colors', asyncHandler(async (_req, res) => {
-  res.set('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+  // Color names and their Arabic translations are admin-managed. Do not let a
+  // browser/CDN keep showing the previous translation after an admin save.
+  res.set('Cache-Control', 'no-store');
   const tenant = await ensureDefaultTenant(db);
   const { rows } = await db.query(
     `SELECT id, name_en, name_ar, hex, swatch_image_url, sort_order

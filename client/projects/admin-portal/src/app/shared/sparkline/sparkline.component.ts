@@ -1,15 +1,15 @@
-import { Component, Input, computed, signal } from '@angular/core';
+import { Component, Input, computed, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
-  selector: 'ap-sparkline',
-  standalone: true,
-  imports: [CommonModule],
-  template: `
+    selector: 'ap-sparkline',
+    imports: [CommonModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     <svg [attr.width]="w" [attr.height]="h" style="flex-shrink:0;">
       <polyline fill="none" [attr.stroke]="color()" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" [attr.points]="points()"/>
     </svg>
-  `,
+  `
 })
 export class SparklineComponent {
   @Input({ required: true }) set data(d: number[]) { this._data.set(d); }

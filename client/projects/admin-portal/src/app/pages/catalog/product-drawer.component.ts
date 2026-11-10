@@ -1,6 +1,9 @@
+import { RestockRequestsService, RestockSummary } from '../../services/restock-requests.service';
+import { colorKey } from '../../../../../../../shared/color-key.js';
 import {
   Component, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output,
   computed, inject, signal,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -9,29 +12,52 @@ import { PillComponent } from '../../shared/pill/pill.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { RichTextComponent } from '../../shared/rich-text/rich-text.component';
 import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
+import { BarcodeComponent } from '../../shared/barcode/barcode.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
-import { AdminProductsService } from '../../services/admin-products.service';
+import { AdminProductsService, SaveProductPayload } from '../../services/admin-products.service';
 import { AdminCollectionsService } from '../../services/admin-collections.service';
 import { AdminRefService, RefColor, RefMaterial, RefSizeSet } from '../../services/admin-ref.service';
 import { MediaUploadService, ProductImageUploadResult } from '../../services/media-upload.service';
 import { AdminMediaService } from '../../services/admin-media.service';
 import { StorageService } from '../../services/storage.service';
+import { LabelPrinterService, arabicPrice } from '../../services/label-printer.service';
 import { Collection, ME, Product, ProductVariant } from '../../models';
+import { RouterLink } from '@angular/router';
+import { InventoryService, StockLocation } from '../../services/inventory.service';
+import { formatVariantSku, variantBaseSku } from '../../utils/variant-sku';
+import { NO_IMAGE_LOGO, onProductImgError } from '../../utils/no-image';
 
 interface FormShape {
   name: string; nameAr: string; sku: string; brand: string; collectionIds: string[];
   relatedProductIds: string[];
-  price: number; stock: number; hidden: boolean;
+  price: number; defaultCostPrice: number | null; defaultShippingCost: number | null;
+  stock: number; hidden: boolean; posHidden: boolean;
+  duplicatedFromProductId: string | null;
   enDesc: string; arDesc: string;
+  shortEn: string; shortAr: string;
+  teaserEn: string; teaserAr: string;
+  noteEn: string; noteAr: string;
+  careEn: string; careAr: string;
   metaTitle: string; metaDesc: string; slug: string;
   variants: ProductVariant[];
   images: string[];
   imageColors: Record<string, string>;
+  colorCovers: Record<string, string>;
 }
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
+
+// A brand-new product isn't saved yet, so its gallery images ride along as
+// base64 data URLs inside the JSON create-product request (see uploadFiles
+// below) instead of the multipart upload used everywhere else — and that
+// request is capped at 10 MB (server/index.js), not the 50 MB per-file
+// limit the rest of the app promises. Base64 inflates raw bytes by ~4/3, so
+// these caps sit well below 50 MB to leave headroom for that encoding plus
+// the rest of the product form.
+const PRESAVE_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+const PRESAVE_IMAGE_TOTAL_BUDGET_BYTES = 7 * 1024 * 1024;
 
 
 /** Read a File as a data URL — used for the upload-row thumbnail before
@@ -47,10 +73,9 @@ function readPreview(file: File): Promise<string> {
 }
 
 @Component({
-  selector: 'ap-product-drawer',
-  standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, PillComponent, SpinnerComponent, RichTextComponent, SaveBarComponent],
-  template: `
+    selector: 'ap-product-drawer',
+    imports: [CommonModule, FormsModule, RouterLink, IconComponent, PillComponent, SpinnerComponent, RichTextComponent, SaveBarComponent, BarcodeComponent],
+    template: `
     <div class="overlay" (click)="handleClose()"></div>
     <div class="drawer drawer-wide product-drawer" [class.is-dirty]="dirty()">
       <!-- Header: title + status + save state — nav buttons live alongside close -->
@@ -148,13 +173,36 @@ function readPreview(file: File): Promise<string> {
           </div>
           <button class="toggle" [class.on]="!form().hidden" (click)="toggle('hidden')" [attr.aria-label]="form().hidden ? t('product.show') : t('product.hide')"></button>
         </div>
+        <!-- HIDDEN-POS-TOGGLE: "Available on POS" hidden at the client's request
+             (2026-09-01) — every product is forced available on POS (posHidden
+             always false, see makeEmptyForm/makeFormFromProduct below) until
+             they ask for this control back. Search "HIDDEN-POS-TOGGLE" to
+             restore: un-comment this block and remove the two forced-false
+             overrides. -->
+        @if (false) {
+          <div class="vis-block mb-24" [class.hidden-state]="form().posHidden">
+            <div>
+              <div class="strong" style="font-size:13px;margin-bottom:2px;" [style.color]="form().posHidden ? 'var(--danger)' : 'var(--ink)'">
+                {{ form().posHidden ? t('product.posVisibility.hiddenTitle') : t('product.posVisibility.visibleTitle') }}
+              </div>
+              <div class="muted small">
+                {{ form().posHidden ? t('product.posVisibility.hiddenSub') : t('product.posVisibility.visibleSub') }}
+              </div>
+            </div>
+            <button class="toggle" [class.on]="!form().posHidden" (click)="toggle('posHidden')"></button>
+          </div>
+        }
 
         <!-- Image preview + key facts -->
         <div class="mb-24" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
           <div class="prod-img" style="border-radius:10px;">
-            <img [src]="primaryImage()" [alt]="form().name" (error)="onImgError($event)"/>
+            @if (primaryImage()) {
+              <img [src]="primaryImage()" [alt]="form().name" (error)="onImgError($event)"/>
+            } @else {
+              <img class="no-img" [src]="noImageLogo" [alt]="form().name"/>
+            }
             @if (form().images.length > 1) {
-              <span class="prod-3d-badge" style="top:10px;inset-inline-start:10px;background:rgba(2,70,56,0.92);">{{ form().images.length }}</span>
+              <span class="corner-badge" style="top:10px;inset-inline-start:10px;background:rgba(2,70,56,0.92);">{{ form().images.length }}</span>
             }
           </div>
           <div>
@@ -220,7 +268,7 @@ function readPreview(file: File): Promise<string> {
                     @if (colorLinkedToImage(img); as linkedColor) {
                       <div class="thumb-color-badge">
                         <span class="color-dot" [style.background]="colorHex(linkedColor)"></span>
-                        <span>{{ linkedColor }}</span>
+                        <span>{{ linkedColor }}{{ imageForColor(linkedColor) === img ? ' (' + t('product.variants.cardCover') + ')' : '' }}</span>
                       </div>
                     }
                     <div class="thumb-actions">
@@ -247,11 +295,46 @@ function readPreview(file: File): Promise<string> {
             <button class="btn btn-outline btn-sm" type="button" (click)="openMediaPicker()">
               <ap-icon name="media" [size]="12"/> {{ t('product.gallery.pickFromMedia') }}
             </button>
-            <button class="btn btn-outline btn-sm" type="button" (click)="addImageUrl()">
-              <ap-icon name="link" [size]="12"/> {{ t('product.gallery.addUrl') }}
+            <button class="btn btn-outline btn-sm" type="button" (click)="openGDrive()">
+              <ap-icon name="link" [size]="12"/> {{ t('product.gallery.addGDrive') }}
             </button>
           </div>
         </div>
+
+        <!-- ── Google Drive import modal ── -->
+        @if (gdriveOpen()) {
+          <div class="overlay" (click)="gdriveOpen.set(false)"></div>
+          <div class="modal gdrive-modal">
+            <div class="modal-head">
+              <div>
+                <p class="gdrive-eyebrow">{{ t('media.gdrive.eyebrow') }}</p>
+                <div class="card-title">{{ t('media.gdrive.title') }}</div>
+              </div>
+              <button class="x-btn" type="button" (click)="gdriveOpen.set(false)"><ap-icon name="x" [size]="14"/></button>
+            </div>
+            <div class="modal-body">
+              <div class="gdrive-info">
+                <ap-icon name="info" [size]="14"/>
+                <span>{{ t('media.gdrive.info') }}</span>
+              </div>
+              <label class="lbl mb-8">{{ t('media.gdrive.label') }}</label>
+              <input class="inp mb-6" [placeholder]="t('media.gdrive.placeholder')"
+                     [ngModel]="gdriveUrl()" (ngModelChange)="gdriveUrl.set($event)"
+                     (keydown.enter)="importGDrive()" [disabled]="gdriveLoading()"/>
+              <div class="muted small mb-16">{{ t('media.gdrive.hint') }}</div>
+
+              @if (gdriveError()) {
+                <div class="gdrive-error">{{ gdriveError() }}</div>
+              }
+            </div>
+            <div class="drawer-foot">
+              <button class="btn btn-outline" type="button" (click)="gdriveOpen.set(false)" [disabled]="gdriveLoading()">{{ t('common.cancel') }}</button>
+              <button class="btn btn-gold" type="button" (click)="importGDrive()" [disabled]="gdriveLoading() || !gdriveUrl().trim()">
+                @if (gdriveLoading()) { <ap-spinner [size]="13"/> {{ t('media.gdrive.importing') }} } @else { {{ t('media.gdrive.import') }} }
+              </button>
+            </div>
+          </div>
+        }
 
         <!-- ② Section: Basics — title + identity fields -->
         <div class="section-title">
@@ -273,6 +356,7 @@ function readPreview(file: File): Promise<string> {
             <div>
               <label class="lbl">{{ t('product.field.sku') }}</label>
               <input class="inp mono" [ngModel]="form().sku" (ngModelChange)="set('sku', $event)"/>
+              <span class="muted small">{{ t('product.field.sku.hint') }}</span>
             </div>
           </div>
         </div>
@@ -287,8 +371,16 @@ function readPreview(file: File): Promise<string> {
         <div class="mb-24" [style.display]="isMobile() && !openSections().has('pricing') ? 'none' : ''"  >
           <div class="grid-2">
             <div>
-              <label class="lbl">{{ t('product.field.price') }} (QAR)</label>
-              <input class="inp mono" type="number" min="0" [ngModel]="form().price" (ngModelChange)="setNum('price', $event)"/>
+              <label class="lbl">{{ t('product.field.price') }}</label>
+              <!-- Derived like the stock total beside it: the shop sells at the size's price,
+                   so this field follows the cheapest size rather than being typed. Left
+                   editable it drifted, and a size added later inherited the stale number. -->
+              @if (hasVariants()) {
+                <div class="inp mono" style="background:var(--bg);cursor:default;color:var(--ink-2);">{{ variantsLowestPrice() }}</div>
+                <div class="muted small mt-8">{{ t('product.field.price.fromVariants') }}</div>
+              } @else {
+                <input class="inp mono" type="number" min="0" step="1" [ngModel]="form().price" (ngModelChange)="setNum('price', $event)"/>
+              }
             </div>
             <div>
               <label class="lbl">{{ t('product.field.stock') }}</label>
@@ -303,6 +395,22 @@ function readPreview(file: File): Promise<string> {
                   <div class="muted small mt-8" style="color:var(--warning);">{{ t('product.field.stock.low') }}</div>
                 }
               }
+            </div>
+          </div>
+          <div class="grid-2 mt-16">
+            <div>
+              <label class="lbl">{{ t('product.field.defaultCost') }}</label>
+              <input class="inp mono" type="number" min="0" step="0.01"
+                     [ngModel]="form().defaultCostPrice"
+                     (ngModelChange)="setDefaultCost('defaultCostPrice', 'costPrice', $event)"/>
+              <div class="muted small mt-8">{{ t('product.field.defaultCost.hint') }}</div>
+            </div>
+            <div>
+              <label class="lbl">{{ t('product.field.defaultShipping') }}</label>
+              <input class="inp mono" type="number" min="0" step="0.01"
+                     [ngModel]="form().defaultShippingCost"
+                     (ngModelChange)="setDefaultCost('defaultShippingCost', 'shippingCost', $event)"/>
+              <div class="muted small mt-8">{{ t('product.field.defaultShipping.hint') }}</div>
             </div>
           </div>
         </div>
@@ -327,15 +435,12 @@ function readPreview(file: File): Promise<string> {
               </button>
             </div>
           } @else {
-            <!-- Transparent backdrop to close image picker on outside click -->
-            @if (variantPickerOpenId()) {
-              <div class="vc-backdrop" (click)="closeVariantPicker()"></div>
-            }
-
             <div class="variants-cards">
               <!-- ══ Color groups accordion ══ -->
               @for (group of colorGroups(); track group.colorKey) {
-                <div class="vcg" [class.vcg--open]="expandedGroups().has(group.colorKey)">
+                <div class="vcg" [class.vcg--open]="expandedGroups().has(group.colorKey)"
+                     [class.vcg--new]="group.colorKey === newGroupKey"
+                     [attr.data-group-key]="group.colorKey">
 
                   <!-- Group header row -->
                   <div class="vcg-head" (click)="toggleGroup(group.colorKey)">
@@ -349,6 +454,9 @@ function readPreview(file: File): Promise<string> {
                     } @else {
                       <span class="vcg-swatch" [style.background]="colorHex(group.colorName)"></span>
                     }
+                    @if (group.colorKey === newGroupKey) {
+                      <span class="vcg-new-label">{{ t('product.variants.newGroup') }}</span>
+                    }
 
                     <!-- Color selector — click stops group toggle, select changes all variants in group -->
                     <div class="vcg-color-wrap" (click)="$event.stopPropagation()">
@@ -356,7 +464,7 @@ function readPreview(file: File): Promise<string> {
                         <select class="inp inp-sm vcg-color-sel"
                                 [ngModel]="group.colorName"
                                 (ngModelChange)="renameGroupColor(group.colorKey, $event)">
-                          <option value="">{{ t('product.variants.noColor') }}</option>
+                          <option value="">{{ group.colorKey === newGroupKey ? t('product.variants.chooseColor') : t('product.variants.noColor') }}</option>
                           @for (c of refColors(); track c.id) {
                             <option [value]="c.name_en">{{ c.name_en }}</option>
                           }
@@ -375,7 +483,7 @@ function readPreview(file: File): Promise<string> {
                       {{ groupStock(group.items) }} {{ t('product.variants.inStock') }}
                     </span>
 
-                    <!-- Image picker trigger + popover, wrapped so picker anchors to button -->
+                    <!-- Photo picker trigger. The picker itself is the dialog at the end of the template. -->
                     <div class="vcg-img-wrap" (click)="$event.stopPropagation()">
                       <button class="vcg-img-btn" type="button"
                               (click)="toggleVariantPicker('group-' + group.colorKey)"
@@ -388,56 +496,23 @@ function readPreview(file: File): Promise<string> {
                           <ap-icon name="media" [size]="13"/>
                         }
                       </button>
-
-                      @if (variantPickerOpenId() === 'group-' + group.colorKey) {
-                        <div class="vc-img-picker vc-img-picker--group" (click)="$event.stopPropagation()">
-                          <div class="vc-img-picker-head">
-                            {{ t('product.variants.linkPhotoFor') }} <strong>{{ group.colorName }}</strong>
-                            <button class="vc-img-picker-close" type="button" (click)="closeVariantPicker()">✕</button>
-                          </div>
-                          @if (form().images.length === 0) {
-                            <p class="vc-img-picker-empty">{{ t('product.variants.uploadFirst') }}</p>
-                          } @else {
-                            <div class="vc-img-picker-grid">
-                              <button class="vc-img-opt vc-img-opt--none" type="button"
-                                      [class.is-sel]="!imageForColor(group.colorName)"
-                                      (click)="setColorImage(group.colorName, ''); closeVariantPicker()">
-                                <span class="vc-img-none-label">{{ t('product.variants.noneOption') }}</span>
-                              </button>
-                              @for (img of form().images; track img) {
-                                <button class="vc-img-opt" type="button"
-                                        [class.is-sel]="imageForColor(group.colorName) === img"
-                                        (click)="setColorImage(group.colorName, img); closeVariantPicker()">
-                                  <img [src]="img" [alt]="''"/>
-                                </button>
-                              }
-                            </div>
-                          }
-                        </div>
+                      @if (imagesForColor(group.colorName).length > 0) {
+                        <span class="vcg-img-count">{{ imagesForColor(group.colorName).length }} {{ t('product.variants.photoCount') }}</span>
                       }
+
                     </div>
 
                     <!-- Spacer -->
                     <span style="flex:1;"></span>
 
-                    <!-- Generate sizes for this color -->
-                    @if (refSizeSets().length > 0 && expandedGroups().has(group.colorKey)) {
-                      <div class="gen-sizes-wrap" (click)="$event.stopPropagation()">
-                        <select class="inp inp-sm" #grpSizeSetSel style="font-size:11px;">
-                          <option value="">{{ t('product.variants.generateSizes') }}</option>
-                          @for (ss of refSizeSets(); track ss.id) {
-                            <option [value]="ss.id">{{ ss.name }}</option>
-                          }
-                        </select>
-                        <button class="btn btn-outline btn-sm" [disabled]="!grpSizeSetSel.value"
-                                (click)="generateSizesForColor(grpSizeSetSel.value, group.colorName); grpSizeSetSel.value=''">
-                          <ap-icon name="wand" [size]="12"/>
-                        </button>
-                      </div>
-                    }
-
                     <!-- Add size in this color -->
-                    @if (expandedGroups().has(group.colorKey)) {
+                    @if (group.colorKey === newGroupKey) {
+                      <button class="vt-remove" type="button"
+                              (click)="$event.stopPropagation(); removeVariant(group.items[0].globalIndex)"
+                              [attr.aria-label]="t('common.remove')">
+                        <ap-icon name="trash" [size]="12"/>
+                      </button>
+                    } @else if (expandedGroups().has(group.colorKey)) {
                       <button class="btn btn-outline btn-sm" type="button"
                               (click)="$event.stopPropagation(); addVariantForColor(group.colorName)">
                         <ap-icon name="plus" [size]="11"/> {{ t('product.variants.addSize') }}
@@ -446,7 +521,38 @@ function readPreview(file: File): Promise<string> {
                   </div>
 
                   <!-- Size rows — shown only when group is expanded -->
-                  @if (expandedGroups().has(group.colorKey)) {
+                  @if (group.colorKey === newGroupKey) {
+                    <p class="vcg-new-hint">{{ t('product.variants.pickColorFirst') }}</p>
+                  } @else if (expandedGroups().has(group.colorKey)) {
+                    <div class="vcg-sku-tools" (click)="$event.stopPropagation()">
+                      <label class="vcg-sku-field">
+                        <span>{{ t('product.variants.colorBaseSku') }}</span>
+                        <input class="inp inp-sm mono"
+                               [placeholder]="t('product.variants.colorBaseSku.placeholder')"
+                               [ngModel]="colorVariantBaseSku(group.colorName, group.items)"
+                               (ngModelChange)="setColorVariantBaseSku(group.colorName, $event)"/>
+                      </label>
+                      <span class="muted small vcg-sku-example">
+                        {{ colorVariantBaseSku(group.colorName, group.items) || t('product.variants.colorBaseSku.placeholder') }}-SIZE
+                      </span>
+                      @if (refSizeSets().length > 0) {
+                        <div class="gen-sizes-wrap">
+                          <select class="inp inp-sm" [value]="groupSizeSet()[group.colorKey] || ''"
+                                  (change)="pickGroupSizeSet(group.colorKey, $any($event.target).value)">
+                            <option value="">{{ t('product.variants.generateSizes') }}</option>
+                            @for (ss of refSizeSets(); track ss.id) {
+                              <option [value]="ss.id">{{ ss.name }}</option>
+                            }
+                          </select>
+                          <button class="btn btn-outline btn-sm" type="button"
+                                  [disabled]="!groupSizeSet()[group.colorKey] || !colorVariantBaseSku(group.colorName, group.items).trim()"
+                                  (click)="generateSizesForColor(groupSizeSet()[group.colorKey], group.colorName); pickGroupSizeSet(group.colorKey, '')">
+                            <ap-icon name="plus" [size]="12"/> {{ t('product.variants.generate') }}
+                          </button>
+                        </div>
+                      }
+                    </div>
+
                     <!-- Column headers -->
                     <div class="vc-header vc-header--group">
                       <span>{{ t('product.variants.col.size') }}</span>
@@ -457,7 +563,9 @@ function readPreview(file: File): Promise<string> {
                     </div>
 
                     @for (item of group.items; track item.v.id) {
-                      <div class="vc vc--grouped" [class.vc-expanded]="expandedVariants().has(item.v.id)">
+                      <div class="vc vc--grouped" [class.vc-expanded]="expandedVariants().has(item.v.id)"
+                           [class.vc--flash]="flashVariantId() === item.v.id"
+                           [attr.data-variant-id]="item.v.id">
                         <div class="vc-row vc-row--grouped">
 
                           <!-- Size -->
@@ -482,6 +590,22 @@ function readPreview(file: File): Promise<string> {
                           </div>
 
                           <!-- Stock -->
+                          @if (perLocation()) {
+                            <!-- The row shows the sellable total; the per-location
+                                 numbers open underneath (less clutter per row). -->
+                            <div class="vc-cell vc-cell--num">
+                              <button type="button" class="vc-stock-total mono"
+                                      [class.is-zero]="item.v.stock === 0"
+                                      [class.is-changed]="variantLocationsChanged(item.v)"
+                                      [class.is-open]="expandedVariants().has(item.v.id)"
+                                      [attr.aria-expanded]="expandedVariants().has(item.v.id)"
+                                      [attr.aria-label]="t('product.variants.stockByLocation') + ' · ' + (item.v.size || '')"
+                                      [title]="t('product.variants.stockByLocation')"
+                                      (click)="toggleVariantExpand(item.v.id)">
+                                {{ item.v.stock }}
+                              </button>
+                            </div>
+                          } @else {
                           <div class="vc-cell vc-cell--num">
                             <input class="inp inp-sm mono vc-stock-inp"
                                    [class.stock-out]="item.v.stock === 0"
@@ -490,6 +614,7 @@ function readPreview(file: File): Promise<string> {
                                    [ngModel]="item.v.stock"
                                    (ngModelChange)="updateVariant(item.globalIndex, { stock: +$event || 0 })"/>
                           </div>
+                          }
 
                           <!-- Price -->
                           <div class="vc-cell vc-cell--num vc-cell--price">
@@ -497,7 +622,7 @@ function readPreview(file: File): Promise<string> {
                               <span class="vc-price-pfx">QAR</span>
                               <input class="inp inp-sm mono" type="number" min="0"
                                      [ngModel]="item.v.price"
-                                     (ngModelChange)="updateVariant(item.globalIndex, { price: +$event || 0 })"/>
+                                     (ngModelChange)="updateVariant(item.globalIndex, { price: wholeQar($event) })"/>
                             </div>
                           </div>
 
@@ -510,6 +635,12 @@ function readPreview(file: File): Promise<string> {
 
                           <!-- Actions -->
                           <div class="vc-cell vc-cell--actions">
+                            <button class="vt-print" type="button"
+                                    (click)="printVariantLabel(item.v)"
+                                    [title]="t('product.variants.printLabel')"
+                                    [attr.aria-label]="t('product.variants.printLabel')">
+                              <ap-icon name="barcode" [size]="13"/>
+                            </button>
                             <button class="vt-expand" type="button"
                                     [class.is-open]="expandedVariants().has(item.v.id)"
                                     (click)="toggleVariantExpand(item.v.id)"
@@ -524,9 +655,37 @@ function readPreview(file: File): Promise<string> {
                           </div>
                         </div>
 
-                        <!-- Expandable detail: Material | Cost | Shipping | Total Cost · Margin -->
+                        @if (waitingForVariant(item.v); as count) {
+                          <p class="muted small" style="margin:0;padding:0 12px 8px;">{{ count }} {{ t('restock.customersWaiting') }}</p>
+                        }
+                        <!-- Expandable detail: Material | Barcode | Cost | Shipping | Total Cost · Margin -->
                         @if (expandedVariants().has(item.v.id)) {
-                          <div class="vc-detail vc-detail--5col">
+                          @if (perLocation()) {
+                            <div class="vc-locs" role="group" [attr.aria-label]="t('product.variants.stockByLocation')">
+                              <div class="vc-locs-head">
+                                <span class="vc-lbl">{{ t('product.variants.stockByLocation') }}</span>
+                                @if (item.v.held) {
+                                  <span class="vc-held" [title]="t('inv.col.heldHelp')">{{ t('product.variants.heldOnline').replace('{n}', '' + item.v.held) }}</span>
+                                }
+                              </div>
+                              <div class="vc-locs-grid">
+                                @for (loc of stockLocations(); track loc.id) {
+                                  <label class="vc-loc">
+                                    <span class="vc-loc-name">{{ loc.name }}</span>
+                                    <input class="inp inp-sm mono"
+                                           [class.is-changed]="locChanged(item.v, loc.id)"
+                                           type="number" min="0" inputmode="numeric"
+                                           [ngModel]="locQty(item.v, loc.id)"
+                                           (ngModelChange)="updateLocationStock(item.globalIndex, loc.id, $event)"/>
+                                    @if (locChanged(item.v, loc.id)) {
+                                      <span class="vc-loc-was">{{ t('product.variants.was').replace('{n}', '' + locWas(item.v, loc.id)) }}</span>
+                                    }
+                                  </label>
+                                }
+                              </div>
+                            </div>
+                          }
+                          <div class="vc-detail vc-detail--6col">
                             <div class="vc-field">
                               <label class="vc-lbl">{{ t('product.variants.col.material') }}</label>
                               @if (refMaterials().length > 0) {
@@ -542,6 +701,17 @@ function readPreview(file: File): Promise<string> {
                                        [placeholder]="t('product.variants.placeholder.material')"
                                        [ngModel]="item.v.material"
                                        (ngModelChange)="updateVariant(item.globalIndex, { material: $event })"/>
+                              }
+                            </div>
+                            <div class="vc-field">
+                              <label class="vc-lbl">{{ t('product.variants.col.barcode') }}</label>
+                              <input class="inp inp-sm mono" [placeholder]="variantBarcodePreview(item.v)"
+                                     [ngModel]="item.v.barcode"
+                                     (ngModelChange)="updateVariant(item.globalIndex, { barcode: $event })"/>
+                              <!-- What the printer will actually put on the
+                                   label, live as the code is typed. -->
+                              @if (variantBarcodePreview(item.v)) {
+                                <ap-barcode class="vc-barcode" [value]="variantBarcodePreview(item.v)" [height]="26" [width]="1.3"/>
                               }
                             </div>
                             <div class="vc-field">
@@ -576,6 +746,27 @@ function readPreview(file: File): Promise<string> {
                               }
                             </div>
                           </div>
+
+                          <!-- Size-specific note. Explains a detail that only this
+                               size has (e.g. a back zipper on the small sizes) so
+                               the storefront can say it without a separate photo. -->
+                          <div class="vc-detail vc-detail--notes">
+                            <div class="vc-field">
+                              <label class="vc-lbl">{{ t('product.variants.note.en') }}</label>
+                              <input class="inp inp-sm"
+                                     [placeholder]="t('product.variants.note.placeholderEn')"
+                                     [ngModel]="item.v.noteEn"
+                                     (ngModelChange)="updateVariant(item.globalIndex, { noteEn: $event })"/>
+                            </div>
+                            <div class="vc-field">
+                              <label class="vc-lbl">{{ t('product.variants.note.ar') }}</label>
+                              <input class="inp inp-sm" dir="rtl"
+                                     [placeholder]="t('product.variants.note.placeholderAr')"
+                                     [ngModel]="item.v.noteAr"
+                                     (ngModelChange)="updateVariant(item.globalIndex, { noteAr: $event })"/>
+                            </div>
+                          </div>
+                          <p class="vc-note-hint muted small">{{ t('product.variants.note.hint') }}</p>
                         }
                       </div>
                     }
@@ -594,14 +785,63 @@ function readPreview(file: File): Promise<string> {
                   }
                 </div>
                 <div class="row gap-sm" style="flex-wrap:wrap;">
-                  <button class="btn btn-outline btn-sm" (click)="openBulkStock()">
-                    <ap-icon name="chart" [size]="12"/> {{ t('product.variants.bulkStock') }}
+                  @if (perLocation()) {
+                    <a class="btn btn-outline btn-sm" routerLink="/inventory" [queryParams]="{ tab: 'transfer' }">
+                      <ap-icon name="sync" [size]="12"/> {{ t('product.variants.moveStock') }}
+                    </a>
+                  } @else {
+                    <button class="btn btn-outline btn-sm" (click)="openBulkStock()">
+                      <ap-icon name="chart" [size]="12"/> {{ t('product.variants.bulkStock') }}
+                    </button>
+                  }
+                  <button class="btn btn-outline btn-sm" [class.is-active]="barcodeSheetOpen()" (click)="toggleBarcodeSheet()">
+                    <ap-icon name="barcode" [size]="12"/>
+                    {{ barcodeSheetOpen() ? t('product.variants.hideBarcodes') : t('product.variants.showBarcodes') }}
+                  </button>
+                  <button class="btn btn-outline btn-sm" (click)="printAllVariantLabels()">
+                    <ap-icon name="barcode" [size]="12"/> {{ t('product.variants.printAllLabels') }}
                   </button>
                   <button class="btn btn-outline btn-sm" (click)="addVariant()">
                     <ap-icon name="plus" [size]="12"/> {{ t('product.variants.add') }}
                   </button>
                 </div>
               </div>
+
+              <!-- Every variant's barcode, on the page. The same JsBarcode
+                   render and the same four lines the label printer emits, so
+                   the codes can be checked (and scan-tested off the screen)
+                   without burning a roll of labels first. -->
+              @if (barcodeSheetOpen()) {
+                <div class="barcode-sheet">
+                  <div class="barcode-sheet-head">
+                    <div>
+                      <div class="strong small">{{ t('product.variants.barcodeSheet.title') }}</div>
+                      <div class="muted small">{{ t('product.variants.barcodeSheet.sub') }}</div>
+                    </div>
+                    <button class="btn btn-outline btn-sm" (click)="printAllVariantLabels()">
+                      <ap-icon name="barcode" [size]="12"/> {{ t('product.variants.printAllLabels') }}
+                    </button>
+                  </div>
+                  <div class="barcode-grid">
+                    @for (v of form().variants; track v.id) {
+                      <div class="barcode-card">
+                        <div class="bc-brand">{{ product?.brand || 'Elite' }}</div>
+                        <div class="bc-name">{{ form().name }}</div>
+                        @if (variantLabelText(v)) { <div class="bc-variant">{{ variantLabelText(v) }}</div> }
+                        <ap-barcode [value]="variantBarcodePreview(v)" [height]="40"/>
+                        <div class="bc-code mono">{{ variantBarcodePreview(v) || '—' }}</div>
+                        <div class="bc-price-row">
+                          <span class="bc-price">QAR {{ (+v.price || 0).toFixed(2) }}</span>
+                          <span class="bc-price-ar" dir="rtl">{{ arabicPrice(+v.price || 0) }}</span>
+                        </div>
+                        <button class="btn btn-ghost btn-sm bc-print" (click)="printVariantLabel(v)">
+                          <ap-icon name="barcode" [size]="11"/> {{ t('product.variants.printLabel') }}
+                        </button>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
             </div>
           }
         </div>
@@ -614,21 +854,113 @@ function readPreview(file: File): Promise<string> {
         </div>
 
         <div [style.display]="isMobile() && !openSections().has('desc') ? 'none' : ''">
+          <!-- Hook: single line, used on the home hero and other compact
+               surfaces. Plain text on purpose — no rich formatting fits there. -->
+          <div class="short-desc-grid mb-24">
+            <div>
+              <label class="lbl">
+                {{ t('product.field.shortEn') }}
+                <span class="short-desc-count" [class.over]="(form().shortEn || '').length > 90">
+                  {{ (form().shortEn || '').length }}/90
+                </span>
+              </label>
+              <textarea class="inp" rows="2" dir="ltr"
+                        [placeholder]="t('product.field.shortEn.ph')"
+                        [ngModel]="form().shortEn"
+                        (ngModelChange)="set('shortEn', $event)"></textarea>
+            </div>
+            <div>
+              <label class="lbl">
+                {{ t('product.field.shortAr') }}
+                <span class="short-desc-count" [class.over]="(form().shortAr || '').length > 90">
+                  {{ (form().shortAr || '').length }}/90
+                </span>
+              </label>
+              <textarea class="inp" rows="2" dir="rtl"
+                        [placeholder]="t('product.field.shortAr.ph')"
+                        [ngModel]="form().shortAr"
+                        (ngModelChange)="set('shortAr', $event)"></textarea>
+            </div>
+          </div>
+          <p class="short-desc-hint">{{ t('product.field.shortHint') }}</p>
+
+          <!-- Short description: shown directly under the product name on the
+               product detail page. Plain text, same compact shape as the Hook. -->
+          <div class="short-desc-grid mb-24">
+            <div>
+              <label class="lbl">
+                {{ t('product.field.teaserEn') }}
+                <span class="short-desc-count" [class.over]="(form().teaserEn || '').length > 160">
+                  {{ (form().teaserEn || '').length }}/160
+                </span>
+              </label>
+              <textarea class="inp" rows="2" dir="ltr"
+                        [placeholder]="t('product.field.teaserEn.ph')"
+                        [ngModel]="form().teaserEn"
+                        (ngModelChange)="set('teaserEn', $event)"></textarea>
+            </div>
+            <div>
+              <label class="lbl">
+                {{ t('product.field.teaserAr') }}
+                <span class="short-desc-count" [class.over]="(form().teaserAr || '').length > 160">
+                  {{ (form().teaserAr || '').length }}/160
+                </span>
+              </label>
+              <textarea class="inp" rows="2" dir="rtl"
+                        [placeholder]="t('product.field.teaserAr.ph')"
+                        [ngModel]="form().teaserAr"
+                        (ngModelChange)="set('teaserAr', $event)"></textarea>
+            </div>
+          </div>
+          <p class="short-desc-hint">{{ t('product.field.teaserHint') }}</p>
+
+          <!-- Product note: a fact that holds for the whole product, shown on
+               the storefront without waiting for a size to be picked. A size
+               note set on a variant stacks underneath it rather than replacing
+               it, so both can be true at once. -->
+          <div class="short-desc-grid mb-24">
+            <div>
+              <label class="lbl">
+                {{ t('product.field.noteEn') }}
+                <span class="short-desc-count" [class.over]="(form().noteEn || '').length > 80">
+                  {{ (form().noteEn || '').length }}/80
+                </span>
+              </label>
+              <input class="inp" dir="ltr"
+                     [placeholder]="t('product.field.noteEn.ph')"
+                     [ngModel]="form().noteEn"
+                     (ngModelChange)="set('noteEn', $event)"/>
+            </div>
+            <div>
+              <label class="lbl">
+                {{ t('product.field.noteAr') }}
+                <span class="short-desc-count" [class.over]="(form().noteAr || '').length > 80">
+                  {{ (form().noteAr || '').length }}/80
+                </span>
+              </label>
+              <input class="inp" dir="rtl"
+                     [placeholder]="t('product.field.noteAr.ph')"
+                     [ngModel]="form().noteAr"
+                     (ngModelChange)="set('noteAr', $event)"/>
+            </div>
+          </div>
+          <p class="short-desc-hint">{{ t('product.field.noteHint') }}</p>
+
           <div class="mb-24">
-            <label class="lbl">{{ t('product.field.descEn') }}</label>
+            <label class="lbl">{{ t('product.field.careEn') }}</label>
             <ap-rich-text
               dir="ltr"
-              [value]="form().enDesc"
-              [ariaLabel]="t('product.field.descEn')"
-              (valueChange)="set('enDesc', $event)"/>
+              [value]="form().careEn"
+              [ariaLabel]="t('product.field.careEn')"
+              (valueChange)="set('careEn', $event)"/>
           </div>
           <div class="mb-24">
-            <label class="lbl">{{ t('product.field.descAr') }}</label>
+            <label class="lbl">{{ t('product.field.careAr') }}</label>
             <ap-rich-text
               dir="rtl"
-              [value]="form().arDesc"
-              [ariaLabel]="t('product.field.descAr')"
-              (valueChange)="set('arDesc', $event)"/>
+              [value]="form().careAr"
+              [ariaLabel]="t('product.field.careAr')"
+              (valueChange)="set('careAr', $event)"/>
           </div>
         </div>
 
@@ -673,6 +1005,8 @@ function readPreview(file: File): Promise<string> {
                   <span class="related-thumb">
                     @if (productThumb(p)) {
                       <img [src]="productThumb(p)" [alt]="p.name" (error)="onImgError($event)" />
+                    } @else {
+                      <img class="no-img" [src]="noImageLogo" [alt]="p.name" />
                     }
                   </span>
                   <span class="related-copy">
@@ -695,14 +1029,14 @@ function readPreview(file: File): Promise<string> {
 
         <div class="mb-24" [style.display]="isMobile() && !openSections().has('seo') ? 'none' : ''"  >
           <label class="lbl">{{ t('product.field.metaTitle') }}</label>
-          <input class="inp mb-16" [ngModel]="form().metaTitle" (ngModelChange)="set('metaTitle', $event)"/>
+          <input class="inp mb-16" [placeholder]="seoTitlePlaceholder()" [ngModel]="form().metaTitle" (ngModelChange)="set('metaTitle', $event)"/>
           <label class="lbl">{{ t('product.field.metaDesc') }}</label>
           <div class="meta-desc-wrap mb-16">
-            <textarea class="inp" rows="3" [ngModel]="form().metaDesc" (ngModelChange)="set('metaDesc', $event)" maxlength="160" style="resize:vertical;"></textarea>
+            <textarea class="inp" rows="3" [placeholder]="seoDescPlaceholder()" [ngModel]="form().metaDesc" (ngModelChange)="set('metaDesc', $event)" maxlength="160" style="resize:vertical;"></textarea>
             <div class="char-counter" [class.over]="form().metaDesc.length > 160">{{ form().metaDesc.length }}/160</div>
           </div>
           <label class="lbl">{{ t('product.field.slug') }}</label>
-          <input class="inp mono" [ngModel]="form().slug" (ngModelChange)="set('slug', $event)" [class.inp-invalid]="slugError()"/>
+          <input class="inp mono" [placeholder]="slugPlaceholder()" [ngModel]="form().slug" (ngModelChange)="set('slug', $event)" [class.inp-invalid]="slugError()"/>
           @if (slugError()) {
             <div class="field-error mt-6">{{ t('product.field.slugError') }}</div>
           }
@@ -733,14 +1067,14 @@ function readPreview(file: File): Promise<string> {
 
     <!-- ── Media Picker Modal ── -->
     @if (mediaPicker()) {
-      <div class="overlay" style="z-index:260;" (click)="mediaPicker.set(false)"></div>
+      <div class="overlay" style="z-index:260;" (click)="closeMediaPicker()"></div>
       <div class="media-pick-panel" style="z-index:270;">
         <div class="mpp-head">
           <div>
             <p class="mpp-eyebrow">{{ t('product.gallery.library') }}</p>
             <div class="card-title">{{ t('product.gallery.selectImages') }}</div>
           </div>
-          <button class="x-btn" type="button" (click)="mediaPicker.set(false)"><ap-icon name="x" [size]="14"/></button>
+          <button class="x-btn" type="button" (click)="closeMediaPicker()"><ap-icon name="x" [size]="14"/></button>
         </div>
         <div class="mpp-search">
           <ap-icon name="search" [size]="13"/>
@@ -771,7 +1105,7 @@ function readPreview(file: File): Promise<string> {
         <div class="drawer-foot">
           <span class="muted small">{{ mediaSelected().size }} {{ t('product.gallery.selected') }}</span>
           <div class="row gap-sm">
-            <button class="btn btn-outline" type="button" (click)="mediaPicker.set(false)">{{ t('common.cancel') }}</button>
+            <button class="btn btn-outline" type="button" (click)="closeMediaPicker()">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" type="button" [disabled]="mediaSelected().size === 0" (click)="applyMediaSelection()">
               {{ mediaSelected().size !== 1 ? t('product.gallery.addImages') : t('product.gallery.addImage') }}
             </button>
@@ -780,7 +1114,99 @@ function readPreview(file: File): Promise<string> {
       </div>
     }
 
+    <!-- ── Colour photo picker ── -->
+    @if (pickerGroup(); as pg) {
+      <div class="overlay" (click)="closeVariantPicker()"></div>
+      <div class="modal cp-modal" role="dialog" aria-modal="true"
+           [attr.aria-label]="t('product.variants.linkPhotoFor') + ' ' + pg.colorName">
+        <div class="modal-head">
+          <div class="cp-title">
+            <span class="cp-swatch" [style.background]="colorHex(pg.colorName)"></span>
+            <div>
+              <div class="card-title">{{ t('product.variants.linkPhotoFor') }} {{ pg.colorName }}</div>
+              <p class="cp-sub">{{ t('product.variants.pickPhotos') }}</p>
+            </div>
+          </div>
+          <button class="x-btn" type="button" (click)="closeVariantPicker()" [attr.aria-label]="t('common.close')">
+            <ap-icon name="x" [size]="14"/>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="cp-summary">
+              <strong>{{ imagesForColor(pg.colorName).length }}</strong> {{ t('product.variants.photosSelected') }}
+              @if (imagesForColor(pg.colorName).length > 0) {
+                <button class="cp-clear" type="button" (click)="clearColorImages(pg.colorName)">{{ t('product.variants.clearAll') }}</button>
+              }
+            </div>
+            <div class="cp-grid">
+              @for (img of pickerImages(); track img) {
+                @let owner = colorLinkedToImage(img);
+                @let mine = owner === pg.colorName;
+                <div class="cp-item"
+                     [class.is-drop]="mine && cpDropUrl() === img"
+                     [attr.draggable]="mine ? 'true' : null"
+                     (dragstart)="mine && onColorDragStart(img, $event)"
+                     (dragover)="mine && onColorDragOver(img, $event)"
+                     (dragleave)="cpDropUrl.set(null)"
+                     (dragend)="cpDropUrl.set(null)"
+                     (drop)="mine && onColorDrop(pg.colorName, img, $event)">
+                  <div class="cp-tile" [class.is-sel]="mine" [class.is-other]="!!owner && !mine" [class.is-draggable]="mine">
+                    <button class="cp-tile-btn" type="button" (click)="toggleColorImage(pg.colorName, img)"
+                            [attr.aria-pressed]="mine">
+                      <img [src]="img" alt=""/>
+                    </button>
+                    @if (mine) {
+                      <span class="cp-check"><ap-icon name="check" [size]="12"/></span>
+                      <button class="cp-star" type="button"
+                              [class.is-cover]="imageForColor(pg.colorName) === img"
+                              [attr.title]="t('product.variants.makeCover')"
+                              [attr.aria-label]="t('product.variants.makeCover')"
+                              (click)="setColorCover(pg.colorName, img)">
+                        <ap-icon name="star" [size]="14"/>
+                      </button>
+                    } @else if (owner) {
+                      <span class="cp-owner">{{ owner }}</span>
+                    }
+                  </div>
+                  @if (mine && imageForColor(pg.colorName) === img) {
+                    <span class="cp-cover-pill">{{ t('product.variants.cardCover') }}</span>
+                  }
+                </div>
+              }
+              <button class="cp-tile cp-add" type="button"
+                      (click)="openLibraryForVariantPicker('group-' + pg.colorKey)">
+                <ap-icon name="media" [size]="22"/>
+                <span class="cp-add-label">{{ t('product.variants.addMorePhotos') }}</span>
+                <span class="cp-add-sub">{{ t('product.variants.browseLibrary') }}</span>
+              </button>
+            </div>
+        </div>
+        <div class="drawer-foot">
+          <button class="btn btn-gold" type="button" (click)="closeVariantPicker()">{{ t('common.done') }}</button>
+        </div>
+      </div>
+    }
+
     <!-- ── Bulk Stock Update Modal ── -->
+    @if (stockReasonPrompt()) {
+      <div class="overlay stock-reason-overlay" (click)="answerStockReason(null)"></div>
+      <div class="stock-reason" role="dialog" aria-modal="true" [attr.aria-label]="t('product.stockReason.title')"
+           (keydown.escape)="answerStockReason(null)">
+        <div class="card-title">{{ t('product.stockReason.title') }}</div>
+        <p class="muted small">{{ t('product.stockReason.sub') }}</p>
+        <div class="stock-reason-options" role="radiogroup">
+          @for (r of stockReasons; track r) {
+            <button type="button" class="chip" role="radio" [attr.aria-checked]="stockReasonChoice() === r"
+                    [class.active]="stockReasonChoice() === r" (click)="stockReasonChoice.set(r)">{{ t('inv.reason.' + r) }}</button>
+          }
+        </div>
+        <div class="stock-reason-actions">
+          <button type="button" class="btn btn-outline" (click)="answerStockReason(null)">{{ t('common.cancel') }}</button>
+          <button type="button" class="btn btn-primary" (click)="answerStockReason(stockReasonChoice())">{{ t('product.stockReason.save') }}</button>
+        </div>
+      </div>
+    }
+
     @if (bulkStockOpen()) {
       <div class="overlay" style="z-index:260;" (click)="closeBulkStock()"></div>
       <div class="media-pick-panel bulk-stock-panel" style="z-index:270;">
@@ -850,7 +1276,53 @@ function readPreview(file: File): Promise<string> {
       </div>
     }
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
+    /* Short description: plain text, two columns, with a soft length guide.
+       The counter turns amber past 90 chars because longer copy wraps past
+       two lines in the home hero rather than being truncated. */
+    .short-desc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 700px) { .short-desc-grid { grid-template-columns: 1fr; } }
+    .short-desc-count { float: inline-end; font-size: 11px; color: var(--muted); font-weight: 400; }
+    .short-desc-count.over { color: var(--warning, #b8860b); font-weight: 600; }
+    .short-desc-hint { margin: -16px 0 24px; font-size: 12px; color: var(--muted); }
+
+    /* Google Drive import modal — mirrors media.component.ts's own gdrive-*
+       styles; component-scoped styles don't cross component boundaries, so
+       this small block is duplicated rather than shared. */
+    .gdrive-modal { width: min(520px, 96vw); }
+    .gdrive-eyebrow {
+      margin: 0 0 4px;
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .gdrive-info {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border-2);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .gdrive-info ap-icon { flex-shrink: 0; margin-top: 1px; }
+    .gdrive-error {
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.25);
+      color: #dc2626;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
     /* Wider drawer for the editor — full screen on phones */
     .drawer-wide { width: min(800px, 100vw); }
     @media (max-width: 800px) { .drawer-wide { width: 100vw; } }
@@ -1277,6 +1749,10 @@ function readPreview(file: File): Promise<string> {
     }
     .vcg-head:hover { background: var(--bg-2); }
     .vcg--open .vcg-head { background: var(--bg-2); border-bottom: 1px solid var(--border-2); }
+    /* A variant started with "Add variant", waiting for its colour */
+    .vcg--new { box-shadow: inset 0 0 0 2px var(--warning, #d97706); border-radius: 8px; }
+    .vcg-new-label { font-size: 11px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+    .vcg-new-hint { margin: 0; padding: 10px 12px 12px; font-size: 12px; color: var(--ink); }
 
     .vcg-chev {
       color: var(--muted); transition: transform .2s; flex-shrink: 0;
@@ -1310,6 +1786,18 @@ function readPreview(file: File): Promise<string> {
     }
     .vcg-stock--out { color: var(--danger); border-color: rgba(239,68,68,.3); }
 
+    .vcg-sku-tools {
+      display: grid;
+      grid-template-columns: minmax(230px, 1fr) auto minmax(250px, auto);
+      gap: 12px;
+      align-items: end;
+      padding: 12px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border-2);
+    }
+    .vcg-sku-field { display: grid; gap: 5px; color: var(--text-2); font-size: 11px; font-weight: 700; }
+    .vcg-sku-example { align-self: center; white-space: nowrap; }
+
     /* Wrapper gives the picker a tight anchor right next to the button */
     .vcg-img-wrap { position: relative; flex-shrink: 0; }
 
@@ -1320,10 +1808,46 @@ function readPreview(file: File): Promise<string> {
       color: var(--muted); position: relative; overflow: hidden;
       transition: border-color .12s;
     }
+    .vcg-img-count { font-size: 11px; color: var(--muted); margin-inline-start: 6px; white-space: nowrap; }
     .vcg-img-btn.has-img { border-style: solid; border-color: var(--gold); }
     .vcg-img-btn.no-color { opacity: 0.3; cursor: not-allowed; }
 
     /* Grouped size rows use narrower grid (no photo/color columns) */
+    /* Stock per location: the row shows the total; locations open below. */
+    .vc-stock-total {
+      width: 100%; height: 32px; padding: 0 8px;
+      border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+      font: inherit; font-weight: 600; font-size: 13px; color: var(--ink);
+      cursor: pointer; text-align: center; transition: border-color .15s, background .15s;
+    }
+    .vc-stock-total:hover, .vc-stock-total.is-open { border-color: var(--gold); }
+    .vc-stock-total.is-zero { color: var(--muted-2); font-weight: 500; }
+    .vc-stock-total.is-changed { border-color: var(--gold); background: var(--gold-3); }
+    .vc-stock-total:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+    .vc-locs {
+      margin-top: 8px; padding: 10px 12px;
+      border: 1px solid var(--border-2); border-radius: 10px; background: var(--surface);
+      animation: vc-reveal 0.14s ease-out;
+    }
+    .vc-locs-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .vc-locs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+    .vc-loc { display: grid; gap: 4px; margin: 0; }
+    .vc-loc-name { font-size: 11px; font-weight: 600; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vc-loc .inp { text-align: center; }
+    .vc-loc .inp.is-changed { border-color: var(--gold); background: var(--gold-3); }
+    .vc-loc-was { font-size: 10px; color: var(--muted); }
+    .vc-held { font-size: 11px; color: var(--info); background: var(--info-bg); padding: 2px 8px; border-radius: 999px; }
+    a.btn { text-decoration: none; }
+    .stock-reason-overlay { z-index: 1100; }
+    .stock-reason {
+      position: fixed; z-index: 1101; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: min(440px, calc(100vw - 32px)); padding: 20px;
+      background: var(--surface); border-radius: 14px; box-shadow: var(--shadow-lg);
+      display: grid; gap: 10px;
+    }
+    .stock-reason p { margin: 0; }
+    .stock-reason-options { display: flex; flex-wrap: wrap; gap: 8px; }
+    .stock-reason-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
     .vc-header--group,
     .vc-row--grouped {
       grid-template-columns: 80px 80px 1fr 1fr 56px !important;
@@ -1441,87 +1965,66 @@ function readPreview(file: File): Promise<string> {
     .vc-img-placeholder { color: var(--muted); display: flex; }
 
     /* Image picker popover — opens to the right of the photo cell */
-    .vc-img-picker {
-      position: absolute;
-      top: 0;
-      left: calc(100% + 10px);
-      z-index: 300;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px;
-      box-shadow: 0 8px 32px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.08);
-      min-width: 224px;
-      max-width: 280px;
+    /* Colour photo dialog (cp-*). Own namespace: .vc-img-cell etc. belong to the variant row. */
+    .cp-modal { width: min(720px, 96vw); }
+    .cp-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .cp-swatch { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); flex-shrink: 0; }
+    .cp-sub { margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+    .cp-summary { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); margin-bottom: 14px; }
+    .cp-clear {
+      margin-inline-start: auto; border: none; background: none; cursor: pointer;
+      font-size: 12px; font-weight: 600; color: var(--muted); text-decoration: underline; padding: 4px 6px;
     }
-    /* Group picker anchors to .vcg-img-wrap (32 px button).
-       Opens downward; right edge aligns with button right edge.
-       Extends leftward so it never escapes the drawer. */
-    .vc-img-picker--group {
-      top: calc(100% + 6px);
-      left: auto;
-      right: 0;
-      min-width: 260px;
-      max-width: 300px;
+    .cp-clear:hover { color: var(--danger, #b3261e); }
+    .cp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 14px; }
+    .cp-item { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .cp-tile {
+      position: relative; width: 100%; aspect-ratio: 1; border-radius: 10px;
+      border: 2px solid var(--border-2); overflow: hidden; background: var(--bg);
+      transition: border-color .12s, box-shadow .12s;
     }
-    .vc-img-picker--group .vc-img-picker-grid {
-      max-height: 220px;
-      overflow-y: auto;
+    .cp-tile:hover { border-color: var(--ink-2); }
+    .cp-tile.is-sel { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(193,154,91,.25); }
+    .cp-tile.is-other .cp-tile-btn img { opacity: .45; }
+    .cp-tile-btn { display: block; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
+    .cp-tile-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .cp-check {
+      position: absolute; top: 6px; inset-inline-start: 6px; width: 22px; height: 22px; border-radius: 50%;
+      background: var(--gold); color: #fff; display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
     }
-    .vc-img-picker-head {
-      display: flex; align-items: center; justify-content: space-between;
-      font-size: 11px; color: var(--muted);
-      margin-bottom: 10px; padding-bottom: 8px;
-      border-bottom: 1px solid var(--border-2);
+    .cp-star {
+      position: absolute; top: 6px; inset-inline-end: 6px; width: 28px; height: 28px; border-radius: 50%;
+      border: 0; cursor: pointer; background: rgba(255,255,255,.92); color: var(--muted);
+      display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,.2);
     }
-    .vc-img-picker-head strong { color: var(--ink); }
-    .vc-img-picker-close {
-      width: 20px; height: 20px;
-      border: none; background: none; cursor: pointer;
-      color: var(--muted); font-size: 11px;
-      display: flex; align-items: center; justify-content: center;
-      border-radius: 4px;
-      transition: color 0.12s, background 0.12s;
+    .cp-star:hover { color: var(--gold); }
+    .cp-star.is-cover { background: var(--gold); color: #fff; }
+    .cp-add {
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+      border-style: dashed; background: var(--bg); color: var(--muted); cursor: pointer; padding: 8px;
+      text-align: center;
     }
-    .vc-img-picker-close:hover { color: var(--ink); background: var(--bg); }
-    .vc-img-picker-empty {
-      font-size: 12px; color: var(--muted);
-      text-align: center; padding: 8px 0 4px; margin: 0;
+    .cp-add:hover { border-color: var(--gold); background: var(--gold-3); color: var(--ink); }
+    .cp-add-label { font-size: 13px; font-weight: 700; line-height: 1.3; }
+    .cp-add-sub { font-size: 10px; line-height: 1.3; }
+    .cp-tile.is-draggable { cursor: grab; }
+    .cp-item.is-drop .cp-tile { border-color: var(--ink); box-shadow: 0 0 0 3px rgba(0,0,0,.12); }
+    .cp-owner {
+      position: absolute; inset-inline: 6px; bottom: 6px; padding: 2px 6px; border-radius: 6px;
+      background: rgba(255,255,255,.92); color: var(--ink); font-size: 11px; font-weight: 600;
+      text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
     }
-    .vc-img-picker-grid {
-      display: flex; flex-wrap: wrap; gap: 6px;
+    .cp-cover-pill {
+      padding: 2px 8px; border-radius: 999px; background: var(--gold); color: #fff;
+      font-size: 11px; font-weight: 700; line-height: 1.4;
     }
-    .vc-img-opt {
-      width: 56px; height: 56px;
-      border-radius: 8px;
-      overflow: hidden;
-      border: 2px solid var(--border-2);
-      cursor: pointer;
-      padding: 0;
-      background: var(--bg);
-      display: flex; align-items: center; justify-content: center;
-      transition: border-color 0.12s, transform 0.1s, box-shadow 0.12s;
-    }
-    .vc-img-opt img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .vc-img-opt.is-sel {
-      border-color: var(--gold);
-      box-shadow: 0 0 0 3px rgba(193,154,91,0.2);
-    }
-    .vc-img-opt:hover:not(.is-sel) { border-color: var(--ink-2); transform: scale(1.05); }
-    .vc-img-opt--none { border-style: dashed; }
-    .vc-img-none-label {
-      font-size: 9px; font-weight: 700;
-      color: var(--muted); text-align: center;
-      line-height: 1.3; text-transform: uppercase; letter-spacing: 0.04em;
+    @media (max-width: 560px) {
+      .cp-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
-    /* Transparent backdrop to catch outside clicks */
-    .vc-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 299;
-      background: transparent;
-    }
+    /* Row the save check or "Add variant" just pointed at */
+    .vc--flash { box-shadow: inset 0 0 0 2px var(--warning, #d97706); border-radius: 8px; }
 
     /* Validation hint */
     .vc-hint {
@@ -1541,6 +2044,10 @@ function readPreview(file: File): Promise<string> {
       animation: vc-reveal 0.14s ease-out;
     }
     .vc-detail--5col { grid-template-columns: 1.4fr 1fr 1fr 0.9fr 0.9fr; }
+    .vc-detail--6col { grid-template-columns: 1.2fr 1.3fr 0.9fr 0.9fr 0.8fr 0.8fr; }
+    /* Notes are sentences, not figures — they get their own full-width row. */
+    .vc-detail--notes { grid-template-columns: 1fr 1fr; border-top-style: solid; }
+    .vc-note-hint { margin: 2px 0 6px; line-height: 1.5; }
     /* Margin/total-cost fields inside detail: label + value stacked */
     .vc-field--margin,
     .vc-field--total-cost { flex-direction: column; align-items: flex-start; gap: 5px; }
@@ -1556,6 +2063,54 @@ function readPreview(file: File): Promise<string> {
       font-size: 10px; font-weight: 600;
       text-transform: uppercase; letter-spacing: 0.06em;
       color: var(--muted);
+    }
+
+    /* Live barcode under the code field, so a typo is visible where it is
+       made rather than on the printed sticker. */
+    .vc-barcode { margin-top: 4px; }
+
+    /* Every variant's barcode, on the page. Cards mirror the printed label's
+       stacking order: brand, name, Arabic name, variant, bars, code, price,
+       Arabic price. */
+    .barcode-sheet {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .barcode-sheet-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+    }
+    .barcode-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 12px;
+    }
+    .barcode-card {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: 12px 10px 8px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      text-align: center;
+    }
+    .bc-brand {
+      font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--muted);
+    }
+    .bc-name { font-size: 11px; font-weight: 700; line-height: 1.2; }
+    .bc-variant { font-size: 9.5px; color: var(--muted); margin-bottom: 4px; }
+    .bc-code { font-size: 8.5px; letter-spacing: 0.03em; color: #333; }
+    /* Both prices on one line, at the two edges — same as the printed label. */
+    .bc-price-row {
+      display: flex; align-items: baseline; justify-content: space-between;
+      width: 100%; gap: 6px; margin-top: 2px;
+    }
+    .bc-price, .bc-price-ar { font-size: 11px; font-weight: 700; }
+    .bc-print { margin-top: 6px; }
+
+    @media (max-width: 640px) {
+      .barcode-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
     }
 
     /* Expand button */
@@ -1590,6 +2145,19 @@ function readPreview(file: File): Promise<string> {
       border-color: rgba(239, 68, 68, 0.3);
       background: rgba(239, 68, 68, 0.06);
     }
+
+    .vt-print {
+      width: 28px; height: 28px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: all 0.12s;
+      flex-shrink: 0;
+    }
+    .vt-print:hover { color: var(--gold); border-color: rgba(193,154,91,0.3); background: var(--gold-3); }
 
     .margin-pill {
       display: inline-block;
@@ -1626,7 +2194,14 @@ function readPreview(file: File): Promise<string> {
     .color-select { flex: 1; min-width: 0; }
 
     /* Generate sizes row */
-    .gen-sizes-wrap { display: flex; gap: 4px; align-items: center; }
+    .gen-sizes-wrap { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+
+    @media (max-width: 900px) {
+      .vcg-sku-tools { grid-template-columns: 1fr; align-items: stretch; }
+      .vcg-sku-example { white-space: normal; }
+      .gen-sizes-wrap { justify-content: stretch; }
+      .gen-sizes-wrap select { flex: 1; }
+    }
 
     /* Responsive: stack on narrow screens */
     @media (max-width: 600px) {
@@ -1641,12 +2216,37 @@ function readPreview(file: File): Promise<string> {
       .vc-cell--size  { grid-column: 2; grid-row: 2; }
       .vc-cell--num   { grid-column: 3; grid-row: 2; }
       .vc-cell--price { grid-column: 4; grid-row: 2; }
-      .vc-cell--sku   { display: none; }
-      .vc-cell--actions { grid-column: 5; grid-row: 1 / 3; align-self: center; flex-direction: column; }
+      .vc-cell--sku   { grid-column: 2 / 5; grid-row: 3; display: block; margin-top: 4px; }
+      .vc-cell--actions { grid-column: 5; grid-row: 1 / 4; align-self: center; flex-direction: column; }
       .vc-detail { grid-template-columns: 1fr 1fr; }
       .vc-detail--5col { grid-template-columns: 1fr 1fr 1fr; }
+      .vc-detail--6col { grid-template-columns: 1fr 1fr; }
+      .vc-detail--notes { grid-template-columns: 1fr; }
       .vc-field--margin,
       .vc-field--total-cost { display: none; }
+
+      /* Grouped (color-accordion) size rows: Size | Stock | Price + stacked
+         actions, with the editable SKU on a second row.
+         Every cell's grid-row is reset to 1 here — the generic (ungrouped)
+         mobile rules above target these same cell classes with grid-row: 2,
+         and since those selectors share this rule's specificity, leaving
+         any cell's row unset lets that stale rule win and reopens a phantom
+         second row that the actions column (grid-row: 1 / 3) bleeds into. */
+      .vc-header--group { display: none; }
+      .vc-row--grouped {
+        grid-template-columns: 1fr 1fr 1fr 44px !important;
+        grid-template-rows: auto auto !important;
+      }
+      .vc-row--grouped .vc-cell--size   { grid-column: 1; grid-row: 1; }
+      .vc-row--grouped .vc-cell--num    { grid-column: 2; grid-row: 1; }
+      .vc-row--grouped .vc-cell--price  { grid-column: 3; grid-row: 1; }
+      .vc-row--grouped .vc-cell--sku    { display: block; grid-column: 1 / 4; grid-row: 2; margin-top: 4px; }
+      .vc-row--grouped .vc-cell--actions {
+        grid-column: 4;
+        grid-row: 1 / 3;
+        flex-direction: column;
+        align-self: center;
+      }
     }
     .related-picker {
       display: grid;
@@ -1741,9 +2341,11 @@ function readPreview(file: File): Promise<string> {
       /* Prevent chevron overlapping the variant summary text */
       .section-title .sec-chev { margin-inline-start: 8px; }
     }
-  `],
+  `]
 })
 export class ProductDrawerComponent implements OnInit, OnDestroy {
+  readonly noImageLogo = NO_IMAGE_LOGO;
+
   /** Internal signals — reactive so `currentIndex` / `canPrev` / `canNext`
       re-run when the inputs change. Plain @Input properties don't trigger
       computed re-evaluation. */
@@ -1778,15 +2380,31 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   /** Emitted after a successful save so the catalog can update _products signal. */
   @Output() productSaved = new EventEmitter<Product>();
 
+  private readonly restockApi = inject(RestockRequestsService);
+  readonly restockDemand = signal<RestockSummary[]>([]);
+  waitingForVariant(v: ProductVariant): number {
+    return this.restockDemand().find(r => r.color_key === colorKey(v.color) && r.size === (String(v.size ?? '').trim() || 'ONE_SIZE'))?.waiting_count || 0;
+  }
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
   private readonly productsApi = inject(AdminProductsService);
+  private readonly inventoryApi = inject(InventoryService);
+
+  // ── Stock per location (server/lib/location-stock.js) ─────────────────────
+  /** True once stock per location is switched on for this shop. */
+  readonly perLocation = signal(false);
+  readonly stockLocations = signal<StockLocation[]>([]);
+  /** Open while the "why did stock change?" question is on screen. */
+  readonly stockReasonPrompt = signal<{ resolve: (reason: string | null) => void } | null>(null);
+  readonly stockReasonChoice = signal('received');
+  readonly stockReasons = ['received', 'found', 'returned', 'correction', 'damaged', 'lost', 'returned_to_supplier', 'sample'];
   private readonly collectionsApi = inject(AdminCollectionsService);
   private readonly refApi = inject(AdminRefService);
   private readonly uploads = inject(MediaUploadService);
   private readonly mediaApi = inject(AdminMediaService);
   private readonly storage = inject(StorageService);
+  private readonly labelPrinter = inject(LabelPrinterService);
 
   readonly refColors   = signal<RefColor[]>([]);
   readonly refMaterials = signal<RefMaterial[]>([]);
@@ -1844,6 +2462,20 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   readonly dirty = computed(() => JSON.stringify(this.form()) !== JSON.stringify(this.initial()));
 
+  /** What the server generates when these are left empty, shown as placeholders. */
+  seoTitlePlaceholder(): string {
+    const f = this.form();
+    return [f.name, f.brand, 'Elite Collection'].filter(Boolean).join(' · ');
+  }
+  seoDescPlaceholder(): string {
+    const name = this.form().name;
+    return name ? `Buy the ${name} from our Doha atelier. Hand-crafted leather. Free shipping in Qatar.` : '';
+  }
+  /** Same rule as server `slugify()` in routes/lib.js. */
+  slugPlaceholder(): string {
+    return this.form().name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+
   readonly slugError = computed(() => {
     const s = this.form().slug;
     return !!s && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s);
@@ -1851,6 +2483,16 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   readonly duplicating = signal(false);
   readonly expandedVariants = signal(new Set<string>());
+  /** Only IDs created during this open editor session are safe to regenerate. */
+  private readonly autoGeneratedVariantIds = signal(new Set<string>());
+  /** Keeps the prefix while the product SKU field is temporarily empty during
+      a replace-all edit, so variant suffixes do not get lost between keys. */
+  private readonly lastNonEmptyProductSku = signal('');
+  /** Unsaved typing state for each colour's base SKU. It deliberately lives
+      outside the product schema: the generated variant SKUs are the durable
+      source of truth and the base is recovered from them when reopening. */
+  private readonly colorSkuDrafts = signal<Record<string, string>>({});
+  readonly barcodeSheetOpen = signal(false);
 
   // ── Bulk Stock Update ─────────────────────────────────────────────────
   readonly bulkStockOpen = signal(false);
@@ -1858,6 +2500,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   readonly bulkStockSetAll = signal<number | null>(null);
   readonly bulkStockRows = signal<{ id: string; color: string; size: string; sku: string; stock: number }[]>([]);
   readonly variantPickerOpenId = signal<string | null>(null);
+  /** Colour picker to reopen once the media library closes (set by openLibraryForVariantPicker). */
+  private readonly variantPickerResumeId = signal<string | null>(null);
 
   /** Convenience: the current product object (or first as fallback). */
   get product(): Product {
@@ -1884,6 +2528,13 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     if (!this.initial()) this.resetForCurrent();
+    // Non-blocking: until this answers, the editor shows the single stock
+    // field it always had.
+    this.inventoryApi.perLocationStatus().then((status) => {
+      const locations = Array.isArray(status?.locations) ? status.locations : [];
+      this.stockLocations.set(locations);
+      this.perLocation.set(status?.enabled === true && locations.length > 0);
+    }).catch(() => undefined);
     // Load reference lists in the background — non-blocking
     Promise.all([
       this.refApi.getColors(),
@@ -1909,11 +2560,19 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     const p = this.product;
     if (!p) return;
 
+    this.restockDemand.set([]);
+    if (!p.id.startsWith('P-NEW-')) void this.restockApi.summary(`productId=${encodeURIComponent(p.id)}`).then(rows => {
+      if (this.product?.id === p.id) this.restockDemand.set(rows);
+    }).catch(() => {});
     this.initial.set(this.makeFormFromProduct(p));
     this.form.set({ ...this.initial() });
+    this.lastNonEmptyProductSku.set(p.sku || '');
     this.saveState.set('idle');
     this.lastSavedAt.set(null);
     this.draftRestoredAt.set(null);
+    this.autoGeneratedVariantIds.set(new Set());
+    this.colorSkuDrafts.set({});
+    this.pendingVariantIds.set(new Set());
     if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
 
@@ -1922,10 +2581,15 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       const raw = this.storage.get(this.draftBase);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.savedAt) {
+        // Resume only a draft made against the data loaded now. If the product
+        // changed since (a sale, another admin's save), replaying the draft
+        // would write old stock and prices back.
+        if (parsed && parsed.savedAt && JSON.stringify(parsed.base) === JSON.stringify(this.initial())) {
           this.form.set(parsed.form);
           this.draftRestoredAt.set(parsed.savedAt);
           this.saveState.set('dirty');
+        } else {
+          this.storage.remove(this.draftBase);
         }
       }
     } catch {}
@@ -1934,12 +2598,20 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private makeEmptyForm(): FormShape {
     return {
       name: '', nameAr: '', sku: '', brand: '', collectionIds: [],
-      price: 0, stock: 0, hidden: false,
+      // HIDDEN-POS-TOGGLE: forced false while the toggle is hidden (see template).
+      price: 0, defaultCostPrice: null, defaultShippingCost: null,
+      stock: 0, hidden: false, posHidden: false,
+      duplicatedFromProductId: null,
       enDesc: '', arDesc: '',
+      shortEn: '', shortAr: '',
+      teaserEn: '', teaserAr: '',
+      noteEn: '', noteAr: '',
+      careEn: '', careAr: '',
       metaTitle: '', metaDesc: '', slug: '',
       variants: [],
       images: [],
       imageColors: {},
+      colorCovers: {},
       relatedProductIds: [],
     };
   }
@@ -1952,16 +2624,36 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       brand: p.brand,
       collectionIds: this.collections.filter(c => c.productIds.includes(p.id)).map(c => c.id),
       price: p.price,
+      defaultCostPrice: p.defaultCostPrice ?? null,
+      defaultShippingCost: p.defaultShippingCost ?? null,
       stock: p.stock,
+      duplicatedFromProductId: p.duplicatedFromProductId ?? null,
       hidden: p.hidden,
+      // HIDDEN-POS-TOGGLE: ignore the stored value and force every product
+      // available on POS while the toggle is hidden — otherwise a product
+      // that already had posHidden=true would stay stuck hidden from POS
+      // with no visible control left to fix it. Restore `p.posHidden ?? false`
+      // when un-hiding the toggle above.
+      posHidden: false,
       enDesc: p.enDesc ?? '',
       arDesc: p.arDesc ?? '',
-      metaTitle: p.metaTitle || `${p.name} · ${p.brand} · Elite Collection`,
-      metaDesc: p.metaDesc || `Buy the ${p.name} from our Doha atelier. Hand-crafted leather. Free shipping in Qatar.`,
-      slug: p.slug || p.name.toLowerCase().replace(/\s+/g, '-'),
+      shortEn: p.shortEn ?? '',
+      shortAr: p.shortAr ?? '',
+      teaserEn: p.teaserEn ?? '',
+      teaserAr: p.teaserAr ?? '',
+      noteEn: p.noteEn ?? '',
+      noteAr: p.noteAr ?? '',
+      careEn: p.careEn ?? '',
+      careAr: p.careAr ?? '',
+      // Empty means "generate": the server fills slug from the name, and the
+      // inputs show the generated SEO text as placeholders only.
+      metaTitle: p.metaTitle || '',
+      metaDesc: p.metaDesc || '',
+      slug: p.slug || '',
       variants: (p.variants ?? []).map(v => ({ ...v })),
       images: p.images && p.images.length > 0 ? [...p.images] : (p.image ? [p.image] : []),
       imageColors: { ...(p.imageColors ?? {}) },
+      colorCovers: { ...(p.colorCovers ?? {}) },
       relatedProductIds: [...(p.relatedProductIds ?? [])],
     };
   }
@@ -1970,10 +2662,45 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   // Image gallery
   // ────────────────────────────────────────────────────────────────────
 
-  addImageUrl(): void {
-    const url = window.prompt(this.t('product.gallery.urlPrompt'), 'https://');
-    if (url && url.trim()) {
-      this.set('images', [...this.form().images, url.trim()]);
+  readonly gdriveOpen = signal(false);
+  readonly gdriveUrl = signal('');
+  readonly gdriveLoading = signal(false);
+  readonly gdriveError = signal('');
+
+  openGDrive(): void {
+    this.gdriveUrl.set('');
+    this.gdriveError.set('');
+    this.gdriveOpen.set(true);
+  }
+
+  async importGDrive(): Promise<void> {
+    const url = this.gdriveUrl().trim();
+    if (!url || this.gdriveLoading()) return;
+    this.gdriveError.set('');
+    this.gdriveLoading.set(true);
+    try {
+      const imported = await this.mediaApi.importFromGDrive(url);
+      if (imported.length === 0) {
+        this.gdriveError.set('No images were found at that URL. Make sure the file/folder is publicly shared.');
+        return;
+      }
+      const existing = new Set(this.form().images);
+      const newUrls = imported
+        .map(f => f.preview || f.storageUrl)
+        .filter((u): u is string => !!u && !existing.has(u));
+      if (newUrls.length > 0) {
+        this.set('images', [...this.form().images, ...newUrls]);
+      }
+      this.gdriveOpen.set(false);
+      this.toast.success(
+        `${imported.length} image${imported.length === 1 ? '' : 's'} added`,
+        this.t('product.gallery.upload'),
+      );
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || this.t('media.toast.importFailed');
+      this.gdriveError.set(msg);
+    } finally {
+      this.gdriveLoading.set(false);
     }
   }
 
@@ -1986,8 +2713,8 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     try {
       const files = await this.mediaApi.list();
       this.mediaFiles.set(files);
-    } catch {
-      this.toast.error(this.t('product.gallery.loadError'));
+    } catch (caught) {
+      this.toast.errorFrom(caught, this.t('product.gallery.loadError'));
     } finally {
       this.mediaLoading.set(false);
     }
@@ -2009,7 +2736,17 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     if (toAdd.length > 0) {
       this.set('images', [...this.form().images, ...toAdd]);
     }
+    this.closeMediaPicker();
+  }
+
+  closeMediaPicker(): void {
     this.mediaPicker.set(false);
+    const resumeId = this.variantPickerResumeId();
+    if (resumeId) {
+      this.variantPickerResumeId.set(null);
+      this.snapshotPickerSelection(resumeId);
+      this.variantPickerOpenId.set(resumeId);
+    }
   }
 
   /** Per-pending-file progress UI state. We render one row per active upload
@@ -2039,6 +2776,16 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   onDragOver(ev: DragEvent): void { ev.preventDefault(); }
 
+  /** Estimates the raw byte size already sitting in the draft's local (not
+      yet uploaded) gallery images, by inverting base64's ~4/3 expansion.
+      Used to budget how many more pre-save images the JSON request can
+      still fit under its 10 MB limit. */
+  private presaveImageBytes(): number {
+    return this.form().images
+      .filter((src) => src.startsWith('data:'))
+      .reduce((total, src) => total + Math.floor(((src.length - src.indexOf(',') - 1) * 3) / 4), 0);
+  }
+
   /**
    * Uploads images via the storage adapter. We buffer files into the
    * pendingUploads signal so the UI renders a thumbnail + progress bar per
@@ -2053,8 +2800,25 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   private async uploadFiles(files: File[]): Promise<void> {
     if (this.product?.id?.startsWith('P-NEW-')) {
       // Pre-save stub: keep using local data URLs so the gallery preview
-      // works before the product exists on the server.
+      // works before the product exists on the server. These ride inside
+      // the JSON create-product request (10 MB limit), not the multipart
+      // upload's 50 MB one, so they're validated against the much lower
+      // pre-save budget instead of the real per-file limit.
+      let runningBytes = this.presaveImageBytes();
+      let added = 0;
       for (const file of files) {
+        const reason = this.uploads.validate(file, PRESAVE_IMAGE_MAX_BYTES);
+        if (reason) {
+          this.toast.error(reason, file.name);
+          continue;
+        }
+        if (runningBytes + file.size > PRESAVE_IMAGE_TOTAL_BUDGET_BYTES) {
+          this.toast.warning(
+            'These photos are getting large for an unsaved product',
+            'Save the product first, then add the rest from its gallery — that path allows up to 50 MB per image.',
+          );
+          break;
+        }
         const reader = new FileReader();
         await new Promise<void>((resolve) => {
           reader.onload = () => {
@@ -2064,8 +2828,10 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
           };
           reader.readAsDataURL(file);
         });
+        runningBytes += file.size;
+        added += 1;
       }
-      this.toast.info(this.t('product.gallery.upload'), this.t('product.gallery.empty.sub'));
+      if (added > 0) this.toast.info(this.t('product.gallery.upload'), this.t('product.gallery.empty.sub'));
       return;
     }
 
@@ -2085,11 +2851,13 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     }
     if (accepted.length === 0) return;
 
+    const uploadProductId = this.product.id;
+    const uploadProductName = this.product.name;
     try {
       await new Promise<void>((resolve, reject) => {
         const filesToSend = accepted.map((a) => a.file);
         let lastPercent = 0;
-        this.uploads.uploadProductImages(this.product.id, filesToSend).subscribe({
+        this.uploads.uploadProductImages(uploadProductId, filesToSend).subscribe({
           next: (ev) => {
             if (ev.stage === 'uploading') {
               lastPercent = ev.percent;
@@ -2101,15 +2869,24 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
             }
             if (ev.stage === 'done') {
               const result = ev.result as ProductImageUploadResult;
-              if (result?.images) {
-                this.set('images', result.images);
-                const imageColors = this.pruneImageColors(this.form().imageColors, result.images);
-                this.set('imageColors', imageColors);
-                this.initial.set({ ...this.initial(), images: [...result.images], imageColors: { ...imageColors } });
+              // Saved on its own product. If the editor moved on meanwhile, leave
+              // the other product's form alone.
+              if (result?.images && this.product?.id === uploadProductId) {
+                // Add the new server images without dropping unsaved gallery
+                // edits (reorder, removals); the baseline is the server list.
+                const added = result.images.filter((url) => !this.initial().images.includes(url));
+                const images = [...this.form().images, ...added.filter((url) => !this.form().images.includes(url))];
+                this.set('images', images);
+                this.set('imageColors', this.pruneImageColors(this.form().imageColors, images));
+                this.initial.set({
+                  ...this.initial(),
+                  images: [...result.images],
+                  imageColors: this.pruneImageColors(this.initial().imageColors, result.images),
+                });
               }
               this.toast.success(
                 `${result?.uploaded ?? accepted.length} ${this.t('product.gallery.upload').toLowerCase()}`,
-                this.product.name,
+                uploadProductName,
               );
               resolve();
             }
@@ -2139,6 +2916,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     const images = this.form().images.filter((_, i) => i !== index);
     this.set('images', images);
     this.set('imageColors', this.pruneImageColors(this.form().imageColors, images));
+    this.pruneColorCovers();
   }
 
   setPrimaryImage(index: number): void {
@@ -2200,79 +2978,233 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   // Variants
   // ────────────────────────────────────────────────────────────────────
 
-  /**
-   * Returns `candidate`, or `candidate-2`, `candidate-3`, ... if it already
-   * collides with another variant's SKU. Two variants sharing a SKU collapse
-   * into one row on save (product_variants has a UNIQUE(tenant_id, sku)
-   * constraint), so newly-added rows must never reuse an existing SKU.
-   */
-  private uniqueVariantSku(candidate: string): string {
-    if (!candidate) return candidate;
-    const existing = new Set(this.form().variants.map(v => v.sku));
-    if (!existing.has(candidate)) return candidate;
-    let n = 2;
-    while (existing.has(`${candidate}-${n}`)) n++;
-    return `${candidate}-${n}`;
+  /** Cost and shipping cost a new variant should start with: whatever an
+   *  existing variant of the same colour already has, so generating sizes
+   *  or adding a row never resets them to blank. Falls back to any variant
+   *  on the product when the colour has none yet. */
+  private inheritedCosts(colorName: string): Pick<ProductVariant, 'costPrice' | 'shippingCost'> {
+    const variants = this.form().variants;
+    const sameColor = variants.find(v =>
+      colorName && this.colorKey(v.color || '') === this.colorKey(colorName)
+      && (v.costPrice != null || v.shippingCost != null));
+    const source = sameColor ?? variants.find(v => v.costPrice != null || v.shippingCost != null);
+    return {
+      costPrice: source?.costPrice ?? this.form().defaultCostPrice ?? undefined,
+      shippingCost: source?.shippingCost ?? this.form().defaultShippingCost ?? undefined,
+    };
   }
 
   addVariant(): void {
+    // One new variant at a time: a second click brings back the one still
+    // waiting for its colour instead of stacking blank rows.
+    const waiting = this.form().variants.find(v => !v.color && this.pendingVariantIds().has(v.id));
+    if (waiting) {
+      this.revealVariant(waiting.id);
+      return;
+    }
     const f = this.form();
+    const id = 'V-' + Date.now().toString(36);
     const next: ProductVariant = {
-      id: 'V-' + Date.now().toString(36),
-      sku: f.sku ? this.uniqueVariantSku(`${f.sku}-NEW`) : '',
+      id,
+      sku: '',
       size: '',
       color: '',
       material: '',
       price: f.price || 0,
       stock: 0,
+      ...this.inheritedCosts(''),
     };
+    this.markVariantSkuAutomatic(id);
+    this.pendingVariantIds.update(ids => new Set(ids).add(id));
     this.set('variants', [...f.variants, next]);
+    // Its own group opens at the top with the colour select focused.
+    this.revealVariant(id);
+  }
+
+  locQty(v: ProductVariant, locationId: string): number {
+    return v.locationStock?.[locationId] ?? 0;
+  }
+
+  locWas(v: ProductVariant, locationId: string): number {
+    return this.initial()?.variants.find((x) => x.id === v.id)?.locationStock?.[locationId] ?? 0;
+  }
+
+  variantLocationsChanged(v: ProductVariant): boolean {
+    return this.stockLocations().some((loc) => this.locChanged(v, loc.id));
+  }
+
+  /** Highlights a location field the user changed and has not saved yet. */
+  locChanged(v: ProductVariant, locationId: string): boolean {
+    const before = this.initial()?.variants.find((x) => x.id === v.id);
+    return (before?.locationStock?.[locationId] ?? 0) !== this.locQty(v, locationId);
+  }
+
+  /** Sets one location's quantity; the sellable total follows (minus held). */
+  updateLocationStock(index: number, locationId: string, value: unknown): void {
+    const current = this.form().variants[index];
+    if (!current) return;
+    const qty = Math.max(0, Math.min(100000, Math.floor(Number(value) || 0)));
+    const locationStock = { ...(current.locationStock ?? {}), [locationId]: qty };
+    const total = Object.values(locationStock).reduce((sum, n) => sum + (Number(n) || 0), 0) - (current.held ?? 0);
+    this.updateVariant(index, { locationStock, stock: Math.max(0, total) });
+  }
+
+  /** Any per-location number differs from what was loaded. */
+  private locationStockChanged(): boolean {
+    const before = new Map((this.initial()?.variants ?? []).map((v) => [v.id, v.locationStock ?? {}]));
+    return this.form().variants.some((v) => {
+      const was = before.get(v.id) ?? {};
+      return this.stockLocations().some((loc) => (was[loc.id] ?? 0) !== (v.locationStock?.[loc.id] ?? 0));
+    });
+  }
+
+  /** Asks once per save why stock changed; null = cancelled. */
+  private askStockReason(): Promise<string | null> {
+    const increased = this.form().variants.some((v) => {
+      const was = this.initial()?.variants.find((x) => x.id === v.id)?.locationStock ?? {};
+      return this.stockLocations().some((loc) => (v.locationStock?.[loc.id] ?? 0) > (was[loc.id] ?? 0));
+    });
+    this.stockReasonChoice.set(increased ? 'received' : 'correction');
+    return new Promise((resolve) => this.stockReasonPrompt.set({ resolve }));
+  }
+
+  answerStockReason(reason: string | null): void {
+    const prompt = this.stockReasonPrompt();
+    this.stockReasonPrompt.set(null);
+    prompt?.resolve(reason);
   }
 
   updateVariant(index: number, patch: Partial<ProductVariant>): void {
-    const next = this.form().variants.map((v, i) => (i === index ? { ...v, ...patch } : v));
+    const current = this.form().variants[index];
+    if (!current) return;
+    const nextSize = String(patch.size ?? '').trim();
+    if (nextSize && this.form().variants.some(v => v.id !== current.id
+      && this.groupKeyOf(v) === this.groupKeyOf(current)
+      && String(v.size || '').trim() === nextSize)) {
+      this.toast.error(this.t('product.variants.duplicateSize.title'), `${nextSize} · ${this.t('product.variants.duplicateSize.sub')}`);
+      return;
+    }
+    if (this.flashVariantId() === current.id) this.flashVariantId.set(null);
+    const manualSkuEdit = Object.prototype.hasOwnProperty.call(patch, 'sku');
+    if (manualSkuEdit) this.unmarkVariantSkuAutomatic(current.id);
+    const currentBaseSku = this.baseSkuForVariant(current);
+    const followsGeneratedFormat = !!current.size
+      && current.sku === formatVariantSku(currentBaseSku, current.size);
+    const updateSkuAutomatically = !manualSkuEdit && (
+      this.autoGeneratedVariantIds().has(current.id)
+      || (Object.prototype.hasOwnProperty.call(patch, 'size') && followsGeneratedFormat)
+    );
+    const next = this.form().variants.map((v, i) => {
+      if (i !== index) return v;
+      const updated = { ...v, ...patch };
+      return updateSkuAutomatically
+        ? { ...updated, sku: formatVariantSku(currentBaseSku, updated.size) }
+        : updated;
+    });
+    this.set('variants', next);
+    if (Object.prototype.hasOwnProperty.call(patch, 'size')) this.warnIfDuplicateVariantSkus(next);
+  }
+
+  async removeVariant(index: number): Promise<void> {
+    const removed = this.form().variants[index];
+    if (!removed) return;
+    // Rows added in this session and holding no stock go straight away; a saved
+    // row or one with stock asks first, because saving zeroes that stock.
+    const isSaved = this.initial().variants.some(v => v.id === removed.id);
+    if (isSaved || removed.stock > 0) {
+      const key = removed.stock > 0 ? 'product.variants.removeConfirm.stock' : 'product.variants.removeConfirm.saved';
+      const confirmed = await this.confirm.ask({
+        title: this.t('product.variants.removeConfirm'),
+        message: this.t(key).replace('{sku}', removed.sku || removed.size || '-').replace('{n}', String(removed.stock)),
+        confirmLabel: this.t('common.remove'),
+        variant: 'danger',
+      });
+      if (!confirmed) return;
+    }
+    // By id, not index: the list can change while the dialog is open.
+    const next = this.form().variants.filter(v => v.id !== removed.id);
+    this.unmarkVariantSkuAutomatic(removed.id);
+    this.expandedVariants.update(ids => { const n = new Set(ids); n.delete(removed.id); return n; });
+    const groupKey = this.groupKeyOf(removed);
+    this.pendingVariantIds.update(ids => { const n = new Set(ids); n.delete(removed.id); return n; });
+    if (!next.some(v => this.groupKeyOf(v) === groupKey)) {
+      // Last size of that colour: drop the colour's UI state and photo links
+      // so they do not come back if the colour is added again.
+      this.expandedGroups.update(keys => { const n = new Set(keys); n.delete(groupKey); return n; });
+      this.colorSkuDrafts.update(drafts => { const n = { ...drafts }; delete n[groupKey]; return n; });
+      const imageColors = Object.fromEntries(Object.entries(this.form().imageColors)
+        .filter(([, color]) => this.colorKey(color) !== groupKey));
+      if (Object.keys(imageColors).length !== Object.keys(this.form().imageColors).length) {
+        this.set('imageColors', imageColors);
+        this.pruneColorCovers();
+      }
+    }
     this.set('variants', next);
   }
 
-  removeVariant(index: number): void {
-    const next = this.form().variants.filter((_, i) => i !== index);
-    this.set('variants', next);
+  readonly flashVariantId = signal<string | null>(null);
+
+  /** Opens the row's colour group, scrolls it into view and focuses its first
+      control, so an added or invalid variant is never hidden in a collapsed group. */
+  private revealVariant(id: string, flash = false): void {
+    const variant = this.form().variants.find(v => v.id === id);
+    if (!variant) return;
+    const groupKey = this.groupKeyOf(variant);
+    this.expandedGroups.update(keys => new Set(keys).add(groupKey));
+    if (flash) this.flashVariantId.set(id);
+    setTimeout(() => {
+      // A new variant has no rows yet, only its colour select.
+      const target = groupKey === this.newGroupKey
+        ? document.querySelector<HTMLElement>(`[data-group-key="${this.newGroupKey}"]`)
+        : document.querySelector<HTMLElement>(`[data-variant-id="${CSS.escape(id)}"]`);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target?.querySelector<HTMLElement>('select, input')?.focus({ preventScroll: true });
+    });
+  }
+
+  private markVariantSkuAutomatic(id: string): void {
+    this.autoGeneratedVariantIds.update(ids => new Set(ids).add(id));
+  }
+
+  private markVariantSkusAutomatic(ids: string[]): void {
+    this.autoGeneratedVariantIds.update(current => {
+      const next = new Set(current);
+      ids.forEach(id => next.add(id));
+      return next;
+    });
+  }
+
+  private unmarkVariantSkuAutomatic(id: string): void {
+    this.autoGeneratedVariantIds.update(ids => {
+      const next = new Set(ids);
+      next.delete(id);
+      return next;
+    });
+  }
+
+  private duplicateVariantSku(variants = this.form().variants): string | null {
+    const seen = new Set<string>();
+    for (const variant of variants) {
+      const sku = String(variant.sku || '').trim();
+      if (!sku) continue;
+      if (seen.has(sku)) return sku;
+      seen.add(sku);
+    }
+    return null;
+  }
+
+  private warnIfDuplicateVariantSkus(variants: ProductVariant[]): boolean {
+    const duplicate = this.duplicateVariantSku(variants);
+    if (duplicate) {
+      this.toast.error(this.t('product.variants.duplicateSku.title'), `${duplicate} · ${this.t('product.variants.duplicateSku.sub')}`);
+      return true;
+    }
+    return false;
   }
 
   colorHex(name: string | undefined): string {
     if (!name) return '#e5e7eb';
     return this.refColors().find(c => c.name_en === name)?.hex ?? '#e5e7eb';
-  }
-
-  /**
-   * Derives the SKU color segment for a given color name.
-   * Strategy: strip non-letters, uppercase, take up to 3 chars.
-   * e.g. "Taupe" → "TAU", "Milk White" → "MIL", "Black" → "BLA"
-   * This is used when generating new variant SKUs in the product editor.
-   * Bulk-imported SKUs carry their own codes from the CSV.
-   */
-  private colorToSkuCode(colorName: string): string {
-    return colorName.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 3) || 'CLR';
-  }
-
-  /**
-   * Extracts the color code segment from an existing variant SKU.
-   * Given baseSku = "3513-RBR" and variantSku = "3513-RBR-RP-5",
-   * returns "RP". Returns null if the SKU doesn't start with baseSku or
-   * has no extra segments to parse.
-   */
-  private extractColorCodeFromSku(baseSku: string, variantSku: string): string | null {
-    if (!baseSku || !variantSku || !variantSku.startsWith(baseSku + '-')) return null;
-    const rest = variantSku.slice(baseSku.length + 1); // e.g. "RP-5" or "RP-5.5"
-    const segments = rest.split('-');
-    // The last segment is typically numeric (the size); the one before it is the color code.
-    if (segments.length >= 2) {
-      const last = segments[segments.length - 1];
-      const isSize = /^\d+(\.\d+)?$/.test(last) || /^(XS|S|M|L|XL|XXL|XXXL|OS)$/i.test(last);
-      if (isSize) return segments[segments.length - 2];
-    }
-    // Only one segment after base — could be just a color code (no size yet)
-    return segments[0] || null;
   }
 
   colorSwatchImage(name: string | undefined): string | null {
@@ -2282,6 +3214,74 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   // Groups the flat variants[] by color for the accordion UI.
   // The underlying flat array is preserved — this is purely a computed view.
+  /** The colour whose photo dialog is open, if any. */
+  readonly pickerGroup = computed(() => {
+    const id = this.variantPickerOpenId();
+    if (!id?.startsWith('group-')) return null;
+    return this.colorGroups().find((group) => 'group-' + group.colorKey === id) ?? null;
+  });
+
+  /** Photos tagged with the colour when its dialog opened. Taken once per open so a tile does
+      not jump away from under the cursor while the worker is still picking. */
+  private readonly pickerOpenedWith = signal<Set<string>>(new Set());
+
+  /** The gallery in dialog order: this colour's photos first, the rest after, both in gallery order. */
+  readonly pickerImages = computed(() => {
+    const first = this.pickerOpenedWith();
+    const images = this.form().images;
+    return [...images.filter((url) => first.has(url)), ...images.filter((url) => !first.has(url))];
+  });
+
+  private cpDragUrl: string | null = null;
+  readonly cpDropUrl = signal<string | null>(null);
+
+  onColorDragStart(url: string, ev: DragEvent): void {
+    this.cpDragUrl = url;
+    ev.dataTransfer?.setData('text/plain', url);
+    if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+  }
+
+  onColorDragOver(url: string, ev: DragEvent): void {
+    if (!this.cpDragUrl) return;
+    ev.preventDefault();
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+    if (this.cpDropUrl() !== url) this.cpDropUrl.set(url);
+  }
+
+  onColorDrop(colorName: string, targetUrl: string, ev: DragEvent): void {
+    ev.preventDefault();
+    const from = this.cpDragUrl;
+    this.cpDragUrl = null;
+    this.cpDropUrl.set(null);
+    if (from) this.moveColorImage(colorName, from, targetUrl);
+  }
+
+  /** Moves one of the colour's photos to another's place. The colour's photos swap among the gallery
+      slots they already hold, so nothing else in the gallery moves and no new order field is needed. */
+  moveColorImage(colorName: string, fromUrl: string, toUrl: string): void {
+    if (fromUrl === toUrl) return;
+    const own = this.imagesForColor(colorName);
+    const from = own.indexOf(fromUrl);
+    const to = own.indexOf(toUrl);
+    if (from < 0 || to < 0) return;
+    const reordered = [...own];
+    reordered.splice(to, 0, ...reordered.splice(from, 1));
+    const gallery = [...this.form().images];
+    const slots = own.map((url) => gallery.indexOf(url));
+    reordered.forEach((url, i) => { gallery[slots[i]] = url; });
+    this.set('images', gallery);
+  }
+
+  private snapshotPickerSelection(id: string | null): void {
+    const group = id?.startsWith('group-') ? this.colorGroups().find((g) => 'group-' + g.colorKey === id) : null;
+    this.pickerOpenedWith.set(new Set(group ? this.imagesForColor(group.colorName) : []));
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.variantPickerOpenId()) this.closeVariantPicker();
+  }
+
   readonly colorGroups = computed(() => {
     const variants = this.form().variants;
     const map = new Map<string, {
@@ -2291,15 +3291,83 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     }>();
 
     variants.forEach((v, globalIndex) => {
-      const key = (v.color || '').trim().toLowerCase() || '__none__';
+      const key = this.groupKeyOf(v);
       if (!map.has(key)) map.set(key, { colorKey: key, colorName: v.color || '', items: [] });
       map.get(key)!.items.push({ v, globalIndex });
     });
 
-    return [...map.values()];
+    // A variant started with "Add variant" sits on top, apart from older
+    // colourless rows, until its colour is chosen.
+    const groups = [...map.values()];
+    return [
+      ...groups.filter(g => g.colorKey === this.newGroupKey),
+      ...groups.filter(g => g.colorKey !== this.newGroupKey),
+    ];
   });
 
   readonly expandedGroups = signal<Set<string>>(new Set());
+
+  /** Ids made by "Add variant" whose colour is not chosen yet. They get their
+      own group so they never mix with older rows that have no colour. */
+  readonly pendingVariantIds = signal<Set<string>>(new Set());
+  readonly newGroupKey = '__new__';
+
+  private groupKeyOf(v: ProductVariant): string {
+    return !v.color && this.pendingVariantIds().has(v.id) ? this.newGroupKey : this.colorKey(v.color || '');
+  }
+
+  /** This colour's rows added in this session that are still blank (no size, no SKU). */
+  private emptySessionRows(colorName: string): ProductVariant[] {
+    const saved = new Set(this.initial().variants.map(v => v.id));
+    const key = this.colorKey(colorName);
+    return this.form().variants.filter(v => !saved.has(v.id)
+      && this.groupKeyOf(v) === key
+      && !String(v.size || '').trim()
+      && !String(v.sku || '').trim());
+  }
+
+  private colorKey(colorName: string): string {
+    return String(colorName || '').trim().toLowerCase() || '__none__';
+  }
+
+  colorVariantBaseSku(
+    colorName: string,
+    items: { v: ProductVariant; globalIndex: number }[] = [],
+  ): string {
+    const key = this.colorKey(colorName);
+    const drafts = this.colorSkuDrafts();
+    if (Object.prototype.hasOwnProperty.call(drafts, key)) return drafts[key];
+    // A legacy size-less row (e.g. 1493-GF-WHT beside 1493-GF-WHI-5) has no
+    // size suffix to strip, so its whole SKU would read as the base and flip
+    // once that row is removed. Read the base from a sized row first.
+    const hasSku = (item: { v: ProductVariant }) => !!String(item.v.sku || '').trim();
+    const saved = items.find(item => hasSku(item) && String(item.v.size || '').trim())
+      ?? items.find(hasSku);
+    return saved ? variantBaseSku(saved.v.sku, saved.v.size) : '';
+  }
+
+  setColorVariantBaseSku(colorName: string, value: string): void {
+    const key = this.colorKey(colorName);
+    const rawBase = String(value || '');
+    this.colorSkuDrafts.update(drafts => ({ ...drafts, [key]: rawBase }));
+    const affectedIds: string[] = [];
+    const next = this.form().variants.map(variant => {
+      if (this.colorKey(variant.color || '') !== key || !variant.size) return variant;
+      affectedIds.push(variant.id);
+      return { ...variant, sku: formatVariantSku(rawBase, variant.size) };
+    });
+    this.markVariantSkusAutomatic(affectedIds);
+    this.set('variants', next);
+    this.warnIfDuplicateVariantSkus(next);
+  }
+
+  private baseSkuForVariant(variant: ProductVariant): string {
+    if (!variant.color) return this.form().sku;
+    const groupItems = this.form().variants
+      .map((v, globalIndex) => ({ v, globalIndex }))
+      .filter(item => this.colorKey(item.v.color || '') === this.colorKey(variant.color || ''));
+    return this.colorVariantBaseSku(variant.color, groupItems) || variantBaseSku(variant.sku, variant.size);
+  }
 
   toggleGroup(key: string): void {
     this.expandedGroups.update(s => {
@@ -2310,47 +3378,76 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   }
 
   addVariantForColor(colorName: string): void {
+    // Fill this colour's empty new row first (e.g. the one "Add variant" made).
+    const empty = this.emptySessionRows(colorName)[0];
+    if (empty) {
+      this.revealVariant(empty.id, true);
+      return;
+    }
     const f = this.form();
-    const colorCode = this.colorToSkuCode(colorName);
+    const id = 'V-' + Date.now().toString(36);
     const next: ProductVariant = {
-      id:       'V-' + Date.now().toString(36),
-      sku:      f.sku ? this.uniqueVariantSku(`${f.sku}-${colorCode}-NEW`) : '',
+      id,
+      sku:      '',
       size:     '',
       color:    colorName,
       material: '',
       price:    f.price || 0,
       stock:    0,
+      ...this.inheritedCosts(colorName),
     };
+    this.markVariantSkuAutomatic(id);
     this.set('variants', [...f.variants, next]);
-    // Ensure the group is expanded so the new row is visible
-    this.expandedGroups.update(s => {
-      const next = new Set(s);
-      next.add(colorName.trim().toLowerCase() || '__none__');
-      return next;
-    });
+    this.revealVariant(id);
+  }
+
+  /** Size chart picked per colour group. A signal, not a template reference:
+      reading `#ref.value` never re-rendered, so Generate stayed disabled after
+      a chart was picked until something else happened on the page. */
+  readonly groupSizeSet = signal<Record<string, string>>({});
+
+  pickGroupSizeSet(colorKey: string, sizeSetId: string): void {
+    this.groupSizeSet.update(choices => ({ ...choices, [colorKey]: sizeSetId }));
   }
 
   generateSizesForColor(sizeSetId: string, colorName: string): void {
     const ss = this.refSizeSets().find(s => s.id === sizeSetId);
     if (!ss) return;
     const f = this.form();
+    const groupItems = f.variants
+      .map((v, globalIndex) => ({ v, globalIndex }))
+      .filter(item => this.colorKey(item.v.color || '') === this.colorKey(colorName));
+    const colorBaseSku = this.colorVariantBaseSku(colorName, groupItems);
+    if (!String(colorBaseSku || '').trim().replace(/-+$/, '')) {
+      this.toast.error(this.t('product.variants.baseSkuRequired.title'), this.t('product.variants.baseSkuRequired.sub'));
+      return;
+    }
     const existingSizes = new Set(
-      f.variants.filter(v => v.color === colorName).map(v => v.size)
+      f.variants
+        .filter(v => this.colorKey(v.color || '') === this.colorKey(colorName))
+        .map(v => v.size)
     );
     const toAdd = ss.sizes.filter(sz => !existingSizes.has(sz));
     if (toAdd.length === 0) { this.toast.info(this.t('product.variants.allSizesAdded'), ss.name); return; }
-    const colorCode = this.colorToSkuCode(colorName);
+    const costs = this.inheritedCosts(colorName);
     const newVariants: ProductVariant[] = toAdd.map(sz => ({
       id:       'V-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 5),
-      sku:      f.sku ? `${f.sku}-${colorCode}-${sz}` : '',
+      sku:      formatVariantSku(colorBaseSku, sz),
       size:     sz,
       color:    colorName,
       material: '',
       price:    f.price || 0,
       stock:    0,
+      ...costs,
     }));
-    this.set('variants', [...f.variants, ...newVariants]);
-    this.toast.success(`${newVariants.length} ${this.t('product.variants.sizesAdded')}`, `${colorName} · ${ss.name}`);
+    this.markVariantSkusAutomatic(newVariants.map(v => v.id));
+    // The generated sizes replace this colour's blank new rows.
+    const blanks = new Set(this.emptySessionRows(colorName).map(v => v.id));
+    const next = [...f.variants.filter(v => !blanks.has(v.id)), ...newVariants];
+    this.set('variants', next);
+    if (!this.warnIfDuplicateVariantSkus(next)) {
+      this.toast.success(`${newVariants.length} ${this.t('product.variants.sizesAdded')}`, `${colorName} · ${ss.name}`);
+    }
   }
 
   setBulkPriceForColor(colorName: string, price: number): void {
@@ -2364,35 +3461,46 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     return items.reduce((sum, item) => sum + (Number(item.v.stock) || 0), 0);
   }
 
-  /** Renames all variants in a color group to a new color name, updating SKU segments too. */
+  /** Rename a color without rewriting stable SKU identifiers. */
   renameGroupColor(colorKey: string, newColor: string): void {
+    if (colorKey === this.newGroupKey) {
+      if (!String(newColor || '').trim()) return;
+      const pending = this.pendingVariantIds();
+      this.pendingVariantIds.set(new Set());
+      this.set('variants', this.form().variants.map(v => (pending.has(v.id) && !v.color ? { ...v, color: newColor } : v)));
+      // Next step is the size: open that colour's group at the new row.
+      const first = this.form().variants.find(v => pending.has(v.id));
+      if (first) this.revealVariant(first.id);
+      return;
+    }
     const f = this.form();
-    const baseSku = f.sku;
-    const newCode = this.colorToSkuCode(newColor);
-
-    // Find the old color code by inspecting the first matching variant's SKU
-    const firstMatch = f.variants.find(v => (v.color || '').trim().toLowerCase() === colorKey);
-    const oldCode = firstMatch && baseSku
-      ? this.extractColorCodeFromSku(baseSku, firstMatch.sku)
-      : null;
-
-    const next = f.variants.map(v => {
-      const key = (v.color || '').trim().toLowerCase() || '__none__';
-      if (key !== colorKey) return v;
-
-      let newSku = v.sku;
-      if (baseSku && oldCode && newSku.startsWith(baseSku + '-')) {
-        // Replace only the first occurrence of the old code segment after baseSku
-        const afterBase = newSku.slice(baseSku.length + 1);
-        const replaced = afterBase.replace(
-          new RegExp(`^${oldCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(-|$)`),
-          `${newCode}$1`
-        );
-        newSku = `${baseSku}-${replaced}`;
+    const targetKey = this.colorKey(newColor);
+    if (targetKey !== colorKey) {
+      const sizesIn = (key: string) => new Set(f.variants
+        .filter(v => this.groupKeyOf(v) === key)
+        .map(v => String(v.size || '').trim())
+        .filter(Boolean));
+      const target = sizesIn(targetKey);
+      if ([...sizesIn(colorKey)].some(size => target.has(size))) {
+        this.toast.error(this.t('product.variants.renameConflict.title'), this.t('product.variants.renameConflict.sub'));
+        // Re-emit the list so the colour <select> snaps back to the old value.
+        this.form.update(current => ({ ...current, variants: [...current.variants] }));
+        return;
       }
-
-      return { ...v, color: newColor, sku: newSku };
+    }
+    const next = f.variants.map(v => {
+      if (this.groupKeyOf(v) !== colorKey) return v;
+      return { ...v, color: newColor };
     });
+    const draft = this.colorSkuDrafts()[colorKey];
+    if (draft !== undefined) {
+      this.colorSkuDrafts.update(drafts => {
+        const renamed = { ...drafts };
+        delete renamed[colorKey];
+        renamed[this.colorKey(newColor)] = draft;
+        return renamed;
+      });
+    }
     this.set('variants', next);
   }
 
@@ -2400,17 +3508,24 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     const ss = this.refSizeSets().find(s => s.id === sizeSetId);
     if (!ss) return;
     const f = this.form();
+    if (!String(f.sku || '').trim().replace(/-+$/, '')) {
+      this.toast.error(this.t('product.variants.baseSkuRequired.title'), this.t('product.variants.baseSkuRequired.sub'));
+      return;
+    }
     const existing = new Set(f.variants.map(v => v.size));
     const toAdd = ss.sizes.filter(sz => !existing.has(sz));
+    const costs = this.inheritedCosts('');
     const newVariants: ProductVariant[] = toAdd.map(sz => ({
       id: 'V-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 5),
-      sku: f.sku ? `${f.sku}-${sz}` : '',
+      sku: formatVariantSku(f.sku, sz),
       size: sz,
       color: '',
       material: '',
       price: f.price || 0,
       stock: 0,
+      ...costs,
     }));
+    this.markVariantSkusAutomatic(newVariants.map(v => v.id));
     if (newVariants.length === 0) {
       this.toast.info(this.t('product.variants.allSizesAdded'), ss.name);
       return;
@@ -2452,11 +3567,67 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     return min === max ? `QAR ${min.toLocaleString()}` : `QAR ${min.toLocaleString()} – ${max.toLocaleString()}`;
   }
 
+  /** What the server will store as the product price: the cheapest sellable size. */
+  variantsLowestPrice(): string {
+    const prices = this.form().variants.map(v => Number(v.price) || 0).filter(n => n > 0);
+    return prices.length ? Math.min(...prices).toLocaleString() : String(this.form().price || 0);
+  }
+
   variantsSummary(): string {
     const n = this.form().variants.length;
     if (n === 0) return '';
     const tpl = n === 1 ? this.t('product.variants.summary.one') : this.t('product.variants.summary.many');
     return tpl.replace('{n}', String(n));
+  }
+
+  /** Barcode preview — mirrors the server default (falls back to SKU) so the
+      admin sees what will actually be saved before it round-trips. */
+  variantBarcodePreview(v: ProductVariant): string {
+    return (v.barcode || '').trim() || (v.sku || '').trim();
+  }
+
+  /** Colour and size as one line, shared by the label and the on-page sheet. */
+  variantLabelText(v: ProductVariant): string {
+    return [v.color, v.size].filter(Boolean).join(' · ');
+  }
+
+  /** Same formatter the printed label uses, so screen and paper never drift. */
+  readonly arabicPrice = arabicPrice;
+
+  private variantLabelData(v: ProductVariant) {
+    return {
+      brand: this.product?.brand || 'Elite',
+      productName: this.form().name || '',
+      variantLabel: this.variantLabelText(v),
+      sku: v.sku || '',
+      barcode: this.variantBarcodePreview(v),
+      price: Number(v.price) || 0,
+      currency: 'QAR',
+    };
+  }
+
+  /** The on-page barcode sheet: every variant's code, checkable without
+      printing anything. Collapsed by default so the drawer stays short. */
+  toggleBarcodeSheet(): void {
+    this.barcodeSheetOpen.update((open) => !open);
+  }
+
+  printVariantLabel(v: ProductVariant): void {
+    this.labelPrinter.printLabels([this.variantLabelData(v)]);
+  }
+
+  printAllVariantLabels(): void {
+    const labels = this.form().variants.flatMap((variant) => {
+      // A stock label represents one physical unit. Printing one label per
+      // variant was misleading for a variant with ten pieces in stock.
+      const quantity = Math.max(0, Math.floor(Number(variant.stock) || 0));
+      return Array.from({ length: quantity }, () => this.variantLabelData(variant));
+    });
+    if (labels.length === 0) {
+      this.toast.warning('No labels to print', 'The current variants have zero stock.');
+      return;
+    }
+    this.labelPrinter.printLabels(labels);
   }
 
   toggleVariantExpand(id: string): void {
@@ -2466,25 +3637,70 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   }
 
   toggleVariantPicker(id: string): void {
-    this.variantPickerOpenId.set(this.variantPickerOpenId() === id ? null : id);
+    const opening = this.variantPickerOpenId() !== id;
+    if (opening) this.snapshotPickerSelection(id);
+    this.variantPickerOpenId.set(opening ? id : null);
   }
 
   closeVariantPicker(): void {
     this.variantPickerOpenId.set(null);
+    this.variantPickerResumeId.set(null);
   }
 
+  /** Open the media library from inside a colour's picker, and come back to that
+      picker afterwards so the newly added image can be linked to the colour. */
+  openLibraryForVariantPicker(pickerId: string): void {
+    this.variantPickerResumeId.set(pickerId);
+    this.variantPickerOpenId.set(null);
+    void this.openMediaPicker();
+  }
+
+  /** Every gallery image tagged with this colour, in gallery order. */
+  imagesForColor(colorName: string): string[] {
+    if (!colorName) return [];
+    const colors = this.form().imageColors;
+    return this.form().images.filter((url) => colors[url] === colorName);
+  }
+
+  /** The colour's card cover: the picked one while it is still tagged, else its first image. */
   imageForColor(colorName: string): string | null {
-    if (!colorName) return null;
-    const entry = Object.entries(this.form().imageColors).find(([, c]) => c === colorName);
-    return entry ? entry[0] : null;
+    const own = this.imagesForColor(colorName);
+    const picked = this.form().colorCovers[colorName];
+    return picked && own.includes(picked) ? picked : own[0] ?? null;
   }
 
-  setColorImage(colorName: string, imageUrl: string): void {
+  /** Adds the image to the colour, or takes it off if it is already there. An image
+      belongs to one colour, so ticking it here moves it from any other colour. */
+  toggleColorImage(colorName: string, imageUrl: string): void {
+    const next = { ...this.form().imageColors };
+    if (next[imageUrl] === colorName) delete next[imageUrl];
+    else next[imageUrl] = colorName;
+    this.set('imageColors', next);
+    this.pruneColorCovers();
+  }
+
+  clearColorImages(colorName: string): void {
     const next = Object.fromEntries(
       Object.entries(this.form().imageColors).filter(([, c]) => c !== colorName)
     );
-    if (imageUrl) next[imageUrl] = colorName;
     this.set('imageColors', next);
+    this.pruneColorCovers();
+  }
+
+  setColorCover(colorName: string, imageUrl: string): void {
+    if (this.form().imageColors[imageUrl] !== colorName) return;
+    this.set('colorCovers', { ...this.form().colorCovers, [colorName]: imageUrl });
+  }
+
+  /** Drops covers whose image is no longer tagged with that colour. */
+  private pruneColorCovers(): void {
+    const colors = this.form().imageColors;
+    const covers = Object.fromEntries(
+      Object.entries(this.form().colorCovers).filter(([color, url]) => colors[url] === color)
+    );
+    if (Object.keys(covers).length !== Object.keys(this.form().colorCovers).length) {
+      this.set('colorCovers', covers);
+    }
   }
 
   colorLinkedToImage(imageUrl: string): string | null {
@@ -2524,16 +3740,83 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   }
 
   set<K extends keyof FormShape>(k: K, v: FormShape[K]): void {
+    if (k === 'sku') {
+      const baseSku = String(v || '');
+      const before = this.form();
+      const oldBase = String(before.sku || this.lastNonEmptyProductSku() || '').trim();
+      if (String(before.sku || '').trim()) this.lastNonEmptyProductSku.set(String(before.sku).trim());
+      const cascadeIds = new Set(this.autoGeneratedVariantIds());
+      for (const variant of before.variants) {
+        const currentSku = String(variant.sku || '').trim();
+        if (oldBase && (currentSku === oldBase || currentSku.startsWith(`${oldBase}-`))) {
+          cascadeIds.add(variant.id);
+        }
+      }
+      this.autoGeneratedVariantIds.set(cascadeIds);
+      this.form.update(f => ({
+        ...f,
+        sku: baseSku,
+        variants: f.variants.map(variant => {
+          const currentSku = String(variant.sku || '').trim();
+          const followsProductSku = !!oldBase
+            && (currentSku === oldBase || currentSku.startsWith(`${oldBase}-`));
+          const automatic = cascadeIds.has(variant.id);
+          if (!followsProductSku && !automatic) return variant;
+          const suffix = followsProductSku
+            ? currentSku.slice(oldBase.length).replace(/^-+/, '')
+            : [variant.color, variant.size].map(part => String(part || '').trim()).filter(Boolean).join('-');
+          const cleanBase = baseSku.trim().replace(/-+$/, '');
+          const sku = !cleanBase
+            ? currentSku
+            : suffix ? `${cleanBase}-${suffix}` : formatVariantSku(cleanBase, variant.size);
+          const autoBarcode = variant.barcodeSource === 'auto' || !variant.barcode || variant.barcode === currentSku;
+          return { ...variant, sku, barcode: autoBarcode ? sku : variant.barcode, barcodeSource: autoBarcode ? 'auto' : 'manual' };
+        }),
+      }));
+      if (baseSku.trim()) this.lastNonEmptyProductSku.set(baseSku.trim());
+      this.scheduleAutoSave();
+      return;
+    }
     this.form.update((f) => ({ ...f, [k]: v }));
     this.scheduleAutoSave();
   }
 
+  wholeQar(value: unknown): number {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+  }
+
   setNum(k: 'price' | 'stock', v: string | number): void {
-    const n = typeof v === 'number' ? v : parseInt(v, 10) || 0;
+    // Whole QAR and whole units: round what was typed so the field shows what is saved.
+    const raw = typeof v === 'number' ? v : parseFloat(v);
+    const n = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
     this.set(k, n);
   }
 
-  toggle(k: 'hidden'): void {
+  setDefaultCost(
+    formKey: 'defaultCostPrice' | 'defaultShippingCost',
+    variantKey: 'costPrice' | 'shippingCost',
+    value: string | number | null,
+  ): void {
+    const parsed = value === '' || value == null ? null : Math.max(0, Number(value));
+    const nextValue = parsed != null && Number.isFinite(parsed) ? parsed : null;
+    this.form.update(f => {
+      const previousDefault = f[formKey];
+      return {
+        ...f,
+        [formKey]: nextValue,
+        // Blank/default-managed sizes follow the product value. A deliberately
+        // different size-specific override remains untouched.
+        variants: f.variants.map(variant => nextValue != null
+          && (variant[variantKey] == null || variant[variantKey] === previousDefault)
+          ? { ...variant, [variantKey]: nextValue }
+          : variant),
+      };
+    });
+    this.scheduleAutoSave();
+  }
+
+  toggle(k: 'hidden' | 'posHidden'): void {
     this.set(k, !this.form()[k] as never);
   }
 
@@ -2573,7 +3856,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
     if (this.saveState() === 'idle') this.saveState.set('dirty');
     if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
     this.autoSaveTimer = window.setTimeout(() => {
-      this.storage.set(this.draftBase, JSON.stringify({ form: this.form(), savedAt: new Date().toISOString() }));
+      this.storage.set(this.draftBase, JSON.stringify({ form: this.form(), base: this.initial(), savedAt: new Date().toISOString() }));
     }, 400);
   }
 
@@ -2583,63 +3866,205 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   async save(): Promise<void> {
     if (!this.dirty() || this.saveState() === 'saving') return;
+    // A pending draft write would re-create the draft right after this save.
+    if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
+    const basics = this.form();
+    if (!basics.name.trim() || !basics.brand.trim() || !basics.sku.trim()) {
+      this.saveState.set('error');
+      this.toast.error(this.t('product.validation.required.title'), this.t('product.validation.required.sub'));
+      return;
+    }
+    if (this.slugError()) {
+      this.saveState.set('error');
+      this.toast.error(this.t('product.field.slugError'));
+      return;
+    }
+    if (this.form().variants.length === 0) {
+      this.saveState.set('error');
+      this.toast.error(this.t('product.variants.required.title'), this.t('product.variants.required.sub'));
+      return;
+    }
+    // Every row needs a size (owner decision 2026-09-15): a colour with no size,
+    // or a SKU without a size, is not a sellable variant.
+    const sizeless = this.form().variants.find(variant => !String(variant.size || '').trim());
+    if (sizeless) {
+      this.saveState.set('error');
+      this.toast.error(
+        this.t('product.variants.missingSize.title'),
+        this.t(this.pendingVariantIds().has(sizeless.id) ? 'product.variants.pickColorFirst' : 'product.variants.missingSize.sub'),
+      );
+      this.revealVariant(sizeless.id, true);
+      return;
+    }
+    const incomplete = this.form().variants.find(variant => !String(variant.sku || '').trim());
+    if (incomplete) {
+      this.saveState.set('error');
+      this.toast.error(this.t('product.variants.missingSku.title'), this.t('product.variants.missingSku.sub'));
+      this.revealVariant(incomplete.id, true);
+      return;
+    }
+    const duplicateSku = this.duplicateVariantSku();
+    if (duplicateSku) {
+      this.saveState.set('error');
+      this.toast.error(this.t('product.variants.duplicateSku.title'), `${duplicateSku} · ${this.t('product.variants.duplicateSku.sub')}`);
+      const clash = [...this.form().variants].reverse().find(v => String(v.sku || '').trim() === duplicateSku);
+      if (clash) this.revealVariant(clash.id, true);
+      return;
+    }
+    // Per-location stock: every stock change carries a reason (it shows in the
+    // movement history), asked once for the whole save.
+    let stockReason: string | null = null;
+    if (this.perLocation() && this.locationStockChanged()) {
+      stockReason = await this.askStockReason();
+      if (!stockReason) return;
+    }
+    // What is on screen now is what gets saved. Edits made while the request is
+    // in flight (deleting a size right after pressing Save) must stay unsaved;
+    // comparing against this snapshot is what keeps the save bar up for them.
+    const submitted: FormShape = structuredClone(this.form());
     this.saveState.set('saving');
 
     try {
-      const f = this.form();
-      const previousId = this.product.id;
+      const f = submitted;
+      // Resolved once: the getter follows `_currentId`, which only moves to the
+      // saved id at the end, so reading it mid-way can return another product.
+      const target = this.product;
+      const previousId = target.id;
       const payload = f.variants.length > 0
         ? { ...f, stock: this.variantsTotalStock() }
         : { ...f };
-      const saved = this.product.id.startsWith('P-NEW-')
+      if (this.perLocation()) {
+        // Absolute numbers per location plus what the editor loaded, so the
+        // server refuses a save that would undo a sale or transfer since then.
+        Object.assign(payload, {
+          stockReason,
+          expectedLocationStock: Object.fromEntries(
+            this.initial().variants.filter((v) => v.id).map((v) => [v.id, { ...(v.locationStock ?? {}) }]),
+          ),
+        });
+      }
+      const saved = target.id.startsWith('P-NEW-')
         ? await this.productsApi.saveProduct(payload)
-        : await this.productsApi.update(this.product.id, payload);
+        : await this.productsApi.update(target.id, {
+          ...payload,
+          // The stock the editor loaded; the server refuses the save if a sale
+          // or stock update changed it since (STOCK_CHANGED).
+          expectedStock: Object.fromEntries(this.initial().variants.map(v => [v.id || v.sku, v.stock])),
+        } as Partial<SaveProductPayload>);
 
-      this.saveState.set('saved');
+      const editedDuringSave = JSON.stringify(this.form()) !== JSON.stringify(submitted);
+      // The baseline is what the server stored (real variant ids, barcode
+      // defaulting to the SKU), not the client copy that was sent.
+      const savedForm: FormShape = { ...this.makeFormFromProduct(saved), collectionIds: [...f.collectionIds] };
+      this.initial.set(savedForm);
       const ts = new Date().toTimeString().slice(0, 5);
       this.lastSavedAt.set(ts);
-      this.storage.remove(this.draftBase);
       this.draftRestoredAt.set(null);
-      this.initial.set({ ...this.form() });
+      if (editedDuringSave) {
+        this.saveState.set('dirty');
+        this.scheduleAutoSave();
+      } else {
+        this.saveState.set('saved');
+        this.form.set(structuredClone(savedForm));
+        this.storage.remove(this.draftBase);
+        this.autoGeneratedVariantIds.set(new Set());
+        this.colorSkuDrafts.set({});
+        this.pendingVariantIds.set(new Set());
+      }
 
-      await this.syncCollections(previousId, saved.id, this.form().collectionIds);
 
       // Persist editable fields back on the underlying product so the current
       // catalog reflects the saved API state.
-      this.product.id = saved.id;
-      this.product.name = saved.name;
-      this.product.sku = saved.sku;
-      this.product.brand = saved.brand;
-      this.product.price = saved.price;
-      this.product.stock = saved.stock;
-      this.product.hidden = saved.hidden;
-      this.product.enDesc = saved.enDesc ?? f.enDesc;
-      this.product.arDesc = saved.arDesc ?? f.arDesc;
-      this.product.variants = (saved.variants ?? []).map(v => ({ ...v }));
-      this.product.images = [...(saved.images ?? f.images)];
-      this.product.imageColors = { ...(saved.imageColors ?? f.imageColors) };
-      this.product.relatedProductIds = [...(saved.relatedProductIds ?? f.relatedProductIds)];
+      target.id = saved.id;
+      target.name = saved.name;
+      target.sku = saved.sku;
+      target.brand = saved.brand;
+      target.price = saved.price;
+      target.defaultCostPrice = saved.defaultCostPrice ?? null;
+      target.defaultShippingCost = saved.defaultShippingCost ?? null;
+      target.duplicatedFromProductId = saved.duplicatedFromProductId ?? null;
+      target.catalogRevision = saved.catalogRevision;
+      target.stock = saved.stock;
+      target.hidden = saved.hidden;
+      target.posHidden = saved.posHidden;
+      target.enDesc = saved.enDesc ?? f.enDesc;
+      target.arDesc = saved.arDesc ?? f.arDesc;
+      target.shortEn = saved.shortEn ?? f.shortEn;
+      target.shortAr = saved.shortAr ?? f.shortAr;
+      target.teaserEn = saved.teaserEn ?? f.teaserEn;
+      target.teaserAr = saved.teaserAr ?? f.teaserAr;
+      target.noteEn = saved.noteEn ?? f.noteEn;
+      target.noteAr = saved.noteAr ?? f.noteAr;
+      target.careEn = saved.careEn ?? f.careEn;
+      target.careAr = saved.careAr ?? f.careAr;
+      target.variants = (saved.variants ?? []).map(v => ({ ...v }));
+      target.images = [...(saved.images ?? f.images)];
+      target.imageColors = { ...(saved.imageColors ?? f.imageColors) };
+      target.colorCovers = { ...(saved.colorCovers ?? f.colorCovers) };
+      target.relatedProductIds = [...(saved.relatedProductIds ?? f.relatedProductIds)];
       // Keep the legacy `image` field in sync with images[0] so the catalog
       // grid, dashboard heatmap, and order rows use the new primary.
-      this.product.image = saved.image || this.product.images?.[0] || this.product.image;
+      target.image = saved.image || target.images?.[0] || target.image;
       if (previousId !== saved.id) {
         this._currentId.set(saved.id);
         this.currentIdChange.emit(saved.id);
       }
       
-      this.productSaved.emit({ ...this.product });
-      this.toast.success(this.t('product.toast.saved.title'), `${this.form().name}`);
+      this.productSaved.emit({ ...target });
+      // Last, and on its own: the product is already saved, so a collection
+      // failure must not leave the drawer on a stale id or a nameless new row.
+      try {
+        await this.syncCollections(previousId, saved.id, f.collectionIds);
+      } catch (caught) {
+        this.toast.errorFrom(caught, this.t('product.toast.collectionsFailed.title'), this.t('product.toast.collectionsFailed.sub'));
+      }
+      this.toast.success(this.t('product.toast.saved.title'), `${f.name}`);
       if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
-      this.feedbackTimer = window.setTimeout(() => this.saveState.set('idle'), 1800);
-    } catch {
+      this.feedbackTimer = window.setTimeout(() => this.saveState.set(this.dirty() ? 'dirty' : 'idle'), 1800);
+    } catch (err) {
       this.saveState.set('error');
       this.triggerShake();
+      const body = (err as { error?: { code?: string; errors?: string[] } })?.error;
+      if (body?.code === 'STOCK_CHANGED') {
+        await this.reloadVariantStock();
+      } else if (body?.errors?.length) {
+        this.toast.errorFrom(err, this.t('product.toast.saveInvalid'), body.errors.join('; '));
+      }
+    }
+  }
+
+  /** After a STOCK_CHANGED refusal: take the stock the server holds now into
+      both the baseline and the form, keeping every other edit, so the next
+      save goes through without undoing the sale. */
+  private async reloadVariantStock(): Promise<void> {
+    const id = this.product?.id;
+    if (!id || id.startsWith('P-NEW-')) return;
+    try {
+      const fresh = await this.productsApi.get(id);
+      if (this.product?.id !== id) return;
+      const freshBySku = new Map((fresh.variants ?? []).map(v => [v.sku, v]));
+      const withFreshStock = (shape: FormShape): FormShape => ({
+        ...shape,
+        variants: shape.variants.map(v => {
+          const latest = freshBySku.get(v.sku);
+          return latest
+            ? { ...v, stock: latest.stock, locationStock: { ...(latest.locationStock ?? {}) }, held: latest.held ?? 0 }
+            : v;
+        }),
+      });
+      this.initial.update(withFreshStock);
+      this.form.update(withFreshStock);
+    } catch {
+      // The error interceptor already reported it.
     }
   }
 
   async discard(): Promise<void> {
     if (!this.dirty()) return;
     this.form.set({ ...this.initial() });
+    this.autoGeneratedVariantIds.set(new Set());
+    this.colorSkuDrafts.set({});
+    this.pendingVariantIds.set(new Set());
     this.storage.remove(this.draftBase);
     this.draftRestoredAt.set(null);
     this.saveState.set('idle');
@@ -2648,6 +4073,9 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
 
   discardDraft(): void {
     this.form.set({ ...this.initial() });
+    this.autoGeneratedVariantIds.set(new Set());
+    this.colorSkuDrafts.set({});
+    this.pendingVariantIds.set(new Set());
     this.storage.remove(this.draftBase);
     this.draftRestoredAt.set(null);
     this.saveState.set('idle');
@@ -2681,10 +4109,13 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       variant: 'danger',
     });
     if (!ok) return;
+    const target = this.product;
+    const draftKey = this.draftBase;
     this.deleting.set(true);
     setTimeout(() => {
       this.deleting.set(false);
-      this.deleted.emit(this.product);
+      this.storage.remove(draftKey);
+      this.deleted.emit(target);
     }, 600);
   }
 
@@ -2693,6 +4124,7 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   // ────────────────────────────────────────────────────────────────────
 
   async navigate(dir: -1 | 1): Promise<void> {
+    if (this.deleting()) return;
     const list = this._products();
     const idx = this.currentIndex();
     const newIdx = idx + dir;
@@ -2703,6 +4135,29 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
       return;
     }
     this.currentIdChange.emit(list[newIdx].id);
+  }
+
+  /** Closing the tab or reloading with unsaved edits asks the browser to confirm. */
+  @HostListener('window:beforeunload', ['$event'])
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (!this.dirty()) return;
+    event.preventDefault();
+    event.returnValue = '';
+  }
+
+  /** Used by the catalog route guard: leaving the page with unsaved edits
+      asks first instead of silently dropping them. */
+  async confirmLeaveIfDirty(): Promise<boolean> {
+    if (!this.dirty()) return true;
+    const leave = await this.confirm.ask({
+      title: this.t('product.leaveConfirm.title'),
+      message: this.t('product.leaveConfirm.message'),
+      confirmLabel: this.t('product.leaveConfirm.confirm'),
+      cancelLabel: this.t('common.cancel'),
+      variant: 'warning',
+    });
+    if (!leave) this.triggerShake();
+    return leave;
   }
 
   triggerShake(): void {
@@ -2822,5 +4277,5 @@ export class ProductDrawerComponent implements OnInit, OnDestroy {
   }
 
   firstName(name: string): string { return name.split(' ')[0] || name; }
-  onImgError(e: Event): void { (e.target as HTMLImageElement).style.display = 'none'; }
+  onImgError(e: Event): void { onProductImgError(e); }
 }

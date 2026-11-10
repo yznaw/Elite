@@ -46,43 +46,86 @@
   --claude-border-strong: #b8965a;
   --claude-text-primary: #1c140c;
   --claude-text-secondary: rgba(28, 20, 12, 0.62);
-  --claude-text-gold: #b8965a;
+  // Darkened from #9f783c (4.02:1 on white, failed WCAG AA). Same hue and
+  // saturation, brightness scaled to 93%, which clears 4.5:1. The "+N" swatch
+  // counter is the smallest text using it, so this token sets the floor.
+  --claude-text-gold: #947038;
   --claude-crystal-green: #0b6f62;
   --claude-crystal-green-hover: #09584e;
   --claude-shadow-soft: 0 28px 80px rgba(87, 58, 31, 0.13);
-  --callout-icon-size: clamp(34px, calc(2vw + 0.8svh), 42px);
-  --callout-icon-offset-y: 0px;
-  --callout-icon-offset-x: 0px;
+  --hero-font-display: var(--ff-serif);
+  --hero-font-body: var(--ff-sans);
 
   position: relative;
   box-sizing: border-box;
   height: 100svh;
   min-height: 100svh;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  align-items: center;
   overflow: clip;
-  padding: clamp(108px, 12svh, 132px) clamp(18px, 4vw, 56px) clamp(22px, 3svh, 36px);
+  padding: clamp(106px, 12svh, 132px) clamp(22px, 4vw, 72px) clamp(26px, 4svh, 44px);
   background: var(--claude-bg-canvas);
   color: var(--claude-text-primary);
+  font-family: var(--hero-font-body);
   isolation: isolate;
 }
 
-.hero-grain,
+/* Montserrat and Inter have no Arabic glyphs, so leaving them on the hero lets
+   each operating system choose a different fallback. Use one deliberate Arabic
+   family for both display and body copy to preserve the hierarchy everywhere. */
+:host-context(html[lang='ar']) .hero {
+  --hero-font-display: var(--ff-arabic);
+  --hero-font-body: var(--ff-arabic);
+}
+
+.hero-layout {
+  position: relative;
+  z-index: 2;
+  width: min(1560px, 100%);
+  height: 100%;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(300px, 0.82fr) minmax(0, 1.55fr);
+  /* Measured at 1885px: the old 5vw gap resolved to 94px, and the shoe's visible
+     edge sits a further ~180px inside its own column, so the copy floated about
+     270px away from the product it describes. The art is centred in its column
+     and cannot move, so the gap is where the distance has to come out. */
+  gap: clamp(28px, 2.4vw, 52px);
+  align-items: center;
+}
+
+.hero-copy {
+  width: min(500px, 100%);
+  /* A grid item defaults to `min-width: auto`, which refuses to shrink below its
+     longest word. A long product name therefore pushed the column wider than its
+     track and the page scrolled sideways: measured 1037px against a 1024px
+     viewport at the narrowest wide layout. */
+  min-width: 0;
+  justify-self: end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(18px, 2.5svh, 28px);
+}
+
+/* Keeps the wide layout's existing flex flow while allowing the stacked layout
+   to reserve the title and description as one visual unit. */
+.hero-intro {
+  display: contents;
+}
+
+.hero-media {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
 .hero-aura,
 .hero-ring {
   position: absolute;
   pointer-events: none;
-}
-
-.hero-grain {
-  inset: 0;
-  z-index: -3;
-  background-image:
-    linear-gradient(rgba(28, 20, 12, 0.026) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(28, 20, 12, 0.026) 1px, transparent 1px);
-  background-size: 76px 76px;
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.52), transparent 86%);
 }
 
 .hero-aura {
@@ -107,7 +150,7 @@
 }
 
 .hero-ring {
-  left: 50%;
+  left: 68%;
   top: 52%;
   z-index: 0;
   aspect-ratio: 1;
@@ -123,57 +166,96 @@
 }
 
 .hero-ring--lg {
-  width: min(1240px, 96vw);
+  width: min(1120px, 68vw);
+}
+
+:host-context(html[dir='rtl']) .hero-ring {
+  left: 32%;
 }
 
 .hero-brand {
   position: relative;
   z-index: 8;
   display: grid;
-  gap: 5px;
-  align-self: start;
-  justify-self: center;
+  justify-items: start;
   color: var(--claude-text-gold);
-  text-align: center;
+  text-align: start;
   animation: heroFadeUp 0.7s ease both;
 }
 
 .hero-brand p {
   margin: 0;
-  font-family: var(--ff-serif);
-  font-size: clamp(18px, 1.7vw, 26px);
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  line-height: 1.05;
+  font-family: var(--hero-font-display);
+  font-size: clamp(34px, 3.3vw, 66px);
+  font-weight: 600;
+  letter-spacing: 0.045em;
+  line-height: 1;
   text-transform: uppercase;
-  white-space: nowrap;
+  text-wrap: balance;
+  /* Long single words break rather than widen the column. Only the stacked
+     layout had this, so the wide layout scrolled sideways on a long name. */
+  overflow-wrap: anywhere;
+  /* Line clamp, not `overflow: hidden` alone: an ellipsis tells the reader the
+     sentence was cut, a hard crop looks like a rendering fault. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
 }
 
-.hero-brand span {
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  white-space: nowrap;
+:host-context(html[lang='ar']) .hero-brand p {
+  line-height: 1.18;
+  text-transform: none;
 }
 
 .hero-stage {
+  /* Single source for the colour crossfade length.
+     ⚠ Mirrored in home.component.ts by `heroColorTransitionMs()`, which sizes
+     the timer that removes the outgoing layer. The two must move together:
+     a timer shorter than the fade cuts the old colourway off mid-dissolve, and
+     a timer longer than it leaves a fully transparent layer stacked on the new
+     one. Same three branches, same order, in both files. */
+  --hero-color-fade: 280ms;
+
   position: relative;
-  width: min(1320px, 100%);
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
   min-height: 0;
   height: 100%;
   display: grid;
   place-items: center;
-  align-self: stretch;
-  justify-self: center;
-  margin-top: 0;
-  touch-action: pan-y;
-  transform: translateY(clamp(-82px, -7svh, -48px));
+  /* `pan-y` alone opts the stage out of pinch zoom, which is the one gesture a
+     visitor inspecting the leather grain actually wants. `pinch-zoom` gives it
+     back while still handing horizontal drags to the swipe handler. */
+  touch-action: pan-y pinch-zoom;
+}
+
+/* Every control inside the hero opts out of the 300ms double-tap-to-zoom
+   window. This is the targeted replacement for the old `maximum-scale=1.0`:
+   two fast taps on an arrow or a swatch now fire two activations instead of
+   zooming the page, and pinch zoom elsewhere is untouched. Text outside the
+   controls stays selectable. */
+.hero-arrow,
+.hero-swatch,
+.hero-pagination__segment,
+.hero-cta {
+  touch-action: manipulation;
+}
+
+/* Colour changes are the most repeated hero interaction on a phone, where the
+   swatch row sits under the thumb. 280ms is tuned for a desktop pointer that
+   changes colour occasionally; at thumb cadence it reads as lag. */
+@media (any-pointer: coarse) {
+  .hero-stage {
+    --hero-color-fade: 180ms;
+  }
 }
 
 .hero-product {
   position: relative;
   z-index: 1;
-  width: min(940px, 74vw, 88svh);
+  width: min(100%, 1240px, 90svh);
   aspect-ratio: 1330 / 1182;
   margin: 0;
   animation: productReveal 0.9s cubic-bezier(0.22, 1, 0.36, 1) both 0.12s;
@@ -200,18 +282,71 @@
   display: block;
   opacity: 0;
   pointer-events: none;
+  /* A long press on the shoe used to raise the iOS image callout and start a
+     drag ghost, which cancelled the swipe mid-gesture and left the pointer
+     sequence unfinished. The layers are decoration for a swipeable stage, not
+     saveable content. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   transform: translateY(10px) scale(0.975);
-  filter: drop-shadow(0 30px 44px rgba(68, 42, 22, 0.11)) contrast(1.02) saturate(1.02);
   transition:
     opacity 0.58s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.58s cubic-bezier(0.22, 1, 0.36, 1),
-    filter 0.58s cubic-bezier(0.22, 1, 0.36, 1);
+    transform 0.58s cubic-bezier(0.22, 1, 0.36, 1);
 
+  /* The hero sources carry a wide transparent margin: the shoe occupies only
+     about 57% of the canvas width. `object-fit: contain` therefore fits the
+     padding, not the merchandise, and a correctly sized box still renders a
+     small-looking product. This scale compensates for that margin.
+
+     It is applied to the <img>, never to `.hero-product`, so the box that
+     anchors the arrows and the position indicator keeps its measured size.
+     Re-measure the visible silhouette after changing it: the acceptance target
+     is the shoe, not the element rectangle. */
   img {
     width: 100%;
     height: 100%;
     object-fit: contain;
     display: block;
+    /* Paired with `draggable="false"` in the template: this covers WebKit, the
+       attribute covers the rest. Both are needed to keep a slow horizontal
+       swipe from turning into a native image drag. */
+    -webkit-user-drag: none;
+    transform: scale(var(--hero-art-scale, 1.22));
+    transform-origin: center;
+    /* Kept on the <img> itself, not the `picture` wrapper: the wrapper is an
+       animated compositing layer (opacity/transform transitions). On real
+       mobile GPUs (both iOS Safari and Android Chrome), `drop-shadow` applied
+       to a transformed/animated layer gets rasterized against that layer's
+       full rectangular tile bounds instead of the image's alpha silhouette,
+       leaving a faint rectangular seam around the whole hero frame. Desktop
+       browsers, including Chrome's device-emulation mode, use a different
+       compositor path and never reproduce it. */
+    filter: drop-shadow(0 30px 44px rgba(68, 42, 22, 0.11)) contrast(1.02) saturate(1.02);
+  }
+}
+
+/* Wide *and* short only. `.hero-product` is capped by `90svh`, so on a short
+   viewport the box shrinks while the media column stays wide, and the shoe
+   reads as small marooned in white space. A tall 1920x1080 screen is not
+   affected and must keep the base scale, which is why this is gated on height
+   rather than on width alone.
+
+   The stacked layout sets its own `transform: scale()` further down and is
+   deliberately not part of this variable. */
+/* Narrowest wide layout. The media column is at its tightest here, and the base
+   scale pushes the shoe into the next arrow: measured -4px at 1024x768 and only
+   3px of clearance at 1180x800. Clearance recovers by 1280, which is where the
+   base scale takes over. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .hero-product__image img {
+    --hero-art-scale: 1.08;
+  }
+}
+
+@media (min-width: 1600px) and (max-height: 920px) {
+  .hero-product__image img {
+    --hero-art-scale: 1.6;
   }
 }
 
@@ -221,15 +356,76 @@
   transform: translateY(0) scale(1);
 }
 
+.hero-product__image--color-outgoing {
+  z-index: 3;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  animation: heroColorFadeOut var(--hero-color-fade) cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* Adjacent navigation keeps the dissolve but adds a 16px spatial cue. The
+   logical direction flips in RTL; pagination and colour selection never add
+   these classes and therefore remain a plain crossfade. Shorthand animation is
+   intentional because Angular safely scopes keyframe names in production. */
+.hero-stage.is-hero-slide-next {
+  --hero-slide-offset: 16px;
+}
+
+.hero-stage.is-hero-slide-previous {
+  --hero-slide-offset: -16px;
+}
+
+:host-context(html[dir='rtl']) .hero-stage.is-hero-slide-next {
+  --hero-slide-offset: -16px;
+}
+
+:host-context(html[dir='rtl']) .hero-stage.is-hero-slide-previous {
+  --hero-slide-offset: 16px;
+}
+
+.hero-stage.is-hero-slide-transition .hero-product__image.is-slide-incoming {
+  animation: heroSlideIn 420ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.hero-stage.is-hero-slide-transition .hero-product__image.is-slide-outgoing {
+  z-index: 3;
+  animation: heroSlideOut 420ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.hero-next-peek,
+.hero-swipe-hint {
+  display: none;
+}
+
+/* Normal mobile navigation is intentionally only a crossfade. Directional
+   transforms combined with a finger release made the product appear to shake. */
+@media (max-width: 1023px) {
+  .hero-stage .hero-product__image {
+    transform: none;
+    transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .hero-stage .hero-product__image.is-active {
+    transform: none;
+  }
+}
+
 .hero-product__image--photo {
   mix-blend-mode: multiply;
   mask-image: radial-gradient(ellipse at center, #000 0 66%, rgba(0, 0, 0, 0.94) 78%, transparent 97%);
   -webkit-mask-image: radial-gradient(ellipse at center, #000 0 66%, rgba(0, 0, 0, 0.94) 78%, transparent 97%);
 }
 
+/* The arrows sit in the navigation group in the DOM so that screen readers and
+   keyboard users meet previous, position and next as one set. On the wide layout
+   they are lifted back out and pinned beside the art: `top: 0` with a `bottom`
+   inset equal to the indicator row makes the containing band exactly the stage,
+   so `margin-block: auto` centres them on the product and not on the column. */
 .hero-arrow {
   position: absolute;
-  top: 50%;
+  top: 0;
+  bottom: var(--hero-arrow-bottom-inset, 60px);
+  margin-block: auto;
   z-index: 7;
   width: 52px;
   height: 52px;
@@ -245,7 +441,7 @@
   box-shadow: 0 20px 50px rgba(87, 58, 31, 0.1);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  transform: translateY(-50%);
+  transform: none;
   transition: border-color 0.22s ease, box-shadow 0.22s ease, color 0.22s ease, transform 0.22s ease;
 }
 
@@ -258,266 +454,370 @@
 }
 
 .hero-arrow--prev {
-  left: clamp(180px, 16vw, 260px);
+  left: clamp(18px, 6%, 72px);
 }
 
 .hero-arrow--next {
-  right: clamp(180px, 16vw, 260px);
+  right: clamp(18px, 6%, 72px);
 }
 
-.hero-arrow:hover,
 .hero-arrow:focus-visible {
   border-color: rgba(184, 150, 90, 0.76);
   color: rgb(2 69 57);
   box-shadow: 0 24px 62px rgba(11, 111, 98, 0.16);
 }
 
-.hero-arrow--prev:hover,
 .hero-arrow--prev:focus-visible {
-  transform: translate(-2px, -50%);
+  transform: translateX(-2px);
 }
 
-.hero-arrow--next:hover,
 .hero-arrow--next:focus-visible {
-  transform: translate(2px, -50%);
+  transform: translateX(2px);
 }
 
-.hero-callout {
-  position: absolute;
-  z-index: 5;
-  opacity: 0;
-  --callout-line-width: 240px;
-  --callout-line-top: 50%;
-  --callout-line-rotate: 0deg;
-  --callout-line-origin: left center;
-  animation: calloutIn 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: var(--delay);
+.hero-arrow:active {
+  transform: scale(0.96);
 }
 
-.callout-pill {
-  display: grid;
-  grid-template-columns: var(--callout-icon-size) minmax(0, 1fr);
-  gap: 5px;
+@media (hover: hover) and (pointer: fine) {
+  .hero-arrow:hover {
+    border-color: rgba(184, 150, 90, 0.76);
+    color: rgb(2 69 57);
+    box-shadow: 0 24px 62px rgba(11, 111, 98, 0.16);
+  }
+
+  .hero-arrow--prev:hover {
+    transform: translateX(-2px);
+  }
+
+  .hero-arrow--next:hover {
+    transform: translateX(2px);
+  }
+}
+
+/* ── Colour swatch visuals ───────────────────────────────────────────
+   Shared by every breakpoint. Only the tap-target size and the direction
+   of the row change per layout, so the appearance lives at base scope. */
+.hero-swatch__dot {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: flex;
   align-items: center;
-  justify-items: start;
-  width: auto;
-  min-height: 58px;
-  padding: 7px 20px 7px 7px;
-  border: 1px solid rgba(184, 150, 90, 0.72);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: var(--claude-shadow-soft);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
-}
-
-.callout-pill__icon {
-  display: block;
-  width: var(--callout-icon-size);
-  height: var(--callout-icon-size);
-  flex-shrink: 0;
-  transform: translate(var(--callout-icon-offset-x), var(--callout-icon-offset-y));
-}
-
-.callout-pill__icon img {
-  width: var(--callout-icon-size);
-  height: var(--callout-icon-size);
-  display: block;
-  object-fit: contain;
-}
-
-.callout-pill strong,
-.callout-pill span {
-  display: block;
-  text-align: left;
-}
-
-.callout-pill strong {
-  color: var(--claude-text-primary);
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1.25;
-}
-
-.callout-line {
-  position: absolute;
-  height: 1px;
-  background: var(--claude-border-strong);
-  opacity: 0.82;
-  animation: lineDraw 0.68s ease both;
-  animation-delay: calc(var(--delay) + 0.28s);
-  transform-origin: left center;
-  transition: background 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease;
-}
-
-.callout-line span {
-  position: absolute;
-  top: 50%;
-  width: 11px;
-  height: 11px;
+  justify-content: center;
   border-radius: 50%;
-  background: var(--claude-border-strong);
+  /* Every swatch carries a ring: white, cream and milk are otherwise
+     invisible against the cream canvas. */
   box-shadow:
-    0 0 0 4px rgba(250, 247, 242, 0.78),
-    0 0 0 7px rgba(184, 150, 90, 0.16);
-  transform: translateY(-50%);
-  transition: box-shadow 0.25s ease, transform 0.25s ease;
+    inset 0 0 0 1px rgba(28, 20, 12, 0.15),
+    0 2px 6px rgba(87, 58, 31, 0.12);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
-.hero-callout:hover .callout-pill {
-  box-shadow: 0 32px 96px rgba(87, 58, 31, 0.19);
-  transform: translateY(-2px);
+/* Overflow chip. Deliberately unfilled: a solid disc beside four solid colour
+   discs would be read as a fifth colourway. The outline plus the count says
+   "there are more" instead of naming one. Rendered only when the cap actually
+   hides something, so it never claims more colours than exist. */
+.hero-swatch--more .hero-swatch__dot {
+  background: transparent;
+  color: var(--claude-text-gold);
+  font-family: var(--ff-sans);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(184, 150, 90, 0.55);
 }
 
-.hero-callout:hover .callout-line {
-  opacity: 1;
-  box-shadow: 0 0 0 1px rgba(184, 150, 90, 0.2);
+.hero-swatch--more:hover .hero-swatch__dot,
+.hero-swatch--more:focus-visible .hero-swatch__dot {
+  color: var(--claude-crystal-green);
+  box-shadow: inset 0 0 0 1px var(--claude-crystal-green);
 }
 
-.hero-callout:hover .callout-line span {
-  box-shadow: 0 0 0 8px rgba(184, 150, 90, 0.18);
-  transform: translateY(-50%) scale(1.2);
+/* Colour that has no entry in Reference Data. A hatched neutral disc rather
+   than a flat grey one: flat grey would read as an actual grey colourway and
+   mislead. The hatch reads as "unset" without shouting error at the customer,
+   while the admin blocks publish on the same condition. */
+.hero-swatch__dot--unmapped {
+  background-color: rgba(28, 20, 12, 0.05);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(28, 20, 12, 0.16) 0 2px,
+    transparent 2px 6px
+  );
 }
 
-.hero-callout--strap {
-  left: clamp(0px, 1vw, 20px);
-  top: 12%;
-  --callout-line-width: clamp(250px, 21vw, 392px);
-  --callout-line-top: 57%;
-  --callout-line-rotate: 23deg;
+.hero-swatch__dot--image {
+  background-size: cover;
+  background-position: center;
 }
 
-.hero-callout--strap .callout-pill img {
-  object-position: 54% 42%;
+.hero-swatch:active .hero-swatch__dot {
+  transform: scale(0.92);
 }
 
-.hero-callout--strap .callout-line {
-  left: calc(100% - 9px);
-  top: var(--callout-line-top);
-  width: var(--callout-line-width);
-  transform: rotate(var(--callout-line-rotate));
-  transform-origin: var(--callout-line-origin);
+.hero-swatch.is-loading .hero-swatch__dot::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 1.5px solid transparent;
+  border-top-color: var(--green-2);
+  border-radius: 50%;
+  animation: heroSwatchLoading 680ms linear infinite;
 }
 
-.hero-callout--strap .callout-line span {
-  right: -6px;
+/* Selected colour: an offset ring so it reads on dark and light swatches
+   alike, rather than a border that would vanish on a matching colour. */
+.hero-swatch.is-selected .hero-swatch__dot {
+  transform: scale(1.06);
+  box-shadow:
+    inset 0 0 0 1px rgba(28, 20, 12, 0.15),
+    0 0 0 2px var(--claude-bg-canvas),
+    0 0 0 3.5px var(--green-2);
 }
 
-.hero-callout--buckle {
-  right: clamp(0px, 1.4vw, 24px);
-  top: 16%;
-  --callout-line-width: clamp(200px, 16vw, 280px);
-  --callout-line-top: 57%;
-  --callout-line-rotate: -40deg;
-  --callout-line-origin: right center;
+
+.hero-swatch:focus-visible {
+  outline: none;
 }
 
-.hero-callout--buckle .callout-pill img {
-  object-position: 50% 54%;
+.hero-swatch:focus-visible .hero-swatch__dot {
+  box-shadow:
+    inset 0 0 0 1px rgba(28, 20, 12, 0.15),
+    0 0 0 2px var(--green-2);
 }
 
-.hero-callout--buckle .callout-line {
-  right: calc(100% - 9px);
-  top: var(--callout-line-top);
-  width: var(--callout-line-width);
-  transform: rotate(var(--callout-line-rotate));
-  transform-origin: var(--callout-line-origin);
+/* ── Wide-layout product story ─────────────────────────────────────────
+   Copy, colour and commerce share one flow. Product navigation stays with the
+   media. No control is positioned against an unrelated viewport edge. */
+.hero-description {
+  max-width: 38ch;
+  margin: 0;
+  /* Heavier and darker than the 62% secondary tone. Against a shoe rendered at
+     roughly 35vw, 400 weight at 62% opacity read as an afterthought. */
+  color: #3d3120;
+  font-family: var(--hero-font-body);
+  font-size: clamp(16px, 1.2vw, 20px);
+  font-weight: 500;
+  line-height: 1.6;
+  text-align: start;
+  text-wrap: pretty;
+  /* Line clamp, not `overflow: hidden` alone: an ellipsis tells the reader the
+     sentence was cut, a hard crop looks like a rendering fault. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  animation: heroFadeIn 0.7s ease both 0.16s;
 }
 
-.hero-callout--buckle .callout-line span {
-  left: -6px;
+.hero-colours {
+  display: grid;
+  gap: 10px;
 }
 
-.hero-callout--stitching {
-  left: clamp(8px, 5.5vw, 86px);
-  bottom: 12%;
-  --callout-line-width: clamp(210px, 17vw, 340px);
-  --callout-line-top: 49%;
-  --callout-line-rotate: 11deg;
+.hero-colours__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--hero-font-body);
+  font-size: 13px;
+  line-height: 1.3;
 }
 
-.hero-callout--stitching .callout-pill img {
-  object-position: 50% 63%;
+.hero-colours__heading span {
+  color: rgba(28, 20, 12, 0.78);
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
 }
 
-.hero-callout--stitching .callout-line {
-  left: calc(100% - 9px);
-  top: var(--callout-line-top);
-  width: var(--callout-line-width);
-  transform: rotate(var(--callout-line-rotate));
-  transform-origin: var(--callout-line-origin);
+.hero-colours__heading strong {
+  color: var(--claude-text-primary);
+  font-weight: 700;
+  /* One line. A long colourway name ("Dark Chocolate Brown") otherwise wrapped
+     the heading and shifted the swatch row down by a line. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.hero-callout--stitching .callout-line span {
-  right: -6px;
+.hero-swatches {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 0;
+  animation: heroFadeIn 0.7s ease both 0.2s;
 }
 
-.hero-callout--sole {
-  right: clamp(8px, 6vw, 96px);
-  bottom: 11%;
-  --callout-line-width: clamp(84px, 7vw, 124px);
-  --callout-line-top: 40%;
-  --callout-line-rotate: 18deg;
-  --callout-line-origin: right center;
+.hero-swatch {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.hero-callout--sole .callout-pill img {
-  object-position: 50% 72%;
+.hero-pagination {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: -4px;
+  animation: heroFadeIn 0.7s ease both 0.1s;
+
+  /* Both declarations exist to make the arrows clickable, and neither is
+     optional.
+
+     `heroFadeIn` animates opacity with `fill: both`, so its effect persists
+     after it finishes and this element is a stacking context forever. That
+     traps the arrows' `z-index: 7` inside it. Because the element was static
+     and `z-index: auto`, the whole context then painted *below*
+     `.hero-product`, which is positioned at `z-index: 1` and whose box spans
+     the arrows at every width. The result was two 52px controls that looked
+     perfect, hit-tested as the figure behind them, and silently did nothing on
+     desktop and phone alike.
+
+     `position: relative` is what lets this element take a z-index at all; the
+     value then has to clear `.hero-product`. Removing either one puts the
+     arrows back underneath the art. Layout is unaffected: the element is a grid
+     row either way. */
+  position: relative;
+  z-index: 3;
 }
 
-.hero-callout--sole .callout-line {
-  right: calc(100% - 9px);
-  top: var(--callout-line-top);
-  width: var(--callout-line-width);
-  transform: rotate(var(--callout-line-rotate));
-  transform-origin: var(--callout-line-origin);
+.hero-pagination__count {
+  min-width: 54px;
+  color: var(--claude-text-gold);
+  direction: ltr;
+  font-family: var(--hero-font-display);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.12em;
+  unicode-bidi: isolate;
+  white-space: nowrap;
 }
 
-.hero-callout--sole .callout-line span {
-  left: -6px;
+.hero-pagination__segments {
+  width: min(268px, 42%);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  /* Past the segment floor the row scrolls rather than shrinking further. The
+     scrollbar is hidden because it would add height to a 44px row and read as
+     page chrome inside a luxury hero; the segments are not the primary control
+     on any layout, so no affordance is lost. */
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-.hero-mobile-features {
+.hero-pagination__segments::-webkit-scrollbar {
   display: none;
+}
+
+.hero-pagination__segment {
+  /* `1 0 <floor>`: grow to share the row, never shrink below the floor. With
+     `1 1 0` the segments divided whatever space existed, so each new slide made
+     every target narrower without limit. Measured at 353px: five slides give
+     30.3px each, eight would give 16px, under even the WCAG 2.5.8 AA minimum
+     of 24px. */
+  flex: 1 0 26px;
+  min-width: 26px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hero-pagination__segment span {
+  width: 100%;
+  height: 3px;
+  display: block;
+  border-radius: 999px;
+  background: rgba(184, 150, 90, 0.3);
+  transition: background-color 0.22s ease, transform 0.22s ease;
+}
+
+.hero-pagination__segment.is-active span {
+  background: var(--green-2);
+  transform: scaleY(1.66);
+}
+
+/* The indicator follows the tap, the picture follows the decode, and on a slow
+   connection those are not the same moment. The segment therefore moves at once
+   so the control never feels dead, and holds this softer fill until its image
+   is actually on screen. `aria-current` stays on the committed slide, so a
+   screen reader is told what is rendered rather than what is loading. */
+.hero-pagination__segment.is-loading span {
+  background: color-mix(in srgb, var(--green-2) 45%, transparent);
+}
+
+.hero-pagination__segment:focus-visible {
+  outline: 2px solid var(--green-2);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
 }
 
 .hero-cta {
   position: relative;
   z-index: 8;
-  // align-self: end;
-  justify-self: center;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  min-height: 40px;
-  padding: 0 20px;
-  border: 1px solid rgba(11, 111, 98, 0.5);
+  min-height: 52px;
+  padding: 0 28px;
+  border: 1px solid var(--claude-crystal-green);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
-  color: var(--claude-crystal-green);
+  background: var(--claude-crystal-green);
+  color: #fff;
   cursor: pointer;
-  box-shadow: 0 14px 34px rgba(11, 111, 98, 0.12);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  animation: heroFadeUp 0.72s ease both 0.58s;
-  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+  box-shadow: 0 16px 36px rgba(11, 111, 98, 0.18);
+  text-decoration: none;
+  animation: heroFadeIn 0.52s cubic-bezier(0.23, 1, 0.32, 1) both 0.24s;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.14s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .hero-cta span {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  font-family: var(--hero-font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.hero-cta:hover,
 .hero-cta:focus-visible {
-  border-color: rgba(11, 111, 98, 0.78);
-  background: rgba(255, 255, 255, 0.42);
-  box-shadow: 0 18px 42px rgba(11, 111, 98, 0.18);
-  transform: translateY(-2px);
+  border-color: var(--claude-crystal-green-hover);
+  background: var(--claude-crystal-green-hover);
+  box-shadow: 0 20px 44px rgba(11, 111, 98, 0.24);
 }
 
 .hero-cta:focus-visible,
@@ -525,6 +825,29 @@
 .discount-cta:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 5px;
+}
+
+.hero-cta:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hero-cta:hover {
+    border-color: var(--claude-crystal-green-hover);
+    background: var(--claude-crystal-green-hover);
+    box-shadow: 0 20px 44px rgba(11, 111, 98, 0.24);
+    transform: translateY(-2px);
+  }
+}
+
+.hero-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .discount-hero {
@@ -862,6 +1185,17 @@
   }
 }
 
+/* Opacity only, deliberately. Reusable entry motion must not overwrite transforms
+   owned by positioning or an in-progress product interaction. */
+@keyframes heroFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes productReveal {
   from {
     opacity: 0;
@@ -884,27 +1218,6 @@
   }
 }
 
-@keyframes calloutIn {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes lineDraw {
-  from {
-    clip-path: inset(0 100% 0 0);
-    opacity: 0;
-  }
-  to {
-    clip-path: inset(0 0 0 0);
-    opacity: 0.72;
-  }
-}
 
 @media (min-width: 720px) {
   .home-commerce {
@@ -944,114 +1257,92 @@
   }
 }
 
-@media (max-width: 980px) {
-  .hero-product {
-    width: min(720px, 80vw);
-  }
-
-  .callout-pill {
-    width: 232px;
-    grid-template-columns: var(--callout-icon-size) minmax(0, 1fr);
-  }
-
-  .callout-pill picture {
-    width: var(--callout-icon-size);
-    height: var(--callout-icon-size);
-  }
-
-  .callout-pill img {
-    width: var(--callout-icon-size);
-    height: var(--callout-icon-size);
-  }
-
-  .callout-pill strong {
-    font-size: 12px;
-  }
-
-  .callout-pill span {
-    font-size: 9px;
-  }
-
-}
-
-@media (max-width: 980px) and (max-height: 820px) {
-  .hero {
-    --callout-icon-size: clamp(32px, calc(2vw + 0.5svh), 38px);
-    --callout-icon-offset-y: -1px;
-  }
-
-  .hero-callout--strap {
-    --callout-line-width: clamp(228px, 19vw, 340px);
-    --callout-line-top: 58%;
-    --callout-line-rotate: 24deg;
-  }
-
-  .hero-callout--buckle {
-    --callout-line-width: clamp(180px, 15vw, 252px);
-    --callout-line-top: 58%;
-    --callout-line-rotate: -41deg;
-  }
-
-  .hero-callout--stitching {
-    --callout-line-width: clamp(192px, 15vw, 304px);
-    --callout-line-top: 50%;
-    --callout-line-rotate: 12deg;
-  }
-
-  .hero-callout--sole {
-    --callout-line-width: clamp(78px, 6.5vw, 112px);
-    --callout-line-top: 41%;
-    --callout-line-rotate: 17deg;
-  }
-}
-
-@media (max-width: 980px) and (max-height: 720px) {
-  .hero {
-    --callout-icon-size: clamp(30px, calc(1.8vw + 0.35svh), 36px);
-    --callout-icon-offset-y: -2px;
-  }
-
-  .hero-callout--strap {
-    --callout-line-width: clamp(210px, 17vw, 320px);
-    --callout-line-top: 59%;
-    --callout-line-rotate: 25deg;
-  }
-
-  .hero-callout--buckle {
-    --callout-line-width: clamp(168px, 13vw, 232px);
-    --callout-line-top: 59%;
-    --callout-line-rotate: -42deg;
-  }
-
-  .hero-callout--stitching {
-    --callout-line-width: clamp(180px, 14vw, 272px);
-    --callout-line-top: 51%;
-    --callout-line-rotate: 13deg;
-  }
-
-  .hero-callout--sole {
-    --callout-line-width: clamp(72px, 6vw, 102px);
-    --callout-line-top: 42%;
-    --callout-line-rotate: 18deg;
-  }
-}
-
-@media (max-width: 760px) {
+/* Keep in sync with HERO_STACKED_MAX_PX in home.component.ts. */
+@media (max-width: 1023px) {
   .hero {
     --hero-mobile-x: clamp(12px, 4vw, 16px);
-    --hero-mobile-top: clamp(82px, 12svh, 96px);
-    --hero-mobile-gap: clamp(8px, 1.8svh, 16px);
-    --mobile-product-size: min(82vw, 342px, 38svh);
+    /* Clear of the floating header pill, but tighter than before: the description
+       now sits between the name and the art, so the block above the shoe is one
+       row taller and does not need as much padding to feel settled. */
+    --hero-mobile-top: clamp(86px, 12.4svh, 102px);
+    --hero-mobile-gap: clamp(10px, 2.2svh, 20px);
+    /* Width of the hero art; height is this divided by 1.4. Deliberately width
+       only, with no svh term: svh changes as browser chrome shows and hides,
+       and device emulation reports a stale height on resize, which made the
+       hero jump size between a viewport switch and a reload. Vertical fit is
+       handled by the max-height below instead. */
+    --mobile-product-size: min(132vw, 620px);
 
-    height: auto;
-    min-height: 100svh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--hero-mobile-gap);
-    padding: calc(var(--hero-mobile-top) + env(safe-area-inset-top, 0px)) var(--hero-mobile-x) calc(18px + env(safe-area-inset-bottom, 0px));
+    /* Use the smallest mobile viewport so Android's visible browser chrome is
+       included. The image stage below is the only part allowed to shrink. */
+    height: 100svh;
+    min-height: 0;
+    /* The horizontal terms carry a safe-area max() because the viewport meta
+       now declares `viewport-fit=cover`. Without them the hero art and the
+       swatch row would run under the notch and the home indicator rail in
+       landscape on a notched iPhone. Portrait insets are zero, so the usual
+       case still resolves to plain `--hero-mobile-x`. */
+    padding:
+      calc(var(--hero-mobile-top) + env(safe-area-inset-top, 0px))
+      max(var(--hero-mobile-x), env(safe-area-inset-right, 0px))
+      calc(24px + env(safe-area-inset-bottom, 0px))
+      max(var(--hero-mobile-x), env(safe-area-inset-left, 0px));
   }
 
+  .hero-layout {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    /* Colours sit directly under the indicators because both change the picture
+       above them. Putting the description between them separated a control from
+       its own effect by roughly 140px of eye travel. Order is expressed here
+       rather than in the DOM so the wide layout keeps description-then-colours,
+       where the copy column is beside the art and proximity does not apply. */
+    grid-template:
+      "intro" auto
+      "stage" minmax(0, 1fr)
+      "pagination" auto
+      "colours" auto
+      "actions" auto
+      / minmax(0, 1fr);
+    gap: var(--hero-mobile-gap);
+    align-content: center;
+    justify-items: center;
+  }
+
+  .hero-copy,
+  .hero-media {
+    display: contents;
+  }
+
+  /* Keep name and description packed as one block, with only a small safety
+     floor below short copy. The intro grows naturally for longer copy, while a
+     short slide gives its unused space back to the art instead of leaving a
+     conspicuous blank band above the product. */
+  .hero-intro {
+    grid-area: intro;
+    width: 100%;
+    min-width: 0;
+    min-height: clamp(96px, 25vw, 110px);
+    display: grid;
+    justify-items: center;
+    align-content: start;
+    gap: clamp(6px, 1.25svh, 10px);
+  }
+
+  .hero-intro:not(.has-description) {
+    min-height: clamp(54px, 16.4vw, 69px);
+  }
+
+  /* `margin-bottom` pulls the name toward the art rather than shrinking the grid
+     gap, which is shared with every other row and would tighten the whole
+     column. The name belongs to the product directly under it, so only this one
+     seam closes. */
+  /* `justify-items: center` only centres the *box*. A one-line name shrink-wraps
+     so it looked centred, but a name long enough to wrap fills the full width and
+     then inherits the wide layout's `text-align: start`, so every line after the
+     first sat hard against the left edge. The text needs centring in its own
+     right, not just the block that holds it. */
   .hero-brand {
     position: relative;
     top: auto;
@@ -1060,239 +1351,513 @@
     align-self: center;
     justify-items: center;
     width: 100%;
+    text-align: center;
     animation: mobileFadeUp 0.7s ease both;
+  }
+
+  .hero-brand,
+  .hero-pagination,
+  .hero-description,
+  .hero-colours,
+  .hero-swatches,
+  .hero-actions,
+  .hero-cta {
+    min-width: 0;
   }
 
   .hero-brand p {
     max-width: min(100%, 34rem);
-    font-size: clamp(16px, 5vw, 20px);
-    letter-spacing: clamp(0.06em, 0.9vw, 0.12em);
-    line-height: 1.12;
+    font-size: clamp(25px, 7.6vw, 27px);
+    letter-spacing: clamp(0.03em, 0.5vw, 0.06em);
+    line-height: 1.08;
     overflow-wrap: anywhere;
     text-wrap: balance;
     white-space: normal;
+    -webkit-line-clamp: 2;
   }
 
-  .hero-brand span {
-    max-width: min(32ch, 100%);
-    font-size: clamp(9px, 2.7vw, 10px);
-    white-space: normal;
-    line-height: 1.4;
-  }
-
+  /* Grid + place-items keeps the art centred even though it is deliberately
+     wider than the stage. A plain block with `margin: 0 auto` cannot centre an
+     overflowing child, which left the product sitting high and to one side. */
   .hero-stage {
-    display: block;
-    flex: 0 0 auto;
+    grid-area: stage;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    place-items: center;
+    flex: 1 1 auto;
     width: 100%;
-    min-height: calc(var(--mobile-product-size) + clamp(10px, 2svh, 28px));
-    height: calc(var(--mobile-product-size) + clamp(10px, 2svh, 28px));
-    margin-top: clamp(-30px, -4svh, -16px);
-    margin-bottom: 0;
+    /* Keeps the incoming preview clipped to the frame while it slides in, so it
+       enters from a hard edge rather than appearing in mid-air. */
+    overflow: hidden;
+    /* `max-height`, not `height`. The grid declares this row as `minmax(0, 1fr)`
+       so it can absorb whatever the copy above it needs, but a fixed `height`
+       overrode that and made the row rigid. With a rigid row, a long name or
+       description had nowhere to go: it pushed the art down until the shoe
+       overlapped the indicator, and `overflow: clip` on `.hero` hid the damage
+       instead of surfacing it.
+
+       The ceiling is unchanged, so typical content renders exactly as before.
+       Only the overflow case now resolves by shrinking the art. */
+    max-height: min(calc(var(--mobile-product-size) / 1.4), 46svh);
+    /* The floor: below this the art stops giving way and the copy has to clamp
+       instead. Without it, hostile content could shrink the shoe to nothing. */
+    min-height: min(184px, 26svh);
+    margin: 0;
     transform: none;
   }
 
+  /* Sits behind the product, so it tracks the art rather than the viewport. */
   .hero-ring--lg {
-    top: 35%;
-    width: min(560px, 112vw);
+    top: 38%;
+    left: 50%;
+    width: min(660px, 132vw);
   }
 
+  :host-context(html[dir='rtl']) .hero-ring {
+    left: 50%;
+  }
+
+  /* Slides stack absolutely, so the figure needs an explicit box. It is kept
+     close to the 3:2 shape of a typical product photo rather than square: in a
+     1:1 box `object-fit: contain` letterboxed landscape art to ~62% of the
+     height, which is why the product read as small. */
   .hero-product {
     width: var(--mobile-product-size);
-    height: var(--mobile-product-size);
-    aspect-ratio: 1;
-    margin: 0 auto;
+    height: 100%;
+    /* `min(..., 100%)`, not the art ratio alone. The stage is the elastic row,
+       but the art inside it was not: with only the ratio cap the figure kept its
+       full height, so the stage was sized by its content and burst out of the
+       grid track the layout had already shrunk for it. Measured at 320x568 with
+       hostile copy: track 145.6px, stage element 221.5px, and the difference
+       landed on top of the indicator.
+
+       Capping at `100%` makes the art give way with its container, which is what
+       "the art is the only elastic element" was supposed to mean. */
+    max-height: min(calc(var(--mobile-product-size) / 1.4), 100%);
+    aspect-ratio: auto;
+    justify-self: center;
+    margin: 0;
     transform: none;
   }
 
   .hero-product img {
-    aspect-ratio: 1;
+    aspect-ratio: auto;
     object-fit: contain;
+    transform: scale(1.14);
+    transform-origin: center;
+    /* Product photos usually carry more empty space below the subject than
+       above it, which reads as the shoe sitting high in its box. Anchoring
+       slightly above centre optically re-centres it. */
+    object-position: center 44%;
   }
 
+  /* Gesture preview for the swipe demonstration.
+   *
+   * The layer rests fully outside the frame and is only ever seen while the
+   * hint animation runs. It is deliberately NOT a persistent edge sliver: the
+   * hero product is sized past the viewport on purpose (see `--mobile-product-size`
+   * and 03-client-web.md), overflowing past both sides at 390px wide, so
+   * there is no free edge lane for a resting preview to occupy. A persistent
+   * sliver measured a 101px overlap with the active shoe and read as a smudge
+   * on top of it rather than as a second product. During the demo the active
+   * product shifts left first, which is what opens the space this layer enters.
+   */
+  .hero-next-peek {
+    --peek-width: min(38vw, 152px);
+
+    position: absolute;
+    top: 50%;
+    inset-inline-end: 0;
+    z-index: 4;
+    width: var(--peek-width);
+    height: min(56%, 244px);
+    display: block;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(calc(100% * var(--peek-dir)), -50%) scale(0.92);
+    transform-origin: center right;
+    /* Softens the clipped edge as the layer crosses the frame boundary. */
+    mask-image: linear-gradient(to left, transparent 0, #000 22%);
+    -webkit-mask-image: linear-gradient(to left, transparent 0, #000 22%);
+  }
+
+  /* In RTL the carousel advances the other way, so the mask and origin flip.
+     The transform itself already follows `--peek-dir`. */
+  :host-context(html[dir='rtl']) .hero-next-peek {
+    transform-origin: center left;
+    mask-image: linear-gradient(to right, transparent 0, #000 22%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 22%);
+  }
+
+  .hero-next-peek img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+    /* Mirrors the active product so both shoes sit at the same optical height
+       rather than reading as two unrelated crops. */
+    object-position: center 44%;
+    transform: none;
+  }
+
+  /* ── Gesture demonstration ─────────────────────────────────────────
+     Both layers travel the same `--peek-shift` in the same direction, which is
+     the physical model of a real swipe: a single track moving under the finger.
+     Animating them by different distances (the earlier approach) gave the eye
+     no causal link, so the motion taught nothing. */
+  .hero-stage {
+    /* How far the active product yields. This is what opens the lane the
+       preview enters. It has to exceed the product's own right overflow
+       (the art is 132vw at 390px wide before the cap)
+       or the preview lands on top of the current shoe instead of beside it. */
+    --peek-shift: clamp(88px, 26vw, 128px);
+    /* How much of the incoming product shows at the peak. Kept below
+       `--peek-shift` so it occupies vacated space rather than overlapping. */
+    --peek-reveal: clamp(62px, 18vw, 92px);
+    /* Travel direction. One set of keyframes serves both writing directions by
+       multiplying through this sign, rather than a second RTL set selected with
+       an `animation-name` override. That override silently broke in production:
+       Angular scopes `@keyframes` names, and the optimizer did not rewrite the
+       standalone longhand to match, so `animation-name` pointed at a name that
+       no longer existed and nothing ran at all. */
+    --peek-dir: 1;
+  }
+
+  :host-context(html[dir='rtl']) .hero-stage {
+    --peek-dir: -1;
+  }
+
+  /* One pass, in step with the pill. Every layer of the demonstration shares the
+     same single 1500ms cycle, so the movement and the words that name it arrive
+     together, hold together, and leave together. The peak is deliberately brief
+     (42% to 58%, ~240ms): a long hold reads as a stuck layout, not a gesture. */
+  .hero-stage.is-leather-peeking .hero-product__image.is-active {
+    animation-name: leatherPeekCurrent;
+    animation-duration: 1500ms;
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+    animation-fill-mode: both;
+  }
+
+  .hero-stage.is-leather-peeking .hero-next-peek {
+    animation-name: leatherPeekNext;
+    animation-duration: 1500ms;
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+    animation-fill-mode: both;
+  }
+
+  /* Interrupted by a real swipe: ease the layers home over ~180ms rather than
+     dropping the animation class and snapping to rest on the current frame. */
+  .hero-stage.is-peek-releasing .hero-product__image.is-active,
+  .hero-stage.is-peek-releasing .hero-next-peek {
+    /* `!important` so this wins over the mobile crossfade transition declared
+       earlier for `.hero-stage .hero-product__image`, which is more specific. */
+    animation: none !important;
+    transition:
+      opacity 180ms cubic-bezier(0.33, 1, 0.68, 1),
+      transform 180ms cubic-bezier(0.33, 1, 0.68, 1) !important;
+  }
+
+  /* The cue borrows the warm leather colour and a stitched border. It overlays
+     the stage instead of entering the flex flow, preserving the full CTA on
+     Android viewports with visible browser chrome. */
+  .hero-swipe-hint {
+    position: absolute;
+    left: 50%;
+    bottom: 2px;
+    z-index: 9;
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 11px;
+    /* A hairline rather than a dashed rule: dashes read as a coupon badge, not
+       as a luxury storefront. */
+    border: 1px solid rgba(184, 150, 90, 0.34);
+    border-radius: 999px;
+    background: rgba(250, 245, 235, 0.82);
+    /* 5.48:1 on the composited pill background. The previous #8f6d32 measured
+       4.36:1 and missed the WCAG AA 4.5:1 floor. */
+    color: #7d5e28;
+    box-shadow: 0 8px 22px rgba(87, 58, 31, 0.09);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.96);
+    pointer-events: none;
+  }
+
+  .hero-swipe-hint__arrow {
+    font-size: 14px;
+    letter-spacing: 0;
+  }
+
+  /* Same single cycle as the layers it labels, so the pill neither outlives the
+     motion nor retires before it. */
+  .hero-stage.is-leather-peeking .hero-swipe-hint {
+    animation-name: leatherSwipeTag;
+    animation-duration: 1500ms;
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+    animation-fill-mode: both;
+  }
+
+  .hero-stage.is-leather-peeking .hero-swipe-hint__arrow {
+    animation-name: leatherHintArrow;
+    animation-duration: 1500ms;
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+    animation-fill-mode: both;
+  }
+
+
+  /* Arrows return on the stacked layout, but beside the indicator rather than on
+     top of the art, which is why they were hidden before: there they covered a
+     quarter of the shoe. Swipe stays the primary gesture; these exist so a
+     visitor who never tries swiping still sees that the hero moves. */
   .hero-arrow {
-    top: calc(var(--mobile-product-size) / 2);
-    width: 44px;
-    height: 44px;
+    position: static;
+    inset: auto;
+    margin-block: 0;
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    box-shadow: 0 8px 20px rgba(87, 58, 31, 0.08);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .hero-arrow span {
-    font-size: 30px;
+    font-size: 26px;
   }
 
-  .hero-arrow--prev {
-    left: 0;
-  }
-
-  .hero-arrow--next {
-    right: 0;
-  }
-
-  .hero-callout {
-    display: none;
-  }
-
-  .hero-mobile-features {
-    display: grid;
-    grid-template-rows: auto;
-    width: min(452px, calc(100vw - (var(--hero-mobile-x) * 2)));
-    max-width: 100%;
-    box-sizing: border-box;
-    position: relative;
-    z-index: 1;
-    margin-top: 40px;
-  }
-
-  .mobile-feature-sheet {
-    min-width: 0;
-    display: grid;
-    gap: 14px;
-    padding: 18px 18px 16px;
-    border: 1px solid rgba(184, 150, 90, 0.18);
-    border-radius: 26px;
-    // background:
-    //   linear-gradient(180deg, rgba(252, 248, 240, 0.98), rgba(244, 237, 225, 0.95)),
-    //   #faf7f2;
-    background: transparent;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.82),
-      0 24px 60px rgba(87, 58, 31, 0.12);
-    position: relative;
-    overflow: hidden;
-    // backdrop-filter: blur(16px) saturate(1.08);
-    -webkit-backdrop-filter: blur(16px) saturate(1.08);
-  }
-
-  .mobile-feature-sheet::before {
-    content: "";
-    width: 78px;
-    height: 5px;
-    border-radius: 999px;
-    background: linear-gradient(90deg, var(--claude-crystal-green), #0a5a4d);
-    opacity: 0.95;
-  }
-
-  .mobile-feature-sheet__header {
-    display: none;
-    gap: 6px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid rgba(184, 150, 90, 0.2);
-  }
-
-  .mobile-feature-sheet__header p {
-    margin: 0;
-    color: var(--claude-text-gold);
-    font-family: var(--ff-serif);
-    font-size: clamp(27px, 7.2vw, 34px);
-    font-weight: 500;
-    line-height: 1.02;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-  }
-
-  .mobile-feature-sheet__header span {
-    color: var(--claude-text-secondary);
-    font-size: clamp(9px, 2.4vw, 10px);
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-
-  .mobile-feature-sheet__rows {
-    display: grid;
-  }
-
-  .mobile-feature-row {
-    display: grid;
-    grid-template-columns: 28px minmax(0, 1fr);
-    gap: 12px;
-    align-items: center;
-    padding: 9px 2px;
-    border-bottom: 1px solid rgba(184, 150, 90, 0.18);
-  }
-
-  .mobile-feature-row:last-child {
-    border-bottom: 0;
-    padding-bottom: 6px;
-  }
-
-  .mobile-feature-icon {
-    width: 28px;
-    height: 28px;
-    display: inline-flex;
+  /* ── Slide pagination ──────────────────────────────────────────────
+     Segmented bars rather than dots: they read as "N slides, you are on
+     this one" at a glance and give each segment a real tap target. */
+  .hero-pagination {
+    grid-area: pagination;
+    position: static;
+    display: flex;
+    gap: 10px;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
-    background: transparent;
+    width: min(330px, 86vw);
+    height: auto;
+    margin: 0;
+    transform: none;
+    animation: mobileFadeUp 0.7s ease both 0.1s;
   }
 
-  .mobile-feature-icon img {
-    width: 28px;
-    height: 28px;
-    display: block;
-    object-fit: contain;
+  /* The `01 / 05` label is dropped on the stacked layout rather than hidden with
+     visibility, so it stops reserving 48px plus a 12px gap. That reservation was
+     pushing the segments 30px right of the viewport centre while the rest of the
+     column stayed centred. With five segments the label was also redundant: the
+     count and the current position are already visible in the bars themselves. */
+  .hero-pagination__count {
+    display: none;
   }
 
-  .mobile-feature-copy {
+  /* `flex: 1 1 auto` rather than a fixed width: the nav already reserves room
+     for both arrows, so letting the row claim what is left gives the segments
+     ~204px instead of ~184px at 353px wide, which pushes the point where they
+     start scrolling from six slides to seven. */
+  .hero-pagination__segments {
+    flex: 1 1 auto;
+    width: auto;
     min-width: 0;
-    display: grid;
-    gap: 4px;
   }
 
-  .mobile-feature-copy strong {
-    color: var(--claude-text-primary);
-    font-size: clamp(12px, 3.4vw, 15px);
+  .hero-pagination__segment {
+    /* Mirrors the base rule's floor. This block previously reset it to
+       `1 1 0` / `min-width: 0`, which silently reinstated unlimited shrinking:
+       eight slides measured 18.4px wide, under the WCAG 2.5.8 AA minimum. */
+    flex: 1 0 26px;
+    min-width: 26px;
+    width: auto;
+    height: 44px; /* full-height hit area, WCAG 2.5.5 */
+    display: flex;
+    align-items: center;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* 6px rather than 3px. The 44px hit area already satisfied WCAG 2.5.5, so this
+     is a perception fix, not a reach one: a 3px hairline does not read as
+     something you are meant to press, however large its invisible target. */
+  .hero-pagination__segment span {
+    width: 100%;
+    height: 6px;
+    display: block;
+    border-radius: 999px;
+    background: rgba(184, 150, 90, 0.28);
+    transition: background-color 0.32s ease;
+  }
+
+  /* Colour alone marks the active bar. `transform: none` is explicit because the
+     wide-layout rule sets `scaleY(1.66)`, which on a 6px bar reaches 10px and
+     softens its rounded ends. */
+  .hero-pagination__segment.is-active span {
+    background: var(--green-2);
+    transform: none;
+  }
+
+  .hero-pagination__segment:focus-visible {
+    outline: 2px solid var(--green-2);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* ── Short description ─────────────────────────────────────────────
+     Replaces the four-row feature table. One sentence that sells, capped
+     at two lines so the hero never pushes the CTA below the fold. */
+  .hero-description {
+    position: static;
+    /* `-webkit-box`, not `block`. `block` here silently defeated the base rule's
+       line clamp, which needs this display type to count lines at all: the
+       hostile fixture rendered five lines through a three-line clamp. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    max-width: min(38ch, 100%);
+    margin: 0;
+    /* Darker and heavier than the wide layout's secondary tone: at phone size
+       and 62% opacity this line read as disabled rather than as supporting copy. */
+    color: #3d3120;
+    font-size: clamp(14px, 3.7vw, 16px);
+    font-weight: 500;
+    line-height: 1.5;
+    text-align: center;
+    /* Three, not the two the plan first proposed. Measured: the current copy
+       already needs three lines at 353px, so a two-line clamp would truncate
+       live text rather than only hostile text. Three still caps the failure
+       case, which was five lines pushing the art into the indicator.
+
+       The surrounding `.hero-intro` keeps only a small shared floor instead of
+       reserving blank lines inside this element, so title and description stay
+       close and short copy lets the product rise toward it. */
+    -webkit-line-clamp: 3;
+    text-wrap: balance;
+    transform: none;
+    animation: mobileFadeUp 0.7s ease both 0.16s;
+  }
+
+  /* ── Colour swatches ───────────────────────────────────────────────
+     The label and selected name make the dots understandable before interaction. */
+  .hero-colours {
+    grid-area: colours;
+    justify-items: center;
+    gap: 5px;
+  }
+
+  .hero-colours__heading {
+    justify-content: center;
+    /* 11px rather than 10px, and heavier. At 10px/600 with 62% opacity and wide
+       tracking, uppercase text this small stops reading as a label. */
+    font-size: 12px;
+  }
+
+  .hero-colours__heading span {
+    color: rgba(28, 20, 12, 0.78);
     font-weight: 700;
-    line-height: 1.15;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    overflow-wrap: anywhere;
   }
 
-  .mobile-feature-copy span {
-    color: var(--claude-text-secondary);
-    font-size: clamp(8px, 2.2vw, 9px);
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    line-height: 1.2;
-    text-transform: uppercase;
-    overflow-wrap: anywhere;
+  .hero-colours__heading strong {
+    font-weight: 700;
   }
 
+  .hero-swatches {
+    position: static;
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 0;
+    transform: none;
+    animation: mobileFadeUp 0.7s ease both 0.2s;
+  }
+
+  /* 48/36 rather than 44/32. The dot is the thing people aim at, and at 32px it
+     read as decoration next to a 6px indicator bar and a full-width CTA. Five
+     items (four colours plus the +N chip) at 48px with 12px gaps measure 288px
+     against 337px of content width at 390px wide, so the row still cannot wrap. */
+  .hero-swatch {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .hero-swatch__dot {
+    width: 36px;
+    height: 36px;
+  }
+
+  .hero-swatch--more .hero-swatch__dot {
+    font-size: 13px;
+  }
+
+  .hero-actions {
+    grid-area: actions;
+    width: min(420px, 100%);
+    justify-content: center;
+    gap: 10px;
+  }
+
+  /* ── CTA ─────────────────────────────────────────────────────────── */
   .hero-cta {
     position: relative;
     left: auto;
     bottom: auto;
     flex-shrink: 0;
-    width: fit-content;
-    min-height: 0;
-    margin-top: 4px;
-    padding: 0;
-    border: 0;
-    border-bottom: 1px solid rgba(184, 150, 90, 0.68);
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    color: var(--claude-text-gold);
-    justify-self: start;
+    width: min(320px, 100%);
+    min-height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 2px;
+    padding: 0 24px;
+    border: 1.5px solid var(--green-2);
+    border-radius: 999px;
+    background: var(--green-2);
+    box-shadow: 0 14px 30px rgba(0, 69, 56, 0.16);
+    color: #fff;
     transform: none;
-    animation: mobileFadeUp 0.72s ease both 0.2s;
+    transition: background-color 0.22s ease, transform 0.16s ease;
+    animation: mobileFadeUp 0.72s ease both 0.24s;
   }
 
   .hero-cta span {
-    font-family: var(--ff-serif);
-    font-size: clamp(16px, 4.8vw, 19px);
+    font-family: var(--hero-font-display);
+    font-size: clamp(13px, 3.6vw, 15px);
     line-height: 1.1;
-    letter-spacing: 0.04em;
-    text-align: start;
+    letter-spacing: 0.08em;
+    text-align: center;
     text-transform: uppercase;
-    white-space: normal;
-    font-weight: 600;
+    white-space: nowrap;
+    font-weight: 700;
   }
 
-  .hero-cta:hover,
   .hero-cta:focus-visible {
-    transform: translateY(-1px);
-    border-bottom-color: rgba(11, 111, 98, 0.9);
+    transform: none;
+    background: var(--claude-crystal-green-hover);
+  }
+
+  .hero-cta:active {
+    background: var(--claude-crystal-green-hover);
+    transform: scale(0.97);
   }
 
   .home-commerce {
@@ -1349,46 +1914,60 @@
   }
 }
 
-@media (max-width: 760px) and (max-height: 700px) {
+/* Short viewports: the flex column absorbs the difference on its own, so these
+   only need to retune the two size variables. */
+@media (max-width: 1023px) and (max-height: 700px) {
   .hero {
     --hero-mobile-top: clamp(76px, 11.5svh, 86px);
-    --hero-mobile-gap: clamp(7px, 1.4svh, 11px);
-    --mobile-product-size: min(80vw, 318px, 37svh);
+    --hero-mobile-gap: clamp(6px, 1.35svh, 10px);
+    --mobile-product-size: min(116vw, 540px);
   }
 
   .hero-stage {
-    margin-top: clamp(-24px, -3svh, -12px);
+    max-height: min(calc(var(--mobile-product-size) / 1.4), 39svh);
   }
 
-  .hero-mobile-features {
-    margin-top: clamp(-16px, -2svh, -8px);
+  .hero-colours {
+    gap: 2px;
+  }
+
+  .hero-actions {
+    gap: 6px;
   }
 }
 
-@media (max-width: 760px) and (max-height: 620px) {
+@media (max-width: 1023px) and (max-height: 620px) {
   .hero {
     --hero-mobile-top: clamp(72px, 11svh, 86px);
     --hero-mobile-gap: clamp(6px, 1.2svh, 10px);
-    --mobile-product-size: min(76vw, 292px, 34svh);
+    --mobile-product-size: min(108vw, 460px);
   }
 
   .hero-brand p {
-    font-size: clamp(15px, 4.7vw, 18px);
+    font-size: clamp(17px, 5.2vw, 21px);
   }
 
-  .hero-brand span {
-    font-size: clamp(8px, 2.4vw, 9px);
-    line-height: 1.25;
+  .hero-intro {
+    min-height: clamp(78px, 22vw, 94px);
   }
 
+  .hero-intro:not(.has-description) {
+    min-height: clamp(37px, 11.2vw, 46px);
+  }
+
+  /* Two lines, not three. At 320x568 the art reached its floor and the rows
+     still overflowed, so the shoe crossed into the indicator by 11px. Past the
+     floor the copy is what has to give, which is the order the plan sets out. */
+  .hero-description {
+    font-size: clamp(13px, 3.4vw, 14px);
+    line-height: 1.45;
+    -webkit-line-clamp: 2;
+  }
+
+  /* The floor scales down with the viewport too: `min(184px, 26svh)` still left
+     more art than these heights can spare once the copy has clamped. */
   .hero-stage {
-    min-height: calc(var(--mobile-product-size) + 8px);
-    height: calc(var(--mobile-product-size) + 8px);
-    margin-top: clamp(-22px, -3svh, -10px);
-  }
-
-  .hero-mobile-features {
-    margin-top: clamp(-14px, -1.8svh, -6px);
+    min-height: min(116px, 20svh);
   }
 }
 
@@ -1400,5 +1979,111 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+
+
+@keyframes heroColorFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes heroSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(var(--hero-slide-offset));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes heroSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(calc(0px - var(--hero-slide-offset)));
+  }
+}
+
+@keyframes heroSwatchLoading {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* Reduced motion is a shorter, flatter transition, not the absence of one.
+   Entry animations and every spatial cue are dropped; the crossfade that tells
+   the visitor the picture changed is kept and shortened. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-stage {
+    --hero-color-fade: 160ms;
+  }
+
+  .hero-brand,
+  .hero-product,
+  .hero-pagination,
+  .hero-description,
+  .hero-swatches,
+  .hero-cta {
+    animation: none !important;
+  }
+
+  /* `0.01ms` here was effectively an instant cut: the incoming product appeared
+     with no transition at all, and paired with the disabled outgoing fade below
+     it produced a hard double-exposed frame. A short opacity ramp reads as a
+     change of state without anything appearing to travel. Transform stays off
+     so the layer never moves or scales. */
+  .hero-product__image {
+    transform: none;
+    transition: opacity 160ms linear;
+  }
+
+  .hero-pagination__segment span {
+    transition: none;
+  }
+
+  .hero-stage.is-leather-peeking .hero-product__image.is-active,
+  .hero-stage.is-leather-peeking .hero-next-peek,
+  .hero-stage.is-leather-peeking .hero-swipe-hint__arrow,
+  .hero-swipe-hint,
+  .hero-swatch.is-loading .hero-swatch__dot::after {
+    animation: none;
+  }
+
+  /* Deliberately NOT in the list above.
+     `.hero-product__image--color-outgoing` carries a hard-coded `opacity: 1`
+     and relies entirely on `heroColorFadeOut` to reach zero. Disabling its
+     animation left the previous colourway fully opaque on top of the new one
+     until the JavaScript timer removed the element, which is the flash that
+     Reduce Motion users reported. The animation is kept and shortened via
+     `--hero-color-fade` instead. It is opacity-only, so it carries no motion to
+     reduce in the first place. */
+
+  .hero-stage.is-hero-slide-transition .hero-product__image.is-slide-incoming,
+  .hero-stage.is-hero-slide-transition .hero-product__image.is-slide-outgoing {
+    animation: none;
+  }
+
+  /* With no motion there is no preview to show: the layer only ever exists
+     mid-gesture. Reduced-motion users are instead served by the swipe pill,
+     which stays legible for 5s (see `scheduleHeroSwipeHint`), and by the
+     pagination segments, which show the slide count directly. */
+  .hero-next-peek {
+    opacity: 0;
+  }
+
+  .hero-swipe-hint {
+    opacity: 1;
+    transform: translateX(-50%);
   }
 }

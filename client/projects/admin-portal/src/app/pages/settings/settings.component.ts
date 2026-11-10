@@ -1,4 +1,5 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { FulfillmentSettingsComponent } from './fulfillment-settings.component';
+import { Component, OnInit, WritableSignal, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule, DatePipe, TitleCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../shared/icons/icon.component';
@@ -6,23 +7,27 @@ import { PillComponent } from '../../shared/pill/pill.component';
 import { AvatarComponent } from '../../shared/avatar/avatar.component';
 import { SpinnerComponent } from '../../shared/spinner/spinner.component';
 import { SaveBarComponent } from '../../shared/save-bar/save-bar.component';
+import { PermHintComponent } from '../../shared/perm-hint/perm-hint.component';
+import { NotificationSettingsComponent } from './notification-settings.component';
+import { WarehouseNameComponent } from './warehouse-name.component';
 import { SortableTableComponent, CellTplDirective, TableColumn } from '../../shared/sortable-table/sortable-table.component';
 import { ToastService } from '../../services/toast.service';
 import { ConfirmService } from '../../services/confirm.service';
 import { I18nService } from '../../services/i18n.service';
-import { AdminSettingsService, Invitation } from '../../services/admin-settings.service';
+import { AdminSettingsService, Invitation, PosRegisterRow, PosActiveSession, PosBranchRow, PosBranchInput, PosEnrollmentTokenRow, ManagerPinRow, PosPolicy } from '../../services/admin-settings.service';
 import { AuthService } from '../../services/auth.service';
 import { StoreConfigService } from '../../services/store-config.service';
+import { PosService } from '../../services/pos.service';
 import { INTEGRATIONS } from '../../data/mock';
-import { TeamMember } from '../../models';
+import { TeamMember, TeamMemberRole, TeamMemberStatus } from '../../models';
+import { rolePillKind, registerStatusPillKind, tokenStatusPillKind, teamStatusPillKind, PillInfo } from '../../shared/pill/status-pill';
 
-type Tab = 'general' | 'team' | 'integrations';
+type Tab = 'general' | 'team' | 'security' | 'notifications' | 'integrations';
 
 @Component({
-  selector: 'ap-settings',
-  standalone: true,
-  imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective, SaveBarComponent],
-  template: `
+    selector: 'ap-settings',
+    imports: [CommonModule, DatePipe, TitleCasePipe, FormsModule, IconComponent, PillComponent, AvatarComponent, SpinnerComponent, SortableTableComponent, CellTplDirective, SaveBarComponent, PermHintComponent, NotificationSettingsComponent, WarehouseNameComponent, FulfillmentSettingsComponent],
+    template: `
     <div class="page-fade">
       @if (tab() === 'general') {
         <ap-save-bar
@@ -32,7 +37,7 @@ type Tab = 'general' | 'team' | 'integrations';
           (discarded)="discardGeneral()"/>
       }
       <div class="tabs">
-        @for (tt of tabs; track tt.key) {
+        @for (tt of visibleTabs(); track tt.key) {
           <button class="tab" [class.active]="tab() === tt.key" (click)="tab.set(tt.key)">{{ t(tt.labelKey) }}</button>
         }
       </div>
@@ -88,16 +93,485 @@ type Tab = 'general' | 'team' | 'integrations';
             <div class="mt-24">
               <label class="lbl">{{ t('settings.logo') }}</label>
               <div style="padding:18px;border:1px dashed var(--border);border-radius:10px;background:var(--bg);display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
-                <div class="avatar lg" style="border-radius:8px;background:var(--green);color:var(--gold);font-family:var(--ff-disp);font-size:18px;">EC</div>
+                @if (logoUrl()) {
+                  <img [src]="logoUrl()" alt="" style="width:48px;height:48px;border-radius:8px;object-fit:contain;background:var(--surface);"/>
+                } @else {
+                  <div class="avatar lg" style="border-radius:8px;background:var(--green);color:var(--gold);font-family:var(--ff-disp);font-size:18px;">EC</div>
+                }
                 <div class="grow" style="min-width:0;">
-                  <div class="strong mono">elite-logo.svg</div>
-                  <div class="muted small">SVG · 4 KB</div>
+                  <div class="strong mono">{{ logoUrl() ? t('settings.logo.custom') : t('settings.logo.default') }}</div>
+                  <div class="muted small">{{ t('settings.logo.hint') }}</div>
                 </div>
-                <button class="btn btn-outline btn-sm"><ap-icon name="upload" [size]="12"/> {{ t('common.edit') }}</button>
+                <label class="btn btn-outline btn-sm" style="cursor:pointer;">
+                  <ap-icon name="upload" [size]="12"/> {{ logoUrl() ? t('common.replace') : t('common.edit') }}
+                  <input type="file" accept="image/*" hidden (change)="onLogoPick($event)"/>
+                </label>
+                @if (logoUrl()) {
+                  <button class="btn btn-ghost btn-sm" style="color:var(--danger);" (click)="removeLogo()">{{ t('common.remove') }}</button>
+                }
               </div>
             </div>
 
           }
+        </div>
+
+        @if (canEditBranches()) {
+        <div class="card card-pad mt-24" style="max-width:680px;">
+          <div class="card-header mb-16">
+            <div>
+              <div class="card-title">{{ t('settings.branches.title') }}</div>
+              <div class="card-sub">{{ t('settings.branches.sub') }}</div>
+            </div>
+            @if (!loadingBranches()) {
+              <button class="btn btn-outline btn-sm" (click)="startAddBranch()">
+                <ap-icon name="plus" [size]="12"/> {{ t('settings.branches.add') }}
+              </button>
+            }
+          </div>
+
+          @if (loadingBranches()) {
+            <div class="row gap-sm" style="padding:24px 0;justify-content:center;">
+              <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
+            </div>
+          } @else {
+            <div class="col gap-lg">
+              @if (addingBranch()) {
+                <div class="card" style="border:1px solid var(--border);">
+                  <div class="card-pad">
+                    <ng-container
+                      [ngTemplateOutlet]="branchForm"
+                      [ngTemplateOutletContext]="{ draft: newBranchDraft(), setField: setNewBranchField }"
+                    />
+                    <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
+                      <button class="btn btn-gold" [disabled]="savingBranch() || !newBranchDraft().name.trim() || !newBranchDraft().tradeNameEn.trim()" (click)="saveNewBranch()">
+                        @if (savingBranch()) { <ap-spinner [size]="12"/> {{ t('common.saving') }} }
+                        @else { {{ t('common.save') }} }
+                      </button>
+                      <button class="btn btn-outline" [disabled]="savingBranch()" (click)="cancelAddBranch()">{{ t('common.cancel') }}</button>
+                    </div>
+                  </div>
+                </div>
+              }
+
+              @for (b of branches(); track b.id) {
+                <div class="card" style="border:1px solid var(--border);">
+                  <div class="card-header" style="padding:12px 16px;">
+                    <div class="row gap-sm" style="align-items:center;">
+                      <span class="strong">{{ b.name }}</span>
+                      @if (b.isDefault) { <ap-pill kind="green">{{ t('settings.branches.default') }}</ap-pill> }
+                    </div>
+                    @if (canEditBranches()) {
+                      <div class="row gap-sm">
+                        @if (!b.isDefault) {
+                          <button class="btn btn-outline btn-sm" [disabled]="settingDefaultBranchId() === b.id" (click)="setDefaultBranch(b)">{{ t('settings.branches.setDefault') }}</button>
+                        }
+                        <button class="btn btn-outline btn-sm" (click)="toggleEditBranch(b)">
+                          {{ editingBranchId() === b.id ? t('common.cancel') : t('common.edit') }}
+                        </button>
+                        <button class="btn btn-danger btn-sm" [disabled]="deletingBranchId() === b.id" (click)="deleteBranch(b)"><ap-icon name="trash" [size]="12"/></button>
+                      </div>
+                    }
+                  </div>
+
+                  @if (editingBranchId() === b.id) {
+                    <div class="card-pad">
+                      <ng-container
+                        [ngTemplateOutlet]="branchForm"
+                        [ngTemplateOutletContext]="{ draft: branchDrafts()[b.id], setField: makeSetBranchField(b.id) }"
+                      />
+                      <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
+                        <button class="btn btn-gold" [disabled]="savingBranch() || !branchDrafts()[b.id]?.name?.trim() || !branchDrafts()[b.id]?.tradeNameEn?.trim()" (click)="saveEditedBranch(b)">
+                          @if (savingBranch()) { <ap-spinner [size]="12"/> {{ t('common.saving') }} }
+                          @else { {{ t('common.save') }} }
+                        </button>
+                      </div>
+                    </div>
+                  } @else {
+                    <div class="card-pad muted small">{{ b.tradeNameEn }} · {{ b.addressEn || '—' }} · {{ b.phone || '—' }}</div>
+
+                    @if (canEditBranches()) {
+                      <div class="card-pad setup-checklist" style="border-top:1px solid var(--border);">
+                        <div class="strong small mb-8">{{ t('settings.branches.setup.title') }}</div>
+                        <div class="col gap-sm">
+                          <div class="row gap-sm" style="align-items:flex-start;">
+                            <span class="setup-step-badge" [class.done]="branchHasRegister(b.id)">
+                              @if (branchHasRegister(b.id)) { <ap-icon name="check" [size]="10"/> } @else { 1 }
+                            </span>
+                            <div class="grow">
+                              <div class="small">{{ t('settings.branches.setup.step1') }}</div>
+                              @if (!branchHasRegister(b.id)) {
+                                <button class="btn btn-ghost btn-sm" style="padding:2px 0;" (click)="tab.set('security')">
+                                  {{ t('settings.branches.setup.goToDevices') }} →
+                                </button>
+                              }
+                            </div>
+                          </div>
+                          <div class="row gap-sm" style="align-items:flex-start;">
+                            <span class="setup-step-badge" [class.done]="hasAnyTeammate()">
+                              @if (hasAnyTeammate()) { <ap-icon name="check" [size]="10"/> } @else { 2 }
+                            </span>
+                            <div class="grow">
+                              <div class="small">{{ t('settings.branches.setup.step2') }}</div>
+                              @if (!hasAnyTeammate()) {
+                                <button class="btn btn-ghost btn-sm" style="padding:2px 0;" (click)="tab.set('team')">
+                                  {{ t('settings.branches.setup.goToTeam') }} →
+                                </button>
+                              }
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    }
+                  }
+                </div>
+              }
+            </div>
+
+            @if (canEditBranches()) { <ap-warehouse-name/> }
+            <div class="muted small mt-16">{{ t('settings.receiptProfile.disclaimer') }}</div>
+          }
+        </div>
+
+        <!--
+          Shared field layout for both the "add branch" and "edit branch"
+          cards above — one template, parameterized by which draft object and
+          setter it writes into, so the two flows can never drift apart.
+        -->
+        <ng-template #branchForm let-draft="draft" let-setField="setField">
+          <div class="grid-2">
+            <div>
+              <label class="lbl">{{ t('settings.branches.name') }}</label>
+              <input class="inp" [ngModel]="draft.name" (ngModelChange)="setField('name', $event)"/>
+              <div class="muted small mt-8">{{ t('settings.branches.nameHint') }}</div>
+            </div>
+            <div></div>
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.tradeNameEn') }}</label>
+              <input class="inp" [ngModel]="draft.tradeNameEn" (ngModelChange)="setField('tradeNameEn', $event)"/>
+            </div>
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.tradeNameAr') }}</label>
+              <input class="inp" dir="rtl" [ngModel]="draft.tradeNameAr" (ngModelChange)="setField('tradeNameAr', $event)"/>
+              <div class="muted small mt-8">{{ t('settings.receiptProfile.notPrinted') }}</div>
+            </div>
+            <!--
+              Textareas, not inputs. A real shop address here is three lines
+              ("Parcel 14, 25 La Croisette Ground Floor / Shop 317, Marina
+              Way 23 / The Pearl - Qatar") and the receipt renderer prints
+              the line breaks as entered. A single-line input made that
+              impossible to type in the first place.
+            -->
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.addressEn') }}</label>
+              <textarea class="inp" rows="3" [ngModel]="draft.addressEn" (ngModelChange)="setField('addressEn', $event)"></textarea>
+            </div>
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.addressAr') }}</label>
+              <textarea class="inp" dir="rtl" rows="3" [ngModel]="draft.addressAr" (ngModelChange)="setField('addressAr', $event)"></textarea>
+              <div class="muted small mt-8">{{ t('settings.receiptProfile.notPrinted') }}</div>
+            </div>
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.phone') }}</label>
+              <input class="inp" type="tel" placeholder="+974 XXXX XXXX" [ngModel]="draft.phone" (ngModelChange)="setField('phone', $event)"/>
+            </div>
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.crLicense') }}</label>
+              <input class="inp" [ngModel]="draft.crLicenseNumber" (ngModelChange)="setField('crLicenseNumber', $event)"/>
+            </div>
+          </div>
+
+          <div class="grid-2 mt-16">
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.returnPolicyEn') }}</label>
+              <textarea class="inp" rows="2" [ngModel]="draft.returnPolicyEn" (ngModelChange)="setField('returnPolicyEn', $event)"></textarea>
+            </div>
+            <div>
+              <label class="lbl">{{ t('settings.receiptProfile.returnPolicyAr') }}</label>
+              <textarea class="inp" dir="rtl" rows="2" [ngModel]="draft.returnPolicyAr" (ngModelChange)="setField('returnPolicyAr', $event)"></textarea>
+            </div>
+          </div>
+        </ng-template>
+        }
+
+        @if (canSetOwnManagerPin()) {
+          <div class="card card-pad mt-24" style="max-width:680px;">
+            <div class="card-header mb-16">
+              <div>
+                <div class="card-title">{{ t('settings.managerPin.title') }}</div>
+                <div class="card-sub">{{ t('settings.managerPin.sub') }}</div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div>
+                <label class="lbl">{{ t('settings.managerPin.newPin') }}</label>
+                <input class="inp" type="password" inputmode="numeric" maxlength="8"
+                       [ngModel]="myManagerPin()" (ngModelChange)="myManagerPin.set($event)"
+                       placeholder="4-8 digits"/>
+              </div>
+            </div>
+
+            <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
+              <button class="btn btn-gold" [disabled]="savingMyManagerPin() || !isValidPinFormat(myManagerPin())" (click)="saveMyManagerPin()">
+                @if (savingMyManagerPin()) { <ap-spinner [size]="12"/> {{ t('common.saving') }} }
+                @else { {{ t('settings.managerPin.save') }} }
+              </button>
+            </div>
+            <div class="muted small mt-16">{{ t('settings.managerPin.hint') }}</div>
+          </div>
+        }
+      }
+
+      @if (tab() === 'security') {
+        <div class="col gap-lg">
+          <!-- ── Registered Devices ── -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">{{ t('settings.security.devices.title') }}</div>
+                <div class="card-sub">{{ t('settings.security.devices.sub') }}</div>
+              </div>
+            </div>
+
+            @if (loadingRegisters()) {
+              <div class="row gap-sm" style="padding:24px;justify-content:center;">
+                <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
+              </div>
+            } @else if (visibleRegisters().length === 0) {
+              <div class="muted small" style="padding:16px 20px;">{{ t('settings.security.devices.empty.sub') }}</div>
+            } @else {
+              <ap-sortable-table [columns]="registerColumns" [rows]="visibleRegisters()">
+                <ng-template apCellTpl="displayName" let-r>
+                  <div class="row gap-sm" style="align-items:center;">
+                    <ap-icon name="device" [size]="15" style="opacity:.5"/>
+                    <span class="strong">{{ r.displayName }}</span>
+                  </div>
+                </ng-template>
+                <ng-template apCellTpl="status" let-r>
+                  <ap-pill [kind]="registerPill(r.status).kind">{{ t(registerPill(r.status).labelKey) }}</ap-pill>
+                </ng-template>
+                <ng-template apCellTpl="branchName" let-r>
+                  @if (canEditBranches()) {
+                    <select class="inp inp-sm" [ngModel]="r.branchId || ''" (ngModelChange)="setRegisterBranch(r, $event || null)">
+                      <option value="">{{ t('settings.branches.useDefault') }}</option>
+                      @for (b of branches(); track b.id) {
+                        <option [value]="b.id">{{ b.name }}</option>
+                      }
+                    </select>
+                  } @else {
+                    <span class="muted small">{{ r.branchName || t('settings.branches.useDefault') }}</span>
+                  }
+                </ng-template>
+                <ng-template apCellTpl="lastSeenAt" let-r>
+                  <span class="muted small">{{ r.lastSeenAt ? (r.lastSeenAt | date:'MMM d, HH:mm') : t('common.never') }}</span>
+                </ng-template>
+                <ng-template apCellTpl="activity" let-r>
+                  <div class="col" style="gap:2px;">
+                    <span class="small">{{ r.activeShiftCashier || r.deviceLeaseClaimedBy || '—' }}</span>
+                    @if (r.activeShiftState) { <span class="muted small">{{ t('settings.security.devices.shift') }} {{ r.activeShiftState }}</span> }
+                    @if (r.pendingCount || r.rejectedCount) {
+                      <span class="small" style="color:var(--danger);">{{ r.pendingCount }} pending · {{ r.rejectedCount }} rejected</span>
+                    }
+                  </div>
+                </ng-template>
+                <ng-template apCellTpl="createdAt" let-r>
+                  <span class="muted small">{{ r.createdAt | date:'MMM d, y' }}</span>
+                </ng-template>
+                <ng-template apCellTpl="actions" let-r>
+                  @if (r.status === 'revoked') {
+                    <button class="btn btn-outline btn-sm" (click)="replaceRegister(r)">{{ t('settings.security.devices.replace') }}</button>
+                  } @else {
+                    <button class="btn btn-outline btn-sm" (click)="replaceRegister(r)">{{ t('settings.security.devices.repair') }}</button>
+                    <button class="btn btn-danger btn-sm" (click)="revokeRegister(r)"><ap-icon name="trash" [size]="12"/> {{ t('settings.security.devices.revoke') }}</button>
+                  }
+                </ng-template>
+              </ap-sortable-table>
+            }
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">{{ t('settings.security.sessions.title') }}</div>
+                <div class="card-sub">{{ t('settings.security.sessions.sub') }}</div>
+              </div>
+            </div>
+            @if (loadingSessions()) {
+              <div class="row gap-sm" style="padding:24px;justify-content:center;"><ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span></div>
+            } @else {
+              <ap-sortable-table [columns]="sessionColumns" [rows]="activeSessions()">
+                <ng-template apCellTpl="userName" let-s><span class="strong">{{ s.userName }}</span></ng-template>
+                <ng-template apCellTpl="register" let-s><span class="muted small">{{ sessionRegisterName(s) }}</span></ng-template>
+                <ng-template apCellTpl="lastSeenAt" let-s><span class="muted small">{{ s.lastSeenAt ? (s.lastSeenAt | date:'MMM d, HH:mm') : '—' }}</span></ng-template>
+                <ng-template apCellTpl="expiresAt" let-s><span class="muted small">{{ s.expiresAt | date:'MMM d, HH:mm' }}</span></ng-template>
+                <ng-template apCellTpl="actions" let-s><button class="btn btn-danger btn-sm" (click)="revokeSession(s)">{{ t('settings.security.sessions.signOut') }}</button></ng-template>
+              </ap-sortable-table>
+            }
+          </div>
+
+          <!-- ── Enrollment Tokens ── -->
+          <div class="card card-pad">
+            <div class="card-header mb-16">
+              <div>
+                <div class="card-title">{{ t('settings.security.tokens.title') }}</div>
+                <div class="card-sub">{{ t('settings.security.tokens.sub') }}</div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div>
+                <label class="lbl">{{ t('settings.registers.nameLabel') }}</label>
+                <input class="inp" [ngModel]="newRegisterName()" (ngModelChange)="newRegisterName.set($event)"
+                       [placeholder]="t('settings.registers.namePlaceholder')"/>
+              </div>
+            </div>
+
+            <div class="row gap-sm mt-16" style="flex-wrap:wrap;">
+              <button class="btn btn-gold" [disabled]="generatingRegisterToken() || !newRegisterName().trim()" (click)="generateRegisterToken()">
+                @if (generatingRegisterToken()) { <ap-spinner [size]="12"/> {{ t('settings.registers.generating') }} }
+                @else { {{ t('settings.registers.generate') }} }
+              </button>
+            </div>
+
+            @if (registerToken()) {
+              <div class="invite-link-box">
+                <ap-icon name="link" [size]="13"/>
+                <input class="inv-link-input" [value]="registerToken()" readonly (click)="copyRegisterToken()"/>
+                <button class="btn btn-outline btn-sm" (click)="copyRegisterToken()">{{ t('settings.registers.copyCode') }}</button>
+              </div>
+              <div class="muted small" style="margin-top:4px;">{{ t('settings.registers.expiry') }}</div>
+            }
+          </div>
+
+          <div class="card">
+            @if (loadingTokens()) {
+              <div class="row gap-sm" style="padding:24px;justify-content:center;">
+                <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
+              </div>
+            } @else if (visibleTokens().length === 0) {
+              <div class="muted small" style="padding:16px 20px;">{{ t('settings.security.tokens.empty.sub') }}</div>
+            } @else {
+              <ap-sortable-table [columns]="tokenColumns" [rows]="visibleTokens()">
+                <ng-template apCellTpl="status" let-r>
+                  <ap-pill [kind]="tokenPill(r.status).kind">{{ t(tokenPill(r.status).labelKey) }}</ap-pill>
+                </ng-template>
+                <ng-template apCellTpl="expiresAt" let-r>
+                  <span class="muted small">{{ r.expiresAt | date:'MMM d, HH:mm' }}</span>
+                </ng-template>
+                <ng-template apCellTpl="createdByName" let-r>
+                  <span class="muted small">{{ r.createdByName || '—' }}</span>
+                </ng-template>
+                <ng-template apCellTpl="actions" let-r>
+                  @if (r.status === 'active') {
+                    <button class="btn btn-danger btn-sm" (click)="revokeToken(r)"><ap-icon name="trash" [size]="12"/> {{ t('settings.security.tokens.revoke') }}</button>
+                  }
+                </ng-template>
+              </ap-sortable-table>
+            }
+          </div>
+
+          <!-- ── Approvals (who can approve a protected POS action) ── -->
+          <div class="card card-pad">
+            <div class="card-header">
+              <div>
+                <div class="card-title">{{ t('settings.security.approvals.title') }}</div>
+                <div class="card-sub">{{ t('settings.security.approvals.sub') }}</div>
+              </div>
+            </div>
+            @if (loadingPosPolicy()) {
+              <div class="row gap-sm" style="padding:16px 0;justify-content:center;">
+                <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
+              </div>
+            } @else {
+              <label class="row gap-sm" style="align-items:flex-start;margin-top:8px;"
+                     [style.cursor]="canEditPosPolicy() ? 'pointer' : 'default'"
+                     [style.opacity]="canEditPosPolicy() ? 1 : 0.6">
+                <input type="checkbox" style="margin-top:3px;flex-shrink:0;"
+                       [checked]="selfCloseShiftEnabled()"
+                       [disabled]="!canEditPosPolicy() || savingPosPolicy()"
+                       (change)="toggleSelfCloseShift()"/>
+                <span>
+                  <span class="strong">{{ t('settings.security.shiftClose.toggle') }}</span>
+                  <span class="muted small" style="display:block;">{{ t('settings.security.shiftClose.hint') }}</span>
+                </span>
+              </label>
+
+              <label class="row gap-sm" style="align-items:flex-start;margin-top:16px;"
+                     [style.cursor]="canEditPosPolicy() ? 'pointer' : 'default'"
+                     [style.opacity]="canEditPosPolicy() ? 1 : 0.6">
+                <input type="checkbox" style="margin-top:3px;flex-shrink:0;"
+                       [checked]="selfApprovalEnabled()"
+                       [disabled]="!canEditPosPolicy() || savingPosPolicy()"
+                       (change)="toggleSelfApproval()"/>
+                <span>
+                  <span class="strong">{{ t('settings.security.selfApproval.toggle') }}</span>
+                  <span class="muted small" style="display:block;">{{ t('settings.security.selfApproval.hint') }}</span>
+                </span>
+              </label>
+              @if (selfApprovalEnabled()) {
+                <div class="muted small mt-16">{{ t('settings.security.selfApproval.warning') }}</div>
+              }
+              @if (!canEditPosPolicy()) {
+                <div class="mt-16"><ap-perm-hint scope="owner"/></div>
+              }
+            }
+          </div>
+
+          <!-- ── Manager PINs ── -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">{{ t('settings.security.managerPins.title') }}</div>
+                <div class="card-sub">{{ t('settings.security.managerPins.sub') }}</div>
+              </div>
+            </div>
+
+            @if (loadingManagerPins()) {
+              <div class="row gap-sm" style="padding:24px;justify-content:center;">
+                <ap-spinner/> <span class="muted small">{{ t('common.loading') }}</span>
+              </div>
+            } @else {
+              <ap-sortable-table [columns]="managerPinColumns" [rows]="managerPins()">
+                <ng-template apCellTpl="name" let-r>
+                  <div class="row gap-sm">
+                    <ap-avatar [initials]="initialsOf(r.name)"/>
+                    <div>
+                      <div class="strong">{{ r.name }}</div>
+                      <div class="muted small">{{ r.email }}</div>
+                    </div>
+                  </div>
+                </ng-template>
+                <ng-template apCellTpl="role" let-r>
+                  <ap-pill [kind]="rolePill(r.role).kind">{{ t(rolePill(r.role).labelKey) }}</ap-pill>
+                </ng-template>
+                <ng-template apCellTpl="configured" let-r>
+                  @if (r.configured) {
+                    <ap-pill kind="green">{{ t('settings.security.managerPins.configured') }}</ap-pill>
+                    <div class="muted small" style="margin-top:2px;">{{ r.lastUpdatedAt ? (r.lastUpdatedAt | date:'MMM d, y') : '' }}</div>
+                  } @else {
+                    <ap-pill kind="grey">{{ t('settings.security.managerPins.notConfigured') }}</ap-pill>
+                  }
+                </ng-template>
+                <ng-template apCellTpl="actions" let-r>
+                  @if (resettingPinFor() === r.userId) {
+                    <div class="row gap-sm" style="align-items:center;">
+                      <input class="inp" type="password" inputmode="numeric" maxlength="8" style="width:100px;padding:4px 8px;font-size:12px;"
+                             [ngModel]="resetPinValue()" (ngModelChange)="resetPinValue.set($event)" placeholder="4-8 digits"/>
+                      <button class="btn btn-gold btn-sm" [disabled]="!isValidPinFormat(resetPinValue())" (click)="confirmResetManagerPin(r)">{{ t('common.save') }}</button>
+                      <button class="btn btn-outline btn-sm" (click)="cancelResetManagerPin()">{{ t('common.cancel') }}</button>
+                    </div>
+                  } @else {
+                    <div class="row gap-sm">
+                      <button class="btn btn-outline btn-sm" (click)="startResetManagerPin(r)">{{ t('settings.security.managerPins.reset') }}</button>
+                      @if (r.configured) {
+                        <button class="btn btn-danger btn-sm" (click)="clearManagerPin(r)">{{ t('settings.security.managerPins.clear') }}</button>
+                      }
+                    </div>
+                  }
+                </ng-template>
+              </ap-sortable-table>
+            }
+          </div>
         </div>
       }
 
@@ -113,10 +587,17 @@ type Tab = 'general' | 'team' | 'integrations';
               <div>
                 <label class="lbl">{{ t('settings.role') }}</label>
                 <select class="inp" [ngModel]="invite().role" (ngModelChange)="setInvite('role', $event)">
+                  @if (isOwner()) {
+                    <option value="Owner">{{ t('settings.role.owner') }}</option>
+                  }
                   <option value="Admin">{{ t('settings.role.admin') }}</option>
                   <option value="Manager">{{ t('settings.role.manager') }}</option>
+                  <option value="Cashier">{{ t('settings.role.cashier') }}</option>
                   <option value="Viewer">{{ t('settings.role.viewer') }}</option>
                 </select>
+                @if (invite().role === 'Cashier') {
+                  <div class="muted small" style="margin-top:6px;">{{ t('settings.role.cashier.hint') }}</div>
+                }
               </div>
             </div>
             <div class="row gap-sm" style="flex-wrap:wrap;">
@@ -126,6 +607,17 @@ type Tab = 'general' | 'team' | 'integrations';
               </button>
             </div>
             @if (inviteLink()) {
+              @if (inviteLink()!.emailSent) {
+                <div class="invite-email-sent">
+                  <ap-icon name="mail" [size]="14"/>
+                  {{ t('settings.team.emailSentTo').replace('{email}', inviteLink()!.email) }}
+                </div>
+              } @else {
+                <div class="invite-email-failed">
+                  <ap-icon name="warning" [size]="14"/>
+                  {{ t('settings.team.emailFailed') }}
+                </div>
+              }
               <div class="invite-link-box">
                 <ap-icon name="link" [size]="13"/>
                 <span class="inv-email">{{ inviteLink()!.email }}</span>
@@ -134,6 +626,9 @@ type Tab = 'general' | 'team' | 'integrations';
                 <button class="btn btn-outline btn-sm" (click)="copyInviteLink()">{{ t('settings.team.copyLink') }}</button>
               </div>
               <div class="muted small" style="margin-top:4px;">{{ t('settings.team.linkExpiry') }}</div>
+              @if (inviteLink()!.hadPendingInvite) {
+                <div class="muted small" style="margin-top:4px;">{{ t('settings.team.replacedPending') }}</div>
+              }
             }
           </div>
 
@@ -151,8 +646,20 @@ type Tab = 'general' | 'team' | 'integrations';
                     <ap-icon name="mail" [size]="13" style="opacity:.4"/>
                     <div class="inv-info">
                       <div class="strong">{{ inv.email }}</div>
-                      <div class="muted small">{{ inv.role | titlecase }} · invited {{ inv.created_at | date:'MMM d' }}</div>
+                      <div class="muted small">
+                        {{ inv.role | titlecase }} · invited {{ inv.created_at | date:'MMM d' }}
+                        @if (inv.invited_by_name) { {{ t('settings.team.by') }} {{ inv.invited_by_name }} }
+                        @if (inv.resend_count > 0) { · {{ t('settings.team.resentN').replace('{n}', inv.resend_count.toString()) }} }
+                      </div>
+                      <div class="small" [class.invite-expiry-warn]="isExpiringSoon(inv.expires_at)">
+                        <ap-icon [name]="inv.email_sent ? 'mail' : 'warning'" [size]="11"/>
+                        {{ inv.email_sent ? t('settings.team.emailedBadge') : t('settings.team.emailFailedBadge') }} · {{ expiryLabel(inv.expires_at) }}
+                      </div>
                     </div>
+                    <button class="btn btn-outline btn-sm" [disabled]="resendingInviteId() === inv.id" (click)="resendInvite(inv)">
+                      @if (resendingInviteId() === inv.id) { <ap-spinner [size]="11"/> }
+                      @else { <ap-icon name="mail" [size]="12"/> {{ t('settings.team.resend') }} }
+                    </button>
                     <button class="btn btn-ghost btn-sm" style="color:var(--danger);" (click)="revokeInvite(inv.id)">{{ t('settings.team.revoke') }}</button>
                   </div>
                 }
@@ -164,7 +671,10 @@ type Tab = 'general' | 'team' | 'integrations';
             <div class="card-header">
               <div>
                 <div class="card-title">{{ t('settings.team.membersTitle') }}</div>
-                <div class="card-sub">{{ team().length }} {{ team().length === 1 ? t('settings.team.memberCount.one') : t('settings.team.memberCount.many') }}</div>
+                <div class="card-sub">
+                  {{ team().length }} {{ team().length === 1 ? t('settings.team.memberCount.one') : t('settings.team.memberCount.many') }}
+                  @if (branches().length > 1) { <span class="muted"> · {{ t('settings.team.branch.hint') }}</span> }
+                </div>
               </div>
             </div>
 
@@ -184,14 +694,50 @@ type Tab = 'general' | 'team' | 'integrations';
                   </div>
                 </ng-template>
                 <ng-template apCellTpl="role" let-r>
-                  <select class="inp" style="width:120px;padding:6px 10px;font-size:12px;" [ngModel]="r.role" (ngModelChange)="updateRole(r.id, $event)">
-                    <option value="Admin">{{ t('settings.role.admin') }}</option>
-                    <option value="Manager">{{ t('settings.role.manager') }}</option>
-                    <option value="Viewer">{{ t('settings.role.viewer') }}</option>
-                  </select>
+                  <div class="row gap-sm" style="align-items:center;">
+                    <ap-pill [kind]="rolePill(r.role).kind">{{ t(rolePill(r.role).labelKey) }}</ap-pill>
+                    @if (r.role !== 'Owner') {
+                      <select class="inp" style="width:110px;padding:4px 8px;font-size:11px;" [ngModel]="r.role" (ngModelChange)="updateRole(r.id, $event)">
+                        @if (isOwner()) {
+                          <option value="Owner">{{ t('settings.role.owner') }}</option>
+                        }
+                        <option value="Admin">{{ t('settings.role.admin') }}</option>
+                        <option value="Manager">{{ t('settings.role.manager') }}</option>
+                        <option value="Cashier">{{ t('settings.role.cashier') }}</option>
+                        <option value="Viewer">{{ t('settings.role.viewer') }}</option>
+                      </select>
+                    }
+                  </div>
+                </ng-template>
+                <ng-template apCellTpl="branch" let-r>
+                  @if (branches().length > 1) {
+                    <select class="inp" style="width:150px;padding:4px 8px;font-size:11px;"
+                            [ngModel]="r.posBranchId || ''" (ngModelChange)="updateMemberBranch(r.id, $event)">
+                      <option value="">{{ t('settings.team.branch.all') }}</option>
+                      @for (b of branches(); track b.id) {
+                        <option [value]="b.id">{{ b.name }}</option>
+                      }
+                    </select>
+                  } @else {
+                    <span class="muted small">{{ t('settings.team.branch.all') }}</span>
+                  }
+                </ng-template>
+                <ng-template apCellTpl="status" let-r>
+                  <ap-pill [kind]="statusPill(r.status).kind">{{ t(statusPill(r.status).labelKey) }}</ap-pill>
+                </ng-template>
+                <ng-template apCellTpl="lastActive" let-r>
+                  <span class="muted small">{{ lastActiveLabel(r) }}</span>
                 </ng-template>
                 <ng-template apCellTpl="actions" let-r>
-                  <button class="btn btn-danger btn-sm" (click)="removeMember(r.id)"><ap-icon name="trash" [size]="12"/> {{ t('common.remove') }}</button>
+                  <div class="row gap-sm" style="justify-content:flex-end;">
+                    @if (r.role !== 'Owner') {
+                      <button class="btn btn-outline btn-sm" (click)="toggleMemberStatus(r)">
+                        @if (r.status === 'disabled') { <ap-icon name="check" [size]="12"/> {{ t('settings.team.reactivate') }} }
+                        @else { <ap-icon name="lock" [size]="12"/> {{ t('settings.team.disable') }} }
+                      </button>
+                      <button class="btn btn-danger btn-sm" (click)="removeMember(r.id)"><ap-icon name="trash" [size]="12"/> {{ t('common.remove') }}</button>
+                    }
+                  </div>
                 </ng-template>
               </ap-sortable-table>
             }
@@ -199,7 +745,12 @@ type Tab = 'general' | 'team' | 'integrations';
         </div>
       }
 
+      @if (tab() === 'notifications') {
+        <ap-notification-settings/>
+      }
+
       @if (tab() === 'integrations') {
+        @if (canEditBranches()) { <ap-fulfillment-settings/> }
         <div class="grid-3">
           @for (itg of integrations; track itg.id) {
             <div class="card card-pad">
@@ -221,23 +772,30 @@ type Tab = 'general' | 'team' | 'integrations';
       }
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [`
     .inp-error { border-color: var(--danger) !important; }
     .inp-msg-error { font-size: 11px; color: var(--danger); margin-top: 4px; }
     .btn-danger { background: #dc2626; color: #fff; border-color: #dc2626; }
     .btn-danger:hover { background: #b91c1c; border-color: #b91c1c; }
     .invite-link-box { display: flex; align-items: center; gap: 8px; padding: 10px 14px; margin-top: 12px; background: rgba(2,70,56,.06); border: 1px solid rgba(2,70,56,.15); border-radius: 8px; flex-wrap: wrap; }
+    .invite-email-sent { display: flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 12px; color: var(--green); }
+    .invite-email-failed { display: flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 12px; color: var(--danger); }
+    .invite-expiry-warn { color: var(--danger); font-weight: 600; }
     .inv-email { font-weight: 700; font-size: 13px; color: var(--green); }
     .inv-link-input { flex: 1; min-width: 180px; border: none; background: transparent; font-size: 12px; font-family: monospace; color: var(--ink-2); cursor: pointer; outline: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .inv-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--border,#e4e4e7); }
     .inv-info { flex: 1; }
+    .setup-checklist { background: var(--bg); }
+    .setup-step-badge { flex-shrink: 0; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border); font-size: 11px; font-weight: 600; color: var(--ink-2); margin-top: 1px; }
+    .setup-step-badge.done { background: var(--green); border-color: var(--green); color: #fff; }
     /* Mobile: tabs scroll horizontally so they never wrap or truncate */
     @media (max-width: 640px) {
       .tabs { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
       .tabs::-webkit-scrollbar { display: none; }
       .tab { flex-shrink: 0; white-space: nowrap; padding: 10px 14px; }
     }
-  `],
+  `]
 })
 export class SettingsComponent implements OnInit {
   private readonly toast = inject(ToastService);
@@ -246,16 +804,23 @@ export class SettingsComponent implements OnInit {
   private readonly settingsApi = inject(AdminSettingsService);
   private readonly auth = inject(AuthService);
   private readonly storeConfig = inject(StoreConfigService);
+  private readonly posApi = inject(PosService);
 
   readonly t = (k: string): string => this.i18n.t(k);
 
   readonly tabs: { key: Tab; labelKey: string }[] = [
     { key: 'general',      labelKey: 'settings.tab.general' },
     { key: 'team',         labelKey: 'settings.tab.team' },
+    { key: 'security',     labelKey: 'settings.tab.security' },
+    { key: 'notifications', labelKey: 'settings.tab.notifications' },
     { key: 'integrations', labelKey: 'settings.tab.integrations' },
   ];
 
   readonly tab = signal<Tab>('general');
+
+  // Security tab is owner/admin only — same gate the underlying registers/
+  // enrollment-token/manager-PIN-for-others services already enforce.
+  readonly visibleTabs = computed(() => this.tabs.filter((tt) => tt.key !== 'security' || this.canManageRegisters()));
 
   // ── Store settings ────────────────────────────────────────────────────────
   readonly loadingStore = signal(true);
@@ -267,25 +832,146 @@ export class SettingsComponent implements OnInit {
   readonly timezone  = signal('Asia/Qatar');
   readonly language  = signal('en');
   readonly lowStockThreshold = signal(this.storeConfig.lowStockThreshold());
+  readonly logoUrl = signal<string | null>(null);
 
   // Snapshot for discard
-  private _storeSnapshot = { storeName: 'Elite Collection', currency: 'QAR', timezone: 'Asia/Qatar', language: 'en', lowStockThreshold: 8 };
+  private _storeSnapshot = { storeName: 'Elite Collection', currency: 'QAR', timezone: 'Asia/Qatar', language: 'en', lowStockThreshold: 8, logoUrl: null as string | null };
 
   readonly isDirty = computed(() =>
     this.storeName() !== this._storeSnapshot.storeName ||
     this.currency()  !== this._storeSnapshot.currency  ||
     this.timezone()  !== this._storeSnapshot.timezone  ||
     this.language()  !== this._storeSnapshot.language  ||
-    this.lowStockThreshold() !== this._storeSnapshot.lowStockThreshold
+    this.lowStockThreshold() !== this._storeSnapshot.lowStockThreshold ||
+    this.logoUrl() !== this._storeSnapshot.logoUrl
   );
 
+  // ── POS branches (each a printable receipt identity for one physical shop) ──
+  readonly loadingBranches = signal(true);
+  readonly canEditBranches = computed(() => this.auth.hasRole('owner', 'admin'));
+  readonly branches = signal<PosBranchRow[]>([]);
+  readonly savingBranch = signal(false);
+  readonly deletingBranchId = signal<string | null>(null);
+  readonly settingDefaultBranchId = signal<string | null>(null);
+  readonly editingBranchId = signal<string | null>(null);
+  readonly branchDrafts = signal<Record<string, PosBranchInput>>({});
+  readonly addingBranch = signal(false);
+  readonly newBranchDraft = signal<PosBranchInput>(this.emptyBranchDraft());
+
+  private emptyBranchDraft(): PosBranchInput {
+    return {
+      name: '', tradeNameAr: '', tradeNameEn: '', addressAr: '', addressEn: '',
+      phone: '', crLicenseNumber: '', returnPolicyAr: '', returnPolicyEn: '',
+    };
+  }
+
+  /** Drives the setup checklist under each branch card: has any active register
+      actually been assigned to this branch yet? */
+  branchHasRegister(branchId: string): boolean {
+    return this.registers().some((r) => r.branchId === branchId && r.status !== 'revoked');
+  }
+
+  /** Weaker signal for the checklist's staff step — any teammate besides the
+      owner exists. Not branch-specific (staff aren't tied to a branch; any
+      account can work any register), just "is there anyone to staff it with". */
+  readonly hasAnyTeammate = computed(() => this.team().length > 1);
+
+  private draftFromBranch(b: PosBranchRow): PosBranchInput {
+    return {
+      name: b.name, tradeNameAr: b.tradeNameAr, tradeNameEn: b.tradeNameEn,
+      addressAr: b.addressAr, addressEn: b.addressEn, phone: b.phone,
+      crLicenseNumber: b.crLicenseNumber || '',
+      returnPolicyAr: b.returnPolicyAr || '', returnPolicyEn: b.returnPolicyEn || '',
+    };
+  }
+
+  // ── Manager PIN ──────────────────────────────────────────────────────────
+  // Only owner/admin/manager roles are ever asked for a manager PIN (cashiers
+  // can't approve anything), so only those roles need a way to set one.
+  readonly canSetOwnManagerPin = computed(() => this.auth.hasRole('owner', 'admin', 'manager'));
+  readonly myManagerPin = signal('');
+  readonly savingMyManagerPin = signal(false);
+
+  // ── POS registers ────────────────────────────────────────────────────────
+  readonly canManageRegisters = computed(() => this.auth.hasRole('owner', 'admin'));
+  readonly newRegisterName = signal('');
+  readonly generatingRegisterToken = signal(false);
+  readonly registerToken = signal<string | null>(null);
+
+  // ── Devices & Security tab ──────────────────────────────────────────────
+  readonly loadingRegisters = signal(true);
+  readonly registers = signal<PosRegisterRow[]>([]);
+  readonly activeSessions = signal<PosActiveSession[]>([]);
+  readonly loadingSessions = signal(true);
+  readonly loadingTokens = signal(true);
+  readonly tokens = signal<PosEnrollmentTokenRow[]>([]);
+
+  // Revoked registers stay visible because Replace / re-pair safely restores
+  // that same logical till and its audit history. Finished setup codes remain
+  // hidden because they have no further action.
+  readonly visibleRegisters = computed(() => this.registers());
+  readonly visibleTokens = computed(() => this.tokens().filter((tk) => tk.status === 'active'));
+  readonly loadingManagerPins = signal(true);
+  readonly managerPins = signal<ManagerPinRow[]>([]);
+  readonly resettingPinFor = signal<string | null>(null);
+  readonly resetPinValue = signal('');
+
+  // ── Shift close policy ──────────────────────────────────────────────────
+  // Loosening approver separation is the owner's call, so admins see the
+  // switch (they manage the rest of this tab) but cannot move it.
+  readonly canEditPosPolicy = computed(() => this.auth.hasRole('owner'));
+  readonly loadingPosPolicy = signal(true);
+  readonly savingPosPolicy = signal(false);
+  readonly selfCloseShiftEnabled = signal(true);
+  readonly selfApprovalEnabled = signal(false);
+
+  readonly registerColumns: TableColumn<PosRegisterRow>[] = [
+    { key: 'displayName', label: 'Device',    labelKey: 'settings.col.name' },
+    { key: 'status',      label: 'Status',    labelKey: 'settings.col.status', noSort: true },
+    { key: 'branchName',  label: 'Branch',    labelKey: 'settings.security.devices.col.branch', noSort: true },
+    { key: 'lastSeenAt',  label: 'Last seen', labelKey: 'settings.security.devices.col.lastSeen' },
+    { key: 'activity',    label: 'Current use', labelKey: 'settings.security.devices.col.currentUse', noSort: true },
+    { key: 'createdAt',   label: 'Created',   labelKey: 'settings.security.devices.col.created' },
+    { key: 'actions',     label: '',                                          noSort: true, align: 'right' },
+  ];
+
+  readonly sessionColumns: TableColumn<PosActiveSession>[] = [
+    { key: 'userName', label: 'User', labelKey: 'settings.security.sessions.col.user' },
+    { key: 'role', label: 'Role', labelKey: 'settings.col.role' },
+    { key: 'register', label: 'Register', labelKey: 'settings.security.sessions.col.register', noSort: true },
+    { key: 'lastSeenAt', label: 'Last seen', labelKey: 'settings.security.devices.col.lastSeen' },
+    { key: 'expiresAt', label: 'Expires', labelKey: 'settings.security.sessions.col.expires' },
+    { key: 'actions', label: '', noSort: true, align: 'right' },
+  ];
+
+  readonly tokenColumns: TableColumn<PosEnrollmentTokenRow>[] = [
+    { key: 'displayName',   label: 'Device',     labelKey: 'settings.col.name' },
+    { key: 'status',        label: 'Status',     labelKey: 'settings.col.status', noSort: true },
+    { key: 'expiresAt',     label: 'Expires',    labelKey: 'settings.security.tokens.col.expiresAt' },
+    { key: 'createdByName', label: 'Issued by',  labelKey: 'settings.security.tokens.col.issuedBy' },
+    { key: 'actions',       label: '',                                          noSort: true, align: 'right' },
+  ];
+
+  readonly managerPinColumns: TableColumn<ManagerPinRow>[] = [
+    { key: 'name',       label: 'Name',      labelKey: 'settings.col.name' },
+    { key: 'role',       label: 'Role',      labelKey: 'settings.col.role',  noSort: true },
+    { key: 'configured', label: 'PIN',       labelKey: 'settings.security.managerPins.col.configured', noSort: true },
+    { key: 'actions',    label: '',                                          noSort: true, align: 'right' },
+  ];
+
   // ── Team ──────────────────────────────────────────────────────────────────
+  // Only an existing owner can grant the Owner role to someone else — this
+  // gates the "Owner" option itself in both role selects below (invite form
+  // and the per-row role editor), matching the server-side check in
+  // admin-settings.route.js's normalizeRole/canAssignRole.
+  readonly isOwner = computed(() => this.auth.hasRole('owner'));
   readonly loadingTeam = signal(true);
   readonly team = signal<TeamMember[]>([]);
-  readonly invite = signal({ name: '', email: '', role: 'Manager' as 'Admin' | 'Manager' | 'Viewer' });
+  readonly invite = signal({ name: '', email: '', role: 'Manager' as TeamMemberRole });
   readonly inviting = signal(false);
   readonly pendingInvitations = signal<Invitation[]>([]);
-  readonly inviteLink = signal<{ email: string; link: string } | null>(null);
+  readonly inviteLink = signal<{ email: string; link: string; emailSent: boolean; hadPendingInvite: boolean } | null>(null);
+  readonly resendingInviteId = signal<string | null>(null);
 
   // ── Integrations ─────────────────────────────────────────────────────────
   readonly integrations = INTEGRATIONS;
@@ -296,14 +982,24 @@ export class SettingsComponent implements OnInit {
   });
 
   readonly teamColumns: TableColumn<TeamMember>[] = [
-    { key: 'name',    label: 'Name',    labelKey: 'settings.col.name' },
-    { key: 'email',   label: 'Email',   labelKey: 'settings.col.email' },
-    { key: 'role',    label: 'Role',    labelKey: 'settings.col.role',  noSort: true },
-    { key: 'actions', label: '',                                         noSort: true, align: 'right' },
+    { key: 'name',       label: 'Name',        labelKey: 'settings.col.name' },
+    { key: 'email',      label: 'Email',       labelKey: 'settings.col.email' },
+    { key: 'role',       label: 'Role',        labelKey: 'settings.col.role',       noSort: true },
+    { key: 'branch',     label: 'Branch',      labelKey: 'settings.col.branch',     noSort: true },
+    { key: 'status',     label: 'Status',      labelKey: 'settings.col.status',     noSort: true },
+    { key: 'lastActive', label: 'Last active', labelKey: 'settings.col.lastActive', noSort: true },
+    { key: 'actions',    label: '',                                                 noSort: true, align: 'right' },
   ];
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([this.loadStore(), this.loadTeam()]);
+    const tasks = [this.loadStore(), this.loadTeam()];
+    if (this.canManageRegisters()) {
+      // Branches share the same owner/admin gate as everything else here —
+      // GET /admin/pos-branches 403s for any other role, and the registers
+      // table's branch-picker column needs the branch list loaded too.
+      tasks.push(this.loadBranches(), this.loadRegisters(), this.loadSessions(), this.loadTokens(), this.loadManagerPins(), this.loadPosPolicy());
+    }
+    await Promise.all(tasks);
   }
 
   private async loadStore(): Promise<void> {
@@ -312,14 +1008,408 @@ export class SettingsComponent implements OnInit {
       const name = s.store_name || s.name || 'Elite Collection';
       const cur = s.currency || 'QAR';
       const tz  = s.timezone || 'Asia/Qatar';
+      const logo = s.logo_url || null;
       this.storeName.set(name);
       this.currency.set(cur);
       this.timezone.set(tz);
-      this._storeSnapshot = { storeName: name, currency: cur, timezone: tz, language: 'en', lowStockThreshold: this.storeConfig.lowStockThreshold() };
+      this.logoUrl.set(logo);
+      this._storeSnapshot = { storeName: name, currency: cur, timezone: tz, language: 'en', lowStockThreshold: this.storeConfig.lowStockThreshold(), logoUrl: logo };
     } catch {
       // keep defaults
     } finally {
       this.loadingStore.set(false);
+    }
+  }
+
+  private async loadBranches(): Promise<void> {
+    try {
+      this.branches.set(await this.settingsApi.listBranches());
+    } catch {
+      this.branches.set([]);
+    } finally {
+      this.loadingBranches.set(false);
+    }
+  }
+
+  startAddBranch(): void {
+    this.newBranchDraft.set(this.emptyBranchDraft());
+    this.addingBranch.set(true);
+    this.editingBranchId.set(null);
+  }
+
+  cancelAddBranch(): void {
+    this.addingBranch.set(false);
+  }
+
+  readonly setNewBranchField = <K extends keyof PosBranchInput>(key: K, value: string): void => {
+    this.newBranchDraft.update((d) => ({ ...d, [key]: value }));
+  };
+
+  /** One updater per branch id, so editing one branch's draft can never bleed into another's. */
+  makeSetBranchField(branchId: string): <K extends keyof PosBranchInput>(key: K, value: string) => void {
+    return (key, value) => {
+      this.branchDrafts.update((drafts) => ({
+        ...drafts,
+        [branchId]: { ...drafts[branchId], [key]: value },
+      }));
+    };
+  }
+
+  toggleEditBranch(b: PosBranchRow): void {
+    this.addingBranch.set(false);
+    if (this.editingBranchId() === b.id) {
+      this.editingBranchId.set(null);
+      return;
+    }
+    this.branchDrafts.update((drafts) => ({ ...drafts, [b.id]: this.draftFromBranch(b) }));
+    this.editingBranchId.set(b.id);
+  }
+
+  async saveNewBranch(): Promise<void> {
+    if (this.savingBranch()) return;
+    const draft = this.newBranchDraft();
+    if (!draft.name.trim() || !draft.tradeNameEn.trim()) return;
+    this.savingBranch.set(true);
+    try {
+      const created = await this.settingsApi.createBranch(draft);
+      this.branches.update((list) => [...list, created]);
+      this.addingBranch.set(false);
+      this.toast.success(this.t('settings.toast.branchSaved'));
+    } catch {
+      // Global interceptor surfaces the error (e.g. BRANCH_NAME_TAKEN).
+    } finally {
+      this.savingBranch.set(false);
+    }
+  }
+
+  async saveEditedBranch(b: PosBranchRow): Promise<void> {
+    if (this.savingBranch()) return;
+    const draft = this.branchDrafts()[b.id];
+    if (!draft || !draft.name.trim() || !draft.tradeNameEn.trim()) return;
+    this.savingBranch.set(true);
+    try {
+      const saved = await this.settingsApi.updateBranch(b.id, draft);
+      this.branches.update((list) => list.map((x) => (x.id === b.id ? saved : x)));
+      this.editingBranchId.set(null);
+      this.toast.success(this.t('settings.toast.branchSaved'));
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.savingBranch.set(false);
+    }
+  }
+
+  async setDefaultBranch(b: PosBranchRow): Promise<void> {
+    if (this.settingDefaultBranchId()) return;
+    this.settingDefaultBranchId.set(b.id);
+    try {
+      await this.settingsApi.setDefaultBranch(b.id);
+      this.branches.update((list) => list.map((x) => ({ ...x, isDefault: x.id === b.id })));
+      this.toast.success(this.t('settings.toast.branchSaved'));
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.settingDefaultBranchId.set(null);
+    }
+  }
+
+  async deleteBranch(b: PosBranchRow): Promise<void> {
+    const ok = await this.confirm.ask({
+      title: this.t('settings.confirm.deleteBranch.title').replace('{name}', b.name),
+      message: this.t('settings.confirm.deleteBranch.message'),
+      confirmLabel: this.t('settings.confirm.deleteBranch.confirmLabel'),
+      cancelLabel: this.t('settings.confirm.deleteBranch.cancelLabel'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    this.deletingBranchId.set(b.id);
+    try {
+      await this.settingsApi.deleteBranch(b.id);
+      this.branches.update((list) => list.filter((x) => x.id !== b.id));
+      this.toast.success(this.t('settings.toast.branchDeleted'));
+    } catch {
+      // Global interceptor surfaces the server's guard message as-is —
+      // BRANCH_LAST_REMAINING or BRANCH_HAS_REGISTERS both read fine
+      // unmodified as a toast.
+    } finally {
+      this.deletingBranchId.set(null);
+    }
+  }
+
+  async setRegisterBranch(r: PosRegisterRow, branchId: string | null): Promise<void> {
+    const previous = this.registers();
+    const branchName = branchId ? this.branches().find((b) => b.id === branchId)?.name ?? null : null;
+    this.registers.update((list) => list.map((x) => (x.registerId === r.registerId ? { ...x, branchId, branchName } : x)));
+    try {
+      await this.settingsApi.setRegisterBranch(r.registerId, branchId);
+    } catch {
+      this.registers.set(previous);
+    }
+  }
+
+  /**
+   * Splits token creation from consumption: the POS enrollment screen mints
+   * and consumes a token in the same click (self-enroll), which only works
+   * if you're physically at the register. This generates one from Settings
+   * so it can be relayed to someone setting up a register elsewhere — the
+   * server already treats it as single-use with a 15-minute TTL.
+   */
+  async generateRegisterToken(): Promise<void> {
+    if (this.generatingRegisterToken() || !this.canManageRegisters()) return;
+    const name = this.newRegisterName().trim();
+    if (!name) return;
+    this.generatingRegisterToken.set(true);
+    try {
+      const { token } = await this.posApi.createEnrollmentToken(name);
+      this.registerToken.set(token);
+      this.toast.success(this.t('settings.toast.tokenCreated'), this.t('settings.toast.tokenCreated.sub'));
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.generatingRegisterToken.set(false);
+    }
+  }
+
+  copyRegisterToken(): void {
+    const token = this.registerToken();
+    if (!token) return;
+    navigator.clipboard.writeText(token).then(() => {
+      this.toast.success(this.t('settings.toast.codeCopied'));
+    }).catch(() => {});
+  }
+
+  // ── Devices & Security tab ──────────────────────────────────────────────
+
+  private async loadRegisters(): Promise<void> {
+    try {
+      this.registers.set(await this.settingsApi.listRegisters());
+    } catch {
+      this.registers.set([]);
+    } finally {
+      this.loadingRegisters.set(false);
+    }
+  }
+
+  private async loadSessions(): Promise<void> {
+    try {
+      this.activeSessions.set(await this.settingsApi.listActiveSessions());
+    } catch {
+      this.activeSessions.set([]);
+    } finally {
+      this.loadingSessions.set(false);
+    }
+  }
+
+  sessionRegisterName(session: PosActiveSession): string {
+    if (!session.registerId) return this.t('settings.security.sessions.notConnected');
+    return this.registers().find((register) => register.registerId === session.registerId)?.displayName
+      || this.t('settings.security.sessions.unknownRegister');
+  }
+
+  private async loadTokens(): Promise<void> {
+    try {
+      this.tokens.set(await this.settingsApi.listEnrollmentTokens());
+    } catch {
+      this.tokens.set([]);
+    } finally {
+      this.loadingTokens.set(false);
+    }
+  }
+
+  private async loadManagerPins(): Promise<void> {
+    try {
+      this.managerPins.set(await this.settingsApi.listManagerPins());
+    } catch {
+      this.managerPins.set([]);
+    } finally {
+      this.loadingManagerPins.set(false);
+    }
+  }
+
+  private async loadPosPolicy(): Promise<void> {
+    try {
+      const policy = await this.settingsApi.getPosPolicy();
+      this.selfCloseShiftEnabled.set(policy.selfCloseShiftEnabled);
+      this.selfApprovalEnabled.set(policy.emergencySelfApprovalEnabled);
+    } catch {
+      // Leave the switches where they are; the POS keeps working either way and
+      // the server is the only authority on what an action actually requires.
+    } finally {
+      this.loadingPosPolicy.set(false);
+    }
+  }
+
+  async toggleSelfCloseShift(): Promise<void> {
+    await this.savePosPolicy(this.selfCloseShiftEnabled, (value) => ({ selfCloseShiftEnabled: value }),
+      (policy) => policy.selfCloseShiftEnabled);
+  }
+
+  async toggleSelfApproval(): Promise<void> {
+    await this.savePosPolicy(this.selfApprovalEnabled, (value) => ({ emergencySelfApprovalEnabled: value }),
+      (policy) => policy.emergencySelfApprovalEnabled);
+  }
+
+  /**
+   * Flips one switch optimistically (a switch that lags behind the tap reads as
+   * broken), then reconciles with whatever the server actually stored. Reverts
+   * on failure so the page never claims a setting that did not save.
+   */
+  private async savePosPolicy(
+    state: WritableSignal<boolean>,
+    payload: (value: boolean) => { selfCloseShiftEnabled?: boolean; emergencySelfApprovalEnabled?: boolean },
+    read: (policy: PosPolicy) => boolean,
+  ): Promise<void> {
+    if (this.savingPosPolicy() || !this.canEditPosPolicy()) return;
+    const next = !state();
+    this.savingPosPolicy.set(true);
+    state.set(next);
+    try {
+      state.set(read(await this.settingsApi.updatePosPolicy(payload(next))));
+      this.toast.success(this.t('settings.security.approvals.saved'));
+    } catch (caught) {
+      state.set(!next);
+      this.toast.errorFrom(caught, this.t('settings.security.approvals.failed'));
+    } finally {
+      this.savingPosPolicy.set(false);
+    }
+  }
+
+  registerPill(status: string): PillInfo {
+    return registerStatusPillKind(status);
+  }
+
+  tokenPill(status: string): PillInfo {
+    return tokenStatusPillKind(status);
+  }
+
+  initialsOf(name: string): string {
+    return String(name || 'User').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('') || 'U';
+  }
+
+  async revokeRegister(r: PosRegisterRow): Promise<void> {
+    const ok = await this.confirm.ask({
+      title: this.t('settings.confirm.revokeRegister.title').replace('{name}', r.displayName),
+      message: this.t('settings.confirm.revokeRegister.message'),
+      confirmLabel: this.t('settings.confirm.revokeRegister.confirmLabel'),
+      cancelLabel: this.t('settings.confirm.revokeRegister.cancelLabel'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    const previous = this.registers();
+    this.registers.update((list) => list.map((x) => (x.registerId === r.registerId ? { ...x, status: 'revoked' } : x)));
+    try {
+      await this.settingsApi.revokeRegister(r.registerId);
+      this.toast.success(this.t('settings.toast.registerRevoked'));
+    } catch {
+      this.registers.set(previous);
+    }
+  }
+
+  async replaceRegister(r: PosRegisterRow): Promise<void> {
+    try {
+      const replacement = await this.settingsApi.createReplacementToken(r.registerId);
+      this.registerToken.set(replacement.token);
+      await this.loadTokens();
+      this.toast.success(this.t('settings.toast.replacementCreated'), this.t('settings.toast.replacementCreated.sub'));
+    } catch {
+      // The global API handler shows the active-shift/offline-queue guard.
+    }
+  }
+
+  async revokeSession(session: PosActiveSession): Promise<void> {
+    const ok = await this.confirm.ask({
+      title: this.t('settings.confirm.revokeSession.title').replace('{name}', session.userName),
+      message: this.t('settings.confirm.revokeSession.message'),
+      confirmLabel: this.t('settings.security.sessions.signOut'),
+      cancelLabel: this.t('settings.confirm.revokeSession.cancel'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await this.settingsApi.revokeSession(session.sessionId);
+      this.activeSessions.update((sessions) => sessions.filter((item) => item.sessionId !== session.sessionId));
+      this.toast.success(this.t('settings.toast.sessionRevoked'));
+    } catch {
+      // Global interceptor surfaces the error.
+    }
+  }
+
+  async revokeToken(r: PosEnrollmentTokenRow): Promise<void> {
+    const ok = await this.confirm.ask({
+      title: this.t('settings.confirm.revokeToken.title').replace('{name}', r.displayName),
+      message: this.t('settings.confirm.revokeToken.message'),
+      confirmLabel: this.t('settings.confirm.revokeToken.confirmLabel'),
+      cancelLabel: this.t('settings.confirm.revokeToken.cancelLabel'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    const previous = this.tokens();
+    this.tokens.update((list) => list.map((x) => (x.tokenId === r.tokenId ? { ...x, status: 'revoked' } : x)));
+    try {
+      await this.settingsApi.revokeEnrollmentToken(r.tokenId);
+      this.toast.success(this.t('settings.toast.tokenRevoked'));
+    } catch {
+      this.tokens.set(previous);
+    }
+  }
+
+  startResetManagerPin(r: ManagerPinRow): void {
+    this.resettingPinFor.set(r.userId);
+    this.resetPinValue.set('');
+  }
+
+  cancelResetManagerPin(): void {
+    this.resettingPinFor.set(null);
+    this.resetPinValue.set('');
+  }
+
+  async confirmResetManagerPin(r: ManagerPinRow): Promise<void> {
+    if (!this.isValidPinFormat(this.resetPinValue())) return;
+    try {
+      await this.posApi.setManagerPin(this.resetPinValue(), r.userId);
+      this.managerPins.update((list) => list.map((x) => (x.userId === r.userId ? { ...x, configured: true, lastUpdatedAt: new Date().toISOString() } : x)));
+      this.toast.success(this.t('settings.toast.pinReset'), `${r.name} ${this.t('settings.toast.pinReset.sub')}`);
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.cancelResetManagerPin();
+    }
+  }
+
+  async clearManagerPin(r: ManagerPinRow): Promise<void> {
+    const ok = await this.confirm.ask({
+      title: this.t('settings.confirm.clearPin.title').replace('{name}', r.name),
+      message: this.t('settings.confirm.clearPin.message'),
+      confirmLabel: this.t('settings.confirm.clearPin.confirmLabel'),
+      cancelLabel: this.t('settings.confirm.clearPin.cancelLabel'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    const previous = this.managerPins();
+    this.managerPins.update((list) => list.map((x) => (x.userId === r.userId ? { ...x, configured: false, lastUpdatedAt: null } : x)));
+    try {
+      await this.settingsApi.clearManagerPin(r.userId);
+      this.toast.success(this.t('settings.toast.pinCleared'));
+    } catch {
+      this.managerPins.set(previous);
+    }
+  }
+
+  isValidPinFormat(pin: string): boolean {
+    return /^\d{4,8}$/.test(pin);
+  }
+
+  async saveMyManagerPin(): Promise<void> {
+    if (this.savingMyManagerPin() || !this.isValidPinFormat(this.myManagerPin())) return;
+    this.savingMyManagerPin.set(true);
+    try {
+      await this.posApi.setManagerPin(this.myManagerPin());
+      this.myManagerPin.set('');
+      this.toast.success(this.t('settings.toast.managerPinSaved'), this.t('settings.toast.managerPinSaved.sub'));
+    } catch {
+      // Global interceptor surfaces the error.
+    } finally {
+      this.savingMyManagerPin.set(false);
     }
   }
 
@@ -329,9 +1419,12 @@ export class SettingsComponent implements OnInit {
         this.settingsApi.getTeam(),
         this.settingsApi.getInvitations().catch(() => [] as Invitation[]),
       ]);
+      // GET /admin/settings/team already excludes status='removed' server-side;
+      // this filter stays as a harmless safety net in case an older cached
+      // response or a future caller ever includes one.
       this.team.set(
         list
-          .filter((m: TeamMember & { status?: string }) => m.status !== 'removed')
+          .filter((m) => m.status !== 'removed')
           .map((m) => ({
             ...m,
             role: capitalizeRole(m.role),
@@ -354,6 +1447,7 @@ export class SettingsComponent implements OnInit {
     this.timezone.set(this._storeSnapshot.timezone);
     this.language.set(this._storeSnapshot.language);
     this.lowStockThreshold.set(this._storeSnapshot.lowStockThreshold);
+    this.logoUrl.set(this._storeSnapshot.logoUrl);
     this.storeNameError.set(false);
   }
 
@@ -372,6 +1466,7 @@ export class SettingsComponent implements OnInit {
         currency: this.currency(),
         timezone: this.timezone(),
         language: this.language(),
+        logoUrl: this.logoUrl(),
       });
       this.storeConfig.setLowStockThreshold(this.lowStockThreshold());
       this._storeSnapshot = {
@@ -380,6 +1475,7 @@ export class SettingsComponent implements OnInit {
         timezone: this.timezone(),
         language: this.language(),
         lowStockThreshold: this.lowStockThreshold(),
+        logoUrl: this.logoUrl(),
       };
       this.toast.success(this.t('settings.toast.saved'), this.t('settings.toast.saved.sub'));
     } catch {
@@ -387,6 +1483,27 @@ export class SettingsComponent implements OnInit {
     } finally {
       this.savingGeneral.set(false);
     }
+  }
+
+  // Logo — read as a data URL and stage it, same pattern as the collection
+  // cover-image picker (collection-drawer.component.ts): no separate upload
+  // round-trip, it's saved together with the rest of the General form.
+  onLogoPick(ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) this.readLogo(file);
+    input.value = '';
+  }
+
+  removeLogo(): void {
+    this.logoUrl.set(null);
+  }
+
+  private readLogo(file: File): void {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => this.logoUrl.set(reader.result as string);
+    reader.readAsDataURL(file);
   }
 
   // ── Team ──────────────────────────────────────────────────────────────────
@@ -407,10 +1524,14 @@ export class SettingsComponent implements OnInit {
     try {
       const result = await this.settingsApi.sendInvitation({ email: f.email.trim(), role: f.role });
       this.invite.update(v => ({ ...v, email: '' }));
-      this.inviteLink.set({ email: result.email, link: result.inviteLink });
+      this.inviteLink.set({ email: result.email, link: result.inviteLink, emailSent: result.emailSent, hadPendingInvite: result.hadPendingInvite });
       const invites = await this.settingsApi.getInvitations().catch(() => this.pendingInvitations());
       this.pendingInvitations.set(invites);
-      this.toast.success(this.t('settings.toast.invitationCreated'), this.t('settings.toast.invitationCreated.sub'));
+      if (result.emailSent) {
+        this.toast.success(this.t('settings.toast.invitationEmailed'), this.t('settings.toast.invitationEmailed.sub').replace('{email}', result.email));
+      } else {
+        this.toast.success(this.t('settings.toast.invitationCreated'), this.t('settings.toast.invitationCreated.sub'));
+      }
     } catch {
       // Global interceptor surfaces the error.
     } finally {
@@ -434,7 +1555,75 @@ export class SettingsComponent implements OnInit {
     } catch { /* Global interceptor */ }
   }
 
-  async updateRole(id: string, role: 'Admin' | 'Manager' | 'Viewer'): Promise<void> {
+  async resendInvite(inv: Invitation): Promise<void> {
+    if (this.resendingInviteId()) return;
+    this.resendingInviteId.set(inv.id);
+    try {
+      const result = await this.settingsApi.resendInvitation(inv.id);
+      const invites = await this.settingsApi.getInvitations().catch(() => this.pendingInvitations());
+      this.pendingInvitations.set(invites);
+      if (result.emailSent) {
+        this.toast.success(this.t('settings.toast.invitationEmailed'), this.t('settings.toast.invitationEmailed.sub').replace('{email}', result.email));
+      } else {
+        this.toast.error(this.t('settings.team.emailFailed'));
+      }
+    } catch { /* Global interceptor */ } finally {
+      this.resendingInviteId.set(null);
+    }
+  }
+
+  // Highlights an invite in the last ~12h of its 48h window so an admin
+  // notices before it silently expires, instead of only finding out when
+  // the invitee complains the link doesn't work.
+  isExpiringSoon(expiresAt: string): boolean {
+    return new Date(expiresAt).getTime() - Date.now() < 12 * 60 * 60 * 1000;
+  }
+
+  expiryLabel(expiresAt: string): string {
+    const hours = Math.round((new Date(expiresAt).getTime() - Date.now()) / (60 * 60 * 1000));
+    if (hours <= 0) return this.t('settings.team.expiresSoon');
+    if (hours < 24) return this.t('settings.team.expiresInHours').replace('{n}', String(hours));
+    return this.t('settings.team.expiresInDays').replace('{n}', String(Math.round(hours / 24)));
+  }
+
+  rolePill(role: string): PillInfo {
+    return rolePillKind(role);
+  }
+
+  statusPill(status: TeamMemberStatus): PillInfo {
+    return teamStatusPillKind(status);
+  }
+
+  lastActiveLabel(member: TeamMember): string {
+    if (!member.last_login_at) return this.t('settings.team.neverSignedIn');
+    const days = Math.floor((Date.now() - new Date(member.last_login_at).getTime()) / (24 * 60 * 60 * 1000));
+    if (days <= 0) return this.t('settings.team.activeToday');
+    if (days === 1) return this.t('settings.team.activeYesterday');
+    return this.t('settings.team.activeDaysAgo').replace('{n}', String(days));
+  }
+
+  async toggleMemberStatus(member: TeamMember): Promise<void> {
+    const next: TeamMemberStatus = member.status === 'disabled' ? 'active' : 'disabled';
+    if (next === 'disabled') {
+      const ok = await this.confirm.ask({
+        title: this.t('settings.confirm.disableMember.title').replace('{name}', member.name),
+        message: this.t('settings.confirm.disableMember.message'),
+        confirmLabel: this.t('settings.confirm.disableMember.confirmLabel'),
+        cancelLabel: this.t('settings.confirm.disableMember.cancelLabel'),
+        variant: 'danger',
+      });
+      if (!ok) return;
+    }
+    this.team.update((t) => t.map((m) => (m.id === member.id ? { ...m, status: next } : m)));
+    try {
+      await this.settingsApi.patchTeam(member.id, { status: next });
+      this.toast.success(next === 'disabled' ? this.t('settings.toast.memberDisabled') : this.t('settings.toast.memberReactivated'));
+    } catch {
+      this.team.update((t) => t.map((m) => (m.id === member.id ? { ...m, status: member.status } : m)));
+    }
+  }
+
+  async updateRole(id: string, role: TeamMemberRole): Promise<void> {
     const member = this.team().find((m) => m.id === id);
     if (!member || member.role === role) return;
     const previous = member.role;
@@ -450,6 +1639,31 @@ export class SettingsComponent implements OnInit {
       });
     } catch {
       this.team.update((t) => t.map((m) => (m.id === id ? { ...m, role: previous } : m)));
+    }
+  }
+
+  /**
+   * Scope a staff member to one branch, which is what the POS picker filters
+   * on. Empty means every branch — the default, and the right one for owners
+   * and admins who move between counters.
+   */
+  async updateMemberBranch(id: string, branchId: string): Promise<void> {
+    const member = this.team().find((m) => m.id === id);
+    if (!member) return;
+    const next = branchId || null;
+    const previous = member.posBranchId ?? null;
+    if (next === previous) return;
+    const branchName = next ? (this.branches().find((b) => b.id === next)?.name ?? null) : null;
+    this.team.update((t) => t.map((m) => (m.id === id ? { ...m, posBranchId: next, posBranchName: branchName } : m)));
+    try {
+      await this.settingsApi.patchTeam(id, { posBranchId: next });
+      this.toast.success(
+        this.t('settings.toast.branchUpdated'),
+        `${member.name} · ${branchName || this.t('settings.team.branch.all')}`,
+      );
+    } catch {
+      const previousName = previous ? (this.branches().find((b) => b.id === previous)?.name ?? null) : null;
+      this.team.update((t) => t.map((m) => (m.id === id ? { ...m, posBranchId: previous, posBranchName: previousName } : m)));
     }
   }
 
@@ -496,7 +1710,7 @@ export class SettingsComponent implements OnInit {
   }
 }
 
-function capitalizeRole(role: string): 'Admin' | 'Manager' | 'Viewer' {
+function capitalizeRole(role: string): TeamMemberRole {
   const r = String(role || 'viewer');
-  return (r.charAt(0).toUpperCase() + r.slice(1).toLowerCase()) as 'Admin' | 'Manager' | 'Viewer';
+  return (r.charAt(0).toUpperCase() + r.slice(1).toLowerCase()) as TeamMemberRole;
 }

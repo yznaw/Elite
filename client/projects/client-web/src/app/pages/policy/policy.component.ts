@@ -1,32 +1,36 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { I18nService } from '../../services/i18n.service';
+import { LocaleService } from '../../services/locale.service';
+import { SeoService } from '../../services/seo.service';
+import { API_BASE } from '../../core/api-base';
 
 interface PolicyPage {
   id: string;
   handle: string;
   title: string;
+  titleAr: string;
   content: string;
+  contentAr: string;
   policyType: string;
   status: 'active' | 'draft';
   updatedAt: string;
 }
 
 @Component({
-  selector: 'cw-policy',
-  standalone: true,
-  imports: [CommonModule, RouterLink],
-  template: `
+    selector: 'cw-policy',
+    imports: [CommonModule, RouterLink],
+    template: `
     <div class="policy-page">
 
       <!-- Breadcrumb -->
       <nav class="policy-breadcrumb" aria-label="Breadcrumb">
         <a routerLink="/" class="bc-link">{{ t('brand.name') }}</a>
         <span class="bc-sep">›</span>
-        <span class="bc-current">{{ policy()?.title || '...' }}</span>
+        <span class="bc-current">{{ policyTitle() || '...' }}</span>
       </nav>
 
       @if (loading()) {
@@ -54,13 +58,13 @@ interface PolicyPage {
         @if (policy(); as p) {
           <article class="policy-article">
             <header class="policy-header">
-              <h1 class="policy-title">{{ p.title }}</h1>
+              <h1 class="policy-title">{{ policyTitle() }}</h1>
               <div class="policy-meta">
                 Last updated {{ formatDate(p.updatedAt) }}
               </div>
             </header>
 
-            <div class="policy-content" [innerHTML]="p.content"></div>
+            <div class="policy-content" [innerHTML]="policyContent()"></div>
 
             <footer class="policy-footer">
               <a routerLink="/" class="footer-home-link">
@@ -75,7 +79,8 @@ interface PolicyPage {
       }
     </div>
   `,
-  styles: [`
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    styles: [`
     .policy-page {
       max-width: 760px;
       margin: 0 auto;
@@ -243,25 +248,55 @@ interface PolicyPage {
       .policy-content { padding: 24px 20px; }
       .policy-footer { padding: 16px 20px; }
     }
-  `],
+  `]
 })
 export class PolicyComponent implements OnInit {
   private readonly route  = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly http   = inject(HttpClient);
   private readonly i18n   = inject(I18nService);
+  private readonly locale = inject(LocaleService);
+  private readonly seo    = inject(SeoService);
 
   readonly t = (k: string): string => this.i18n.t(k);
+
+  /**
+   * Arabic title/content with an English fallback, same shape as
+   * Product.descriptionAr elsewhere: a policy saved before the Arabic fields
+   * existed still renders instead of showing blank.
+   */
+  readonly policyTitle = (): string => {
+    const p = this.policy();
+    if (!p) return '';
+    return this.locale.locale() === 'ar' ? (p.titleAr || p.title) : p.title;
+  };
+
+  readonly policyContent = (): string => {
+    const p = this.policy();
+    if (!p) return '';
+    return this.locale.locale() === 'ar' ? (p.contentAr || p.content) : p.content;
+  };
+
+  // Policies are thin, near-duplicate pages across stores. They stay indexable
+  // (customers do search for "Elite Collection returns"), but carry no image
+  // and no structured data.
+  private readonly seoTags = this.seo.watch(() => {
+    const policy = this.policy();
+    if (!policy) return null;
+    const title = this.policyTitle();
+    return {
+      title,
+      description: this.i18n.t('seo.policy.description', { title }),
+      canonicalPath: `/policy/${policy.handle}`,
+      type: 'article' as const,
+    };
+  });
 
   readonly loading = signal(true);
   readonly error   = signal(false);
   readonly policy  = signal<PolicyPage | null>(null);
+  private readonly apiBase = inject(API_BASE);
 
-  private get apiBase(): string {
-    const { hostname, protocol } = window.location;
-    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\./.test(hostname);
-    return isLocal ? `${protocol}//${hostname}:3000/api` : '/api';
-  }
 
   async ngOnInit(): Promise<void> {
     const handle = this.route.snapshot.paramMap.get('handle') ?? '';

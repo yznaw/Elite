@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output, computed, inject, signal } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, OnInit, Output, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../shared/icons/icon.component';
 import { I18nService } from '../../services/i18n.service';
@@ -14,10 +14,10 @@ interface Candidate { media: MediaFile; suggestion: Suggestion; }
 export interface LinkPair { mediaId: string; productId: string; }
 
 @Component({
-  selector: 'ap-auto-link-modal',
-  standalone: true,
-  imports: [CommonModule, IconComponent],
-  template: `
+    selector: 'ap-auto-link-modal',
+    imports: [CommonModule, IconComponent],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    template: `
     <div class="overlay" (click)="closed.emit()"></div>
     <div class="modal" style="width:min(820px,92vw);">
       <div class="modal-head">
@@ -61,11 +61,7 @@ export interface LinkPair { mediaId: string; productId: string; }
             @for (c of candidates(); track c.media.id) {
               <div class="alink-row" [class.skipped]="skipped().has(c.media.id)">
                 <div class="alink-thumb">
-                  @if (c.media.kind === 'image') {
-                    <img [src]="c.media.preview" alt="" (error)="onImgError($event)"/>
-                  } @else {
-                    <div class="glb-thumb" style="height:100%;"><span style="color:var(--gold);font-size:9px;letter-spacing:0.1em;">GLB</span></div>
-                  }
+                  <img [src]="c.media.preview" alt="" (error)="onImgError($event)"/>
                 </div>
                 <div style="min-width:0;">
                   <div class="strong mono" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.media.name }}</div>
@@ -95,7 +91,7 @@ export interface LinkPair { mediaId: string; productId: string; }
         </button>
       </div>
     </div>
-  `,
+  `
 })
 export class AutoLinkModalComponent implements OnInit, OnDestroy {
   private readonly i18n = inject(I18nService);

@@ -1,9 +1,36 @@
 const { Router } = require('express');
 const db = require('../db/client');
-const { ensureDefaultTenant } = require('../db/tenant');
-const { asyncHandler, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
+
+const { customerIdentifierConflictField } = require('../lib/customer-identity');
+const { asyncHandler, conflict, created, fromCents, notFound, ok, toCents, validationError } = require('./lib');
 
 const router = Router();
+
+function identifierConflict(res, field, blocker) {
+  const label = field === 'phone' ? 'phone number' : 'email address';
+  const message = blocker
+    ? `Cannot restore: this ${label} belongs to ${blocker.full_name} (${blocker.id}). Review these customers before restoring.`
+    : `This ${label} is already used by another customer. Review the existing customer or use a different ${label}.`;
+  return conflict(res, 'CUSTOMER_IDENTIFIER_TAKEN', message, {
+    field,
+    ...(blocker ? { blockingCustomer: { id: blocker.id, name: blocker.full_name } } : {}),
+  });
+}
+
+async function findRestoreBlocker(client, tenantId, customerId) {
+  const result = await client.query(
+    `SELECT other.id, other.full_name,
+            CASE WHEN other.email = target.email THEN 'email' ELSE 'phone' END AS field
+       FROM customers target JOIN customers other
+         ON other.tenant_id = target.tenant_id AND other.id <> target.id
+        AND other.deleted_at IS NULL
+        AND (other.email = target.email OR other.phone_key = target.phone_key)
+      WHERE target.tenant_id = $1 AND target.id = $2
+      ORDER BY other.created_at, other.id LIMIT 1`,
+    [tenantId, customerId],
+  );
+  return result.rows[0];
+}
 
 function mapCustomer(row) {
   return {
@@ -36,7 +63,9 @@ function mapOrderRow(row) {
     items: row.items || [],
     address: formatAddress(row.shipping_address || {}),
     shippingAddress: row.shipping_address || {},
-    trackingNumber: row.tracking_number || undefined,
+    trackingNumber: row.fulfillment_version ? undefined : row.tracking_number || undefined,
+    automaticFulfillment: row.fulfillment_version === 1,
+    deliveryProgress: row.metadata?.deliveryProgress,
   };
 }
 
@@ -51,11 +80,58 @@ function mapPayment(status) {
   return status;
 }
 
-// ── GET / — list all customers (with live stats from view, graceful fallback) ──
-router.get('/', asyncHandler(async (_req, res) => {
+// Whitelist of sortable columns. The table header offered click-to-sort but the
+// server always ordered by last activity, so the arrow sorted only the rows that
+// happened to be on screen.
+const CUSTOMER_SORTS = {
+  name:      'c.full_name',
+  email:     'c.email',
+  city:      'c.city',
+  orders:    'orders_count',
+  ltv:       'ltv_cents',
+  sizePref:  'c.size_preference',
+  lastOrder: 'last_order_at',
+  joined:    'c.joined_at',
+};
+const CUSTOMER_SORT_DEFAULT = 'COALESCE(s.last_order_at, c.joined_at) DESC';
+
+function customerOrderBy(sort, dir) {
+  const column = CUSTOMER_SORTS[sort];
+  if (!column) return CUSTOMER_SORT_DEFAULT;
+  const direction = String(dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  // NULLS LAST keeps customers with no orders out of the top of an LTV sort.
+  return `${column} ${direction} NULLS LAST`;
+}
+
+// ── GET / — paginated, searchable, sortable customer list ──
+router.get('/', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
+
+    const page   = Math.max(0, parseInt(req.query.page ?? '0', 10) || 0);
+    const limit  = Math.min(200, Math.max(1, parseInt(req.query.limit ?? '50', 10) || 50));
+    const offset = page * limit;
+
+    const params = [tenant.id];
+    const where  = ['c.tenant_id = $1', 'c.deleted_at IS NULL'];
+
+    if (req.query.q) {
+      params.push(`%${req.query.q}%`);
+      where.push(`(c.full_name ILIKE $${params.length} OR c.email ILIKE $${params.length} OR c.city ILIKE $${params.length} OR c.phone_number ILIKE $${params.length})`);
+    }
+    const whereClause = where.join(' AND ');
+    const orderBy = customerOrderBy(req.query.sort, req.query.dir);
+
+    const countResult = await client.query(
+      `SELECT COUNT(*)::integer AS total FROM customers c WHERE ${whereClause}`,
+      params,
+    );
+    const total = countResult.rows[0].total;
+
+    params.push(limit, offset);
+    const pagination = `LIMIT $${params.length - 1} OFFSET $${params.length}`;
+
     let result;
     try {
       result = await client.query(
@@ -66,21 +142,31 @@ router.get('/', asyncHandler(async (_req, res) => {
             s.last_order_at
           FROM customers c
           LEFT JOIN v_customer_order_stats s ON s.customer_id = c.id
-          WHERE c.tenant_id = $1
-            AND c.deleted_at IS NULL
-          ORDER BY COALESCE(s.last_order_at, c.joined_at) DESC
+          WHERE ${whereClause}
+          ORDER BY ${orderBy}
+          ${pagination}
         `,
-        [tenant.id],
+        params,
       );
     } catch (viewErr) {
-      // v_customer_order_stats may not exist yet — fall back to base table
+      // v_customer_order_stats may not exist yet — fall back to base table.
       console.warn('[customers] v_customer_order_stats unavailable, using denormalized columns:', viewErr.message);
       result = await client.query(
-        `SELECT * FROM customers WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY joined_at DESC`,
-        [tenant.id],
+        `SELECT * FROM customers c
+          WHERE ${whereClause}
+          ORDER BY ${orderBy.includes('s.') || orderBy.includes('last_order_at') ? 'c.joined_at DESC' : orderBy}
+          ${pagination}`,
+        params,
       );
     }
-    ok(res, result.rows.map(mapCustomer));
+
+    ok(res, {
+      customers: result.rows.map(mapCustomer),
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    });
   } finally {
     client.release();
   }
@@ -90,7 +176,7 @@ router.get('/', asyncHandler(async (_req, res) => {
 router.get('/:id', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     let result;
     try {
       result = await client.query(
@@ -122,7 +208,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 router.get('/:id/orders', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
 
     // Resolve customer (need email for the fallback join)
     const cust = await client.query(
@@ -140,10 +226,17 @@ router.get('/:id/orders', asyncHandler(async (req, res) => {
           s.tracking_number,
           COALESCE((SELECT jsonb_agg(jsonb_build_object('n', oi2.product_name, 's', COALESCE(oi2.size, ''), 'q', oi2.quantity, 'p', round(oi2.unit_price_cents / 100.0)) ORDER BY oi2.id) FROM order_items oi2 WHERE oi2.order_id = o.id), '[]'::jsonb) AS items
         FROM orders o
-        LEFT JOIN shipments s ON s.order_id = o.id
+        -- An order can have both a manual and an NBOX shipment; a plain join
+        -- would list that order twice in the customer's history.
+        LEFT JOIN LATERAL (
+          SELECT sh.tracking_number
+            FROM shipments sh
+           WHERE sh.order_id = o.id
+           ORDER BY (sh.tracking_number IS NOT NULL) DESC, sh.created_at DESC
+           LIMIT 1
+        ) s ON TRUE
         WHERE o.tenant_id = $1
           AND (o.customer_id = $2 OR o.customer_email = $3)
-        GROUP BY o.id, s.tracking_number
         ORDER BY o.placed_at DESC
       `,
       [tenant.id, custId, email],
@@ -163,7 +256,7 @@ router.post('/', asyncHandler(async (req, res) => {
 
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     const result = await client.query(
       `
         INSERT INTO customers
@@ -175,8 +268,8 @@ router.post('/', asyncHandler(async (req, res) => {
               phone_number    = COALESCE(EXCLUDED.phone_number, customers.phone_number),
               city            = COALESCE(EXCLUDED.city, customers.city),
               size_preference = COALESCE(EXCLUDED.size_preference, customers.size_preference),
-              notes           = EXCLUDED.notes,
-              deleted_at      = NULL
+              notes           = EXCLUDED.notes
+        WHERE customers.deleted_at IS NULL
         RETURNING *
       `,
       [
@@ -192,7 +285,16 @@ router.post('/', asyncHandler(async (req, res) => {
         Number.parseInt(req.body.orders, 10) || 0,
       ],
     );
+    if (result.rowCount === 0) {
+      return conflict(res, 'CUSTOMER_IDENTIFIER_TAKEN',
+        'This email address belongs to a deleted customer. Restore that customer explicitly before editing it.',
+        { field: 'email' });
+    }
     created(res, mapCustomer(result.rows[0]), 'Customer saved.');
+  } catch (error) {
+    const field = customerIdentifierConflictField(error);
+    if (field) return identifierConflict(res, field);
+    throw error;
   } finally {
     client.release();
   }
@@ -202,31 +304,58 @@ router.post('/', asyncHandler(async (req, res) => {
 router.patch('/:id', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
+
+    // Build the SET list from the keys the caller actually sent. The previous
+    // blanket COALESCE meant a field could never be cleared: sending
+    // `city: ''` was coerced to null and the old value was kept forever.
+    const COLUMNS = {
+      name:     'full_name',
+      email:    'email',
+      phone:    'phone_number',
+      city:     'city',
+      sizePref: 'size_preference',
+      notes:    'notes',
+    };
+    // name and email are required, so an explicit blank is a validation error
+    // rather than a clear.
+    const REQUIRED = new Set(['name', 'email']);
+
+    const sets = [];
+    const params = [tenant.id, req.params.id];
+    const errors = [];
+
+    for (const [key, column] of Object.entries(COLUMNS)) {
+      if (!(key in req.body)) continue;
+      const raw = req.body[key];
+      const value = typeof raw === 'string' ? raw.trim() : raw;
+
+      if (REQUIRED.has(key) && !value) {
+        errors.push(`${key} cannot be empty.`);
+        continue;
+      }
+      params.push(value === '' || value === undefined ? null : value);
+      sets.push(`${column} = $${params.length}`);
+    }
+
+    if (errors.length > 0) return validationError(res, errors);
+    if (sets.length === 0) return validationError(res, ['No updatable fields were provided.']);
+
     const result = await client.query(
       `
         UPDATE customers
-        SET full_name       = COALESCE($3, full_name),
-            email           = COALESCE($4, email),
-            phone_number    = COALESCE($5, phone_number),
-            city            = COALESCE($6, city),
-            size_preference = COALESCE($7, size_preference),
-            notes           = COALESCE($8, notes)
+        SET ${sets.join(', ')}
         WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
         RETURNING *
       `,
-      [
-        tenant.id, req.params.id,
-        req.body.name  || null,
-        req.body.email || null,
-        req.body.phone || null,
-        req.body.city  || null,
-        req.body.sizePref != null ? req.body.sizePref : null,
-        req.body.notes != null   ? req.body.notes  : null,
-      ],
+      params,
     );
     if (result.rowCount === 0) return notFound(res, 'Customer not found.');
     ok(res, mapCustomer(result.rows[0]), 'Customer updated.');
+  } catch (error) {
+    const field = customerIdentifierConflictField(error);
+    if (field) return identifierConflict(res, field);
+    throw error;
   } finally {
     client.release();
   }
@@ -236,7 +365,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 router.delete('/:id', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
   try {
-    const tenant = await ensureDefaultTenant(client);
+    const tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
     const result = await client.query(
       `UPDATE customers SET deleted_at = now()
        WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
@@ -253,16 +382,41 @@ router.delete('/:id', asyncHandler(async (req, res) => {
 // ── PATCH /:id/restore — undo soft-delete ──
 router.patch('/:id/restore', asyncHandler(async (req, res) => {
   const client = await db.pool.connect();
+  let tenant;
   try {
-    const tenant = await ensureDefaultTenant(client);
+    tenant = (await client.query('SELECT id,currency FROM tenants WHERE id=$1', [req.user.tenantId])).rows[0];
+    await client.query('BEGIN');
+    const target = await client.query(
+      'SELECT id FROM customers WHERE tenant_id = $1 AND id = $2 FOR UPDATE',
+      [tenant.id, req.params.id],
+    );
+    if (!target.rowCount) {
+      await client.query('ROLLBACK');
+      return notFound(res, 'Customer not found.');
+    }
+    const blocker = await findRestoreBlocker(client, tenant.id, req.params.id);
+    if (blocker) {
+      await client.query('ROLLBACK');
+      return identifierConflict(res, blocker.field, blocker);
+    }
     const result = await client.query(
       `UPDATE customers SET deleted_at = NULL
        WHERE tenant_id = $1 AND id = $2
        RETURNING *`,
       [tenant.id, req.params.id],
     );
-    if (result.rowCount === 0) return notFound(res, 'Customer not found.');
+    await client.query('COMMIT');
     ok(res, mapCustomer(result.rows[0]), 'Customer restored.');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    const field = customerIdentifierConflictField(error);
+    if (field) {
+      // A different row can claim the identifier after the precheck. The
+      // constraint is the final arbiter; look up the winner after rollback.
+      const blocker = await findRestoreBlocker(client, tenant.id, req.params.id);
+      return identifierConflict(res, field, blocker);
+    }
+    throw error;
   } finally {
     client.release();
   }

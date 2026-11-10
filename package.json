@@ -12,5 +12,9 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@types/jsbarcode": "^3.11.4",
+    "jsbarcode": "^3.12.3"
   }
 }

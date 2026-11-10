@@ -41,6 +41,10 @@ function notFound(res, message = 'Not found.') {
   return res.status(404).json({ success: false, message });
 }
 
+function conflict(res, code, message, details = {}) {
+  return res.status(409).json({ ...details, success: false, code, message });
+}
+
 function validationError(res, errors) {
   return res.status(422).json({
     success: false,
@@ -52,6 +56,7 @@ function validationError(res, errors) {
 module.exports = {
   asyncHandler,
   created,
+  conflict,
   fromCents,
   intOrZero,
   notFound,

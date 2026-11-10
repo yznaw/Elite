@@ -132,6 +132,7 @@
   isolation: isolate;
   box-shadow: 0 18px 42px rgba(30, 28, 24, 0.08);
   transition: border-color 0.24s ease, box-shadow 0.24s ease, transform 0.24s ease;
+  text-decoration: none;
 }
 
 .collection-card:hover {
@@ -347,6 +348,8 @@
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 6px;
+  /* 10px uppercase text is ~13px tall; the row is padded out to a 32px target (WCAG 2.5.8). */
+  min-height: 32px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -458,7 +461,8 @@
   align-self: flex-start;
   flex: 0 0 auto;
   min-height: 28px;
-  padding: 0 2px;
+  padding: 0 6px;
+  margin-inline: -6px;
   border: 0;
   border-bottom: 1px solid rgba(36, 36, 36, 0.32);
   background: transparent;
@@ -549,8 +553,21 @@
   align-items: start;
 }
 
-.mobile-pagination {
+/* Phone only: the desktop grid shows the whole collection at once. */
+.load-more {
   display: none;
+}
+
+/*
+ * The notify layer lives here rather than inside `.product-tile`, which clips its overflow
+ * and lifts itself on hover. A transformed ancestor becomes the containing block for fixed
+ * children, so a layer inside the tile would be cut off at its edge and would slide with it
+ * whenever the pointer entered the card.
+ */
+.product-cell {
+  position: relative;
+  display: grid;
+  min-width: 0;
 }
 
 .product-tile {
@@ -586,9 +603,11 @@
   font: inherit;
   text-align: start;
   -webkit-tap-highlight-color: transparent;
+  text-decoration: none;
 }
 
 .product-image-wrap {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -604,13 +623,48 @@
   overflow: hidden;
 }
 
+.product-image-wrap::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  content: "";
+  background:
+    linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.7) 48%, transparent 66%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(232, 227, 217, 0.86));
+  background-size: 220% 100%, 100% 100%;
+  animation: productImageShimmer 1.35s ease-in-out infinite;
+  transition: opacity 0.25s ease;
+}
+
+.product-image-wrap.is-loaded::before {
+  opacity: 0;
+  animation: none;
+}
+
 .product-image-wrap img {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
   filter: saturate(0.94) contrast(1.02);
-  transition: transform 0.32s ease, filter 0.32s ease;
+  transition: opacity 0.35s ease, transform 0.32s ease, filter 0.32s ease;
+}
+
+.product-image-wrap img.is-loaded {
+  opacity: 1;
+}
+
+@keyframes productImageShimmer {
+  from { background-position: 180% 0, 0 0; }
+  to { background-position: -40% 0, 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-image-wrap::before { animation: none; }
 }
 
 .product-link:hover img,
@@ -619,8 +673,15 @@
   transform: scale(1.035);
 }
 
+/* Swatches sit 8px apart, so the shared 4px offset would put a focus ring on top of the
+   neighbour's tap target. */
+.product-color-swatch:focus-visible {
+  outline: 2px solid #2d2d2d;
+  outline-offset: -2px;
+  border-radius: 999px;
+}
+
 .product-link:focus-visible,
-.product-color-swatch:focus-visible,
 .size-chip:focus-visible,
 .quick-add:focus-visible,
 .buy-now:focus-visible {
@@ -671,25 +732,40 @@
 .product-colors {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  min-height: 18px;
-  padding: 8px 16px 0;
+  gap: 8px;
+  /* Holds the row's height so a card does not resize when its swatches render. */
+  min-height: 24px;
+  padding: 4px 16px 0;
 }
 
+/*
+ * The swatch is two elements: a transparent button that is only a tap target, and the dot
+ * inside it that is the whole of what is drawn. WCAG 2.5.8 asks for 24x24 CSS px and Apple
+ * for 44; the dot itself stays 14px, because a row of 44px discs would take over the card.
+ */
 .product-color-swatch {
   display: inline-grid;
   place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.product-color-swatch__dot {
+  display: block;
   width: 14px;
   height: 14px;
   overflow: hidden;
-  padding: 0;
   border: 1px solid rgba(36, 36, 36, 0.18);
   border-radius: 999px;
   background-position: center;
   background-size: cover;
-  box-shadow: 0 0 0 2px #fff, 0 2px 8px rgba(30, 28, 24, 0.16);
-  cursor: pointer;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  box-shadow: 0 0 0 2px #fff, 0 2px 8px rgba(30, 28, 24, 0.16);
 }
 
 .product-color-swatch img {
@@ -699,11 +775,60 @@
   object-fit: cover;
 }
 
-.product-color-swatch:hover,
-.product-color-swatch.is-selected {
+.product-color-swatch:hover .product-color-swatch__dot,
+.product-color-swatch.is-selected .product-color-swatch__dot {
   border-color: rgba(36, 36, 36, 0.72);
   box-shadow: 0 0 0 3px #fff, 0 0 0 5px rgba(36, 36, 36, 0.2), 0 4px 10px rgba(30, 28, 24, 0.18);
   transform: translateY(-1px);
+}
+
+/* Unfilled and outlined: a solid disc beside the colour dots would read as one more colour. */
+.product-color-swatch--more .product-color-swatch__dot {
+  display: grid;
+  place-items: center;
+  width: auto;
+  min-width: 22px;
+  height: 16px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(36, 36, 36, 0.35);
+  color: rgba(36, 36, 36, 0.72);
+  font-size: 9px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.product-color-swatch--more:hover .product-color-swatch__dot {
+  box-shadow: inset 0 0 0 1px rgba(36, 36, 36, 0.72);
+  transform: translateY(-1px);
+}
+
+/* A finger needs the full 44px, and the dot grows a little with it. */
+@media (pointer: coarse) {
+  .product-colors {
+    gap: 10px;
+    min-height: 44px;
+    padding-top: 0;
+  }
+
+  .product-color-swatch {
+    width: 44px;
+    height: 44px;
+  }
+
+  .product-color-swatch__dot {
+    width: 16px;
+    height: 16px;
+  }
+
+  .product-color-swatch--more .product-color-swatch__dot {
+    width: auto;
+    min-width: 26px;
+    height: 20px;
+    font-size: 10px;
+  }
 }
 
 .purchase-panel {
@@ -716,9 +841,15 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(247, 241, 229, 0.86));
 }
 
+.purchase-panel--disabled {
+  opacity: 0.58;
+}
+
 .size-picker {
   display: grid;
   gap: 9px;
+  /* Same reason as the product page's `.size-section`. */
+  scroll-margin-block: 110px;
 }
 
 .size-label {
@@ -739,7 +870,8 @@
   appearance: none;
   width: 100%;
   min-height: 40px;
-  padding: 0 34px 0 12px;
+  padding-block: 0;
+  padding-inline: 12px 34px;
   border: 1px solid rgba(36, 36, 36, 0.12);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.82);
@@ -763,7 +895,7 @@
 .size-select-arrow {
   position: absolute;
   top: 50%;
-  right: 12px;
+  inset-inline-end: 12px;
   transform: translateY(-50%);
   pointer-events: none;
   color: #6f6659;
@@ -796,6 +928,29 @@
   background: #242424;
   color: #f3efe4;
   transform: translateY(-1px);
+}
+
+.purchase-panel .quick-add:disabled,
+.purchase-panel .buy-now:disabled,
+.purchase-panel .size-select:disabled {
+  cursor: not-allowed;
+}
+
+.purchase-panel .quick-add:disabled,
+.purchase-panel .buy-now:disabled {
+  border-color: rgba(31, 28, 23, 0.12);
+  background: rgba(225, 220, 211, 0.74);
+  color: #8c8376;
+  box-shadow: none;
+  transform: none;
+}
+
+.purchase-panel .quick-add:disabled:hover,
+.purchase-panel .buy-now:disabled:hover {
+  border-color: rgba(31, 28, 23, 0.12);
+  background: rgba(225, 220, 211, 0.74);
+  color: #8c8376;
+  transform: none;
 }
 
 .quick-add,
@@ -950,43 +1105,38 @@ html[dir='rtl'] .product-tile {
     grid-template-columns: 1fr;
   }
 
-  .mobile-pagination {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    margin-top: 16px;
+  .load-more {
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    margin-top: 20px;
   }
 
-  .mobile-page-btn {
-    width: 38px;
-    height: 38px;
-    display: inline-grid;
-    place-items: center;
-    padding: 0;
-    border: 1px solid rgba(36, 36, 36, 0.12);
+  .load-more-btn {
+    width: 100%;
+    min-height: 48px;
+    padding: 0 20px;
+    border: 1px solid rgba(36, 36, 36, 0.18);
     border-radius: 999px;
     background: #fff;
     color: #242424;
     cursor: pointer;
     font-family: var(--ff-sans);
-    font-size: 15px;
-    font-weight: 700;
-    transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    transition: background 0.18s ease, border-color 0.18s ease;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  .mobile-page-btn:hover:not(:disabled) {
-    border-color: rgba(36, 36, 36, 0.28);
+  .load-more-btn:hover {
+    border-color: rgba(36, 36, 36, 0.4);
     background: #f7f5ef;
-    transform: translateY(-1px);
   }
 
-  .mobile-page-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .mobile-page-status {
+  .load-more-count {
+    margin: 0;
     color: #6f6659;
     font-family: var(--ff-sans);
     font-size: 10px;
@@ -1194,7 +1344,8 @@ html[dir='rtl'] .product-tile {
   }
 
   .clear-filters {
-    min-height: 0;
+    /* Was min-height: 0, which left a 10px-tall target on desktop. */
+    min-height: 28px;
   }
 
   .catalog-area {
@@ -1253,4 +1404,55 @@ html[dir='rtl'] .product-tile {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 24px;
   }
+}
+
+.stock-status { display: block; min-height: 1.25rem; font-size: .75rem; }
+/* On the dot, not the button: on the button the strike would be drawn across the whole
+   24/44px tap target instead of across the 14px swatch. */
+.product-color-swatch.is-sold-out .product-color-swatch__dot { opacity: .45; position: relative; }
+.product-color-swatch.is-sold-out .product-color-swatch__dot::after { content: ''; position: absolute; inset: 50% -2px auto; height: 1px; background: #272727; transform: rotate(-45deg); }
+.purchase-panel { grid-template-rows: minmax(59px, auto) 40px 40px; align-content: start; }
+.notify-only { grid-column: 1 / -1; }
+
+/* Size trigger shown instead of the native select below the sheet breakpoint. */
+.size-trigger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding-block: 0;
+  padding-inline: 12px;
+  border: 1px solid rgba(36, 36, 36, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #242424;
+  cursor: pointer;
+  font-family: var(--ff-sans);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-align: start;
+}
+
+.size-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.size-trigger strong {
+  font-size: 13px;
+}
+
+/* "Please choose a size", inline in the card's purchase panel. */
+.size-required-message {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #a33a32;
+  font-family: var(--ff-sans);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: start;
 }

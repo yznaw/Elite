@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    net48  : the Windows bridge that runs on the till (x86, QNB DLL when present).
+    net8.0 : simulator-only build for development on any OS (dotnet run -f net8.0).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net48;net8.0</TargetFrameworks>
+    <LangVersion>10</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>EliteCardBridge</RootNamespace>
+    <AssemblyName>EliteCardBridge</AssemblyName>
+    <Version>1.0.0</Version>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <QnbLib>$(MSBuildThisFileDirectory)..\..\lib\</QnbLib>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
+    <!-- The Ideal DLL is a 32-bit (PE32) assembly. -->
+    <PlatformTarget>x86</PlatformTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net48' And Exists('$(QnbLib)Ideal.PointOfSale.Integration.dll')">
+    <DefineConstants>$(DefineConstants);QNB_DLL</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EliteCardBridge.Core\EliteCardBridge.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.Configuration" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48' And Exists('$(QnbLib)Ideal.PointOfSale.Integration.dll')">
+    <Reference Include="Ideal.PointOfSale.Integration">
+      <HintPath>$(QnbLib)Ideal.PointOfSale.Integration.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <!-- Dependent files must sit next to the DLL (guide §14.5). -->
+    <None Include="$(QnbLib)*.dll;$(QnbLib)log4net.config" Exclude="$(QnbLib)Ideal.PointOfSale.Integration.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>%(Filename)%(Extension)</Link>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <Compile Remove="QnbTerminal.cs" />
+  </ItemGroup>
+</Project>

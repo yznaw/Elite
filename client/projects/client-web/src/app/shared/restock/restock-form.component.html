@@ -1,0 +1,62 @@
+<cw-overlay
+  variant="card"
+  [open]="open"
+  [eyebrow]="t('stock.notifyMe')"
+  [heading]="t('collection.notify.heading')"
+  [ariaLabel]="t('collection.aria.notifyDialog', { product: productName(product) })"
+  [closeLabel]="t('common.close')"
+  (closed)="closed.emit()"
+>
+  <div class="rf-product">
+    @if (image) {
+      <img class="rf-thumb" [src]="image" alt="" />
+    }
+    <div class="rf-identity">
+      <strong>{{ productName(product) }}</strong>
+      @if (color) {
+        <span>{{ color }}</span>
+      }
+    </div>
+  </div>
+
+  @if (submitted()) {
+    <p class="rf-success" role="status">{{ t("product.restock.success") }}</p>
+  } @else {
+    <form (submit)="submit($event)">
+      @if (hasSizes) {
+        <label class="rf-label" for="rf-size">{{ t("collection.quickAdd.size") }}</label>
+        <select id="rf-size" class="rf-select" (change)="onSizeChange($event)" required>
+          <!-- `selected` per option, not `[value]` on the select: the select is created
+               before its options exist, so a value binding is discarded and the browser
+               falls back to the first enabled option. -->
+          <option value="" disabled [selected]="size() === null">{{ t("stock.chooseRestockSize") }}</option>
+          @for (s of soldOutSizes; track s) {
+            <option [value]="s" [selected]="size() === s">{{ s }} {{ t("stock.soldOutOption") }}</option>
+          }
+        </select>
+      }
+
+      <label class="rf-label" for="rf-email">{{ t("product.restock.emailLabel") }}</label>
+      <input
+        id="rf-email"
+        class="rf-input"
+        type="email"
+        [value]="email()"
+        (input)="onEmailInput($event)"
+        [placeholder]="t('product.restock.emailPlaceholder')"
+        autocomplete="email"
+        required
+      />
+
+      @if (error()) {
+        <p class="rf-error" role="alert">{{ error() }}</p>
+      }
+
+      <button class="rf-submit" type="submit" [disabled]="!canSubmit()">
+        {{ submitting() ? t("product.restock.sending") : t("product.restock.submit") }}
+      </button>
+
+      <p class="rf-privacy">{{ t("stock.restockPrivacy") }}</p>
+    </form>
+  }
+</cw-overlay>
