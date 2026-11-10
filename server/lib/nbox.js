@@ -249,7 +249,16 @@ function countryName(country) {
     BH: 'Bahrain',
     OM: 'Oman',
   };
-  return map[code] || String(country || 'Qatar').trim();
+  if (map[code]) return map[code];
+  // Checkout sends ISO 3166-1 alpha-2 values for the worldwide country list.
+  // Keep the NBOX payload shape unchanged while resolving those codes to the
+  // English country names expected alongside countryCode.
+  if (/^[A-Z]{2}$/.test(code)) {
+    try {
+      return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) || String(country || 'Qatar').trim();
+    } catch { /* keep the supplied country value */ }
+  }
+  return String(country || 'Qatar').trim();
 }
 
 function firstPositive(values, fallback) {

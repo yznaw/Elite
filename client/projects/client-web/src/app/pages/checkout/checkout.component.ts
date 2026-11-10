@@ -10,6 +10,7 @@ import { CheckoutService } from '../../services/checkout.service';
 import { DeliveryQuote } from '../../services/checkout.service';
 import { PaymentService } from '../../services/payment.service';
 import { I18nService } from '../../services/i18n.service';
+import { LocaleService } from '../../services/locale.service';
 import { API_BASE } from '../../core/api-base';
 
 // Written just before the browser is sent to Sadad. On Back, ngOnInit reads
@@ -21,12 +22,55 @@ const PENDING_FORM_KEY   = 'elite_pending_form';
 const PENDING_QUOTE_KEY  = 'elite_pending_quote';
 
 const STEPS = ['checkout.step.details', 'checkout.step.delivery', 'checkout.step.payment'] as const;
+const COUNTRY_CODES = `AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW`.split(' ');
+
+const CALLING_CODE_GROUPS: ReadonlyArray<readonly [string, string]> = [
+  ['+1', 'AG AI AS BB BM BS CA DM DO GD GU JM KN KY LC MP MS PR SX TC TT VC VG VI UM US'],
+  ['+7', 'KZ RU'], ['+20', 'EG'], ['+27', 'ZA'], ['+30', 'GR'], ['+31', 'NL'], ['+32', 'BE'],
+  ['+33', 'FR'], ['+34', 'ES'], ['+36', 'HU'], ['+39', 'IT VA'], ['+40', 'RO'], ['+41', 'CH'],
+  ['+43', 'AT'], ['+44', 'GB GG IM JE'], ['+45', 'DK'], ['+46', 'SE'], ['+47', 'NO SJ'], ['+48', 'PL'],
+  ['+49', 'DE'], ['+51', 'PE'], ['+52', 'MX'], ['+53', 'CU'], ['+54', 'AR'], ['+55', 'BR'], ['+56', 'CL'],
+  ['+57', 'CO'], ['+58', 'VE'], ['+60', 'MY'], ['+61', 'AU CC CX'], ['+62', 'ID'], ['+63', 'PH'],
+  ['+64', 'NZ PN'], ['+65', 'SG'], ['+66', 'TH'], ['+81', 'JP'], ['+82', 'KR'], ['+84', 'VN'], ['+86', 'CN'],
+  ['+90', 'TR'], ['+91', 'IN'], ['+92', 'PK'], ['+93', 'AF'], ['+94', 'LK'], ['+95', 'MM'], ['+98', 'IR'],
+  ['+211', 'SS'], ['+212', 'EH MA'], ['+213', 'DZ'], ['+216', 'TN'], ['+218', 'LY'], ['+220', 'GM'],
+  ['+221', 'SN'], ['+222', 'MR'], ['+223', 'ML'], ['+224', 'GN'], ['+225', 'CI'], ['+226', 'BF'],
+  ['+227', 'NE'], ['+228', 'TG'], ['+229', 'BJ'], ['+230', 'MU'], ['+231', 'LR'], ['+232', 'SL'],
+  ['+233', 'GH'], ['+234', 'NG'], ['+235', 'TD'], ['+236', 'CF'], ['+237', 'CM'], ['+238', 'CV'],
+  ['+239', 'ST'], ['+240', 'GQ'], ['+241', 'GA'], ['+242', 'CG'], ['+243', 'CD'], ['+244', 'AO'],
+  ['+245', 'GW'], ['+246', 'IO'], ['+248', 'SC'], ['+249', 'SD'], ['+250', 'RW'], ['+251', 'ET'],
+  ['+252', 'SO'], ['+253', 'DJ'], ['+254', 'KE'], ['+255', 'TZ'], ['+256', 'UG'], ['+257', 'BI'],
+  ['+258', 'MZ'], ['+260', 'ZM'], ['+261', 'MG'], ['+262', 'RE TF YT'], ['+263', 'ZW'], ['+264', 'NA'],
+  ['+265', 'MW'], ['+266', 'LS'], ['+267', 'BW'], ['+268', 'SZ'], ['+269', 'KM'], ['+290', 'SH'],
+  ['+291', 'ER'], ['+297', 'AW'], ['+298', 'FO'], ['+299', 'GL'], ['+350', 'GI'], ['+351', 'PT'],
+  ['+352', 'LU'], ['+353', 'IE'], ['+354', 'IS'], ['+355', 'AL'], ['+356', 'MT'], ['+357', 'CY'],
+  ['+358', 'AX FI'], ['+359', 'BG'], ['+370', 'LT'], ['+371', 'LV'], ['+372', 'EE'], ['+373', 'MD'],
+  ['+374', 'AM'], ['+375', 'BY'], ['+376', 'AD'], ['+377', 'MC'], ['+378', 'SM'], ['+380', 'UA'],
+  ['+381', 'RS'], ['+382', 'ME'], ['+385', 'HR'], ['+386', 'SI'], ['+387', 'BA'], ['+389', 'MK'],
+  ['+420', 'CZ'], ['+421', 'SK'], ['+423', 'LI'], ['+500', 'FK GS'], ['+501', 'BZ'], ['+502', 'GT'],
+  ['+503', 'SV'], ['+504', 'HN'], ['+505', 'NI'], ['+506', 'CR'], ['+507', 'PA'], ['+508', 'PM'],
+  ['+509', 'HT'], ['+590', 'BL GP MF'], ['+591', 'BO'], ['+592', 'GY'], ['+593', 'EC'], ['+594', 'GF'],
+  ['+595', 'PY'], ['+596', 'MQ'], ['+597', 'SR'], ['+598', 'UY'], ['+599', 'BQ CW'], ['+670', 'TL'],
+  ['+672', 'HM NF'], ['+673', 'BN'], ['+674', 'NR'], ['+675', 'PG'], ['+676', 'TO'], ['+677', 'SB'],
+  ['+678', 'VU'], ['+679', 'FJ'], ['+680', 'PW'], ['+681', 'WF'], ['+682', 'CK'], ['+683', 'NU'],
+  ['+685', 'WS'], ['+686', 'KI'], ['+687', 'NC'], ['+688', 'TV'], ['+689', 'PF'], ['+690', 'TK'],
+  ['+691', 'FM'], ['+692', 'MH'], ['+850', 'KP'], ['+852', 'HK'], ['+853', 'MO'], ['+855', 'KH'],
+  ['+856', 'LA'], ['+880', 'BD'], ['+886', 'TW'], ['+960', 'MV'], ['+961', 'LB'], ['+962', 'JO'],
+  ['+963', 'SY'], ['+964', 'IQ'], ['+965', 'KW'], ['+966', 'SA'], ['+967', 'YE'], ['+968', 'OM'],
+  ['+970', 'PS'], ['+971', 'AE'], ['+972', 'IL'], ['+973', 'BH'], ['+974', 'QA'], ['+975', 'BT'],
+  ['+976', 'MN'], ['+977', 'NP'], ['+992', 'TJ'], ['+993', 'TM'], ['+994', 'AZ'], ['+995', 'GE'],
+  ['+996', 'KG'], ['+998', 'UZ'],
+];
+const CALLING_CODE_BY_COUNTRY = Object.fromEntries(
+  CALLING_CODE_GROUPS.flatMap(([dialCode, countries]) => countries.split(' ').map((country) => [country, dialCode])),
+) as Record<string, string>;
 
 interface CheckoutForm {
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
+  phoneCountry: string;
   address: string;
   zone: string;
   street: string;
@@ -53,6 +97,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly http = inject(HttpClient);
   private readonly i18n = inject(I18nService);
+  private readonly locale = inject(LocaleService);
   private readonly apiBase = inject(API_BASE);
 
   readonly termsHandle   = signal<string | null>(null);
@@ -88,7 +133,13 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     // Restore form data so the delivery quote re-fetch has all required fields.
     try {
       const savedForm = sessionStorage.getItem(PENDING_FORM_KEY);
-      if (savedForm) this.form.set(JSON.parse(savedForm));
+      if (savedForm) {
+        const restored = JSON.parse(savedForm) as CheckoutForm;
+        const oldCountryCodes: Record<string, string> = {
+          Qatar: 'QA', UAE: 'AE', Kuwait: 'KW', 'Saudi Arabia': 'SA', Bahrain: 'BH', Oman: 'OM',
+        };
+        this.form.set({ ...restored, country: oldCountryCodes[restored.country] || restored.country, phoneCountry: restored.phoneCountry || 'QA' });
+      }
 
       const savedQuote = sessionStorage.getItem(PENDING_QUOTE_KEY);
       if (savedQuote) {
@@ -134,7 +185,11 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   }
 
   readonly steps = STEPS;
-  readonly countries = ['Qatar'];
+  readonly countries = computed(() => {
+    const displayNames = new Intl.DisplayNames([this.locale.locale() === 'ar' ? 'ar' : 'en'], { type: 'region' });
+    return [...COUNTRY_CODES].sort((a, b) => this.countryLabel(a, displayNames).localeCompare(this.countryLabel(b, displayNames)));
+  });
+  readonly phoneCountries = this.countries;
 
   readonly step = signal(0);
   readonly placed = signal(false);
@@ -154,13 +209,14 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     lastName: '',
     email: '',
     phone: '',
+    phoneCountry: 'QA',
     address: '',
     zone: '',
     street: '',
     building: '',
     additionalDetails: '',
     city: '',
-    country: 'Qatar',
+    country: 'QA',
   });
 
   readonly touched = signal<Record<CustomerField, boolean>>({
@@ -229,7 +285,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
 
   set<K extends keyof CheckoutForm>(key: K, value: CheckoutForm[K]): void {
     this.form.update((f) => ({ ...f, [key]: value }));
-    if (['phone', 'address', 'zone', 'street', 'building', 'city', 'country'].includes(String(key))) {
+    if (['phone', 'phoneCountry', 'address', 'zone', 'street', 'building', 'city', 'country'].includes(String(key))) {
       this.quoteRequestVersion += 1;
       this.quotedDeliveryKey = '';
       this.shippingQuote.set(null);
@@ -332,7 +388,8 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     (e.target as HTMLImageElement).style.display = 'none';
   }
 
-  countryLabel(country: string): string {
+  countryLabel(country: string, displayNames = new Intl.DisplayNames([this.locale.locale() === 'ar' ? 'ar' : 'en'], { type: 'region' })): string {
+    if (/^[A-Z]{2}$/.test(country)) return displayNames.of(country) || country;
     const keys: Record<string, string> = {
       Qatar: 'checkout.country.qatar',
       UAE: 'checkout.country.uae',
@@ -342,6 +399,17 @@ export class CheckoutComponent implements OnInit, OnDestroy {
       Oman: 'checkout.country.oman',
     };
     return this.t(keys[country] ?? country);
+  }
+
+  phoneCallingCode(country: string): string {
+    return CALLING_CODE_BY_COUNTRY[country] || '';
+  }
+
+  phoneForApi(form: CheckoutForm): string {
+    const phone = form.phone.trim();
+    if (!phone) return '';
+    if (phone.startsWith('+') || phone.startsWith('00')) return phone;
+    return `${this.phoneCallingCode(form.phoneCountry)} ${phone}`.trim();
   }
 
   deliveryStatus(): string {
@@ -395,11 +463,11 @@ export class CheckoutComponent implements OnInit, OnDestroy {
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
           email: form.email.trim(),
-          phone: form.phone.trim(),
+          phone: this.phoneForApi(form),
         },
         shippingAddress: {
           fullName,
-          phone: form.phone.trim(),
+          phone: this.phoneForApi(form),
           line1: this.deliveryLine1(form),
           zone: form.zone.trim(),
           street: form.street.trim(),
@@ -498,11 +566,11 @@ export class CheckoutComponent implements OnInit, OnDestroy {
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
           email: form.email.trim(),
-          phone: form.phone.trim(),
+          phone: this.phoneForApi(form),
         },
         shippingAddress: {
           fullName,
-          phone: form.phone.trim(),
+          phone: this.phoneForApi(form),
           line1: this.deliveryLine1(form),
           zone: form.zone.trim(),
           street: form.street.trim(),
@@ -556,7 +624,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     const value = this.form()[field];
     if (field === 'firstName' || field === 'lastName') return this.isValidName(value);
     if (field === 'email') return this.isValidEmail(value);
-    return this.isValidQatarPhone(value);
+    return Boolean(value.trim());
   }
 
   private isDeliveryFieldValid(field: DeliveryField): boolean {
@@ -573,14 +641,6 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     const email = value.trim();
     if (!email || email.length > 254 || email.includes('..')) return false;
     return /^[^\s@.]+(?:\.[^\s@.]+)*@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(email);
-  }
-
-  private isValidQatarPhone(value: string): boolean {
-    const normalized = value
-      .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
-      .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
-      .replace(/[\s().-]/g, '');
-    return /^(?:\+974|00974|974)?[3-7]\d{7}$/.test(normalized);
   }
 
   private canRequestDeliveryQuote(form: CheckoutForm, itemCount: number): boolean {
@@ -608,7 +668,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
 
   private deliveryQuoteKey(form: CheckoutForm, items: ReadonlyArray<{ id: string; variantId?: string; size: number; qty: number }>): string {
     return JSON.stringify({
-      customer: [form.firstName.trim(), form.lastName.trim(), form.phone.trim()],
+      customer: [form.firstName.trim(), form.lastName.trim(), this.phoneForApi(form)],
       address: [
         this.deliveryLine1(form),
         form.city.trim(),

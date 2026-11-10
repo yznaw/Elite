@@ -279,25 +279,35 @@
               }
             </div>
             <div class="float-wrap" style="grid-column: 1/-1">
-              <input
-                id="checkout-phone"
-                class="float-input"
-                type="tel"
-                [value]="form().phone"
-                (input)="set('phone', inputValue($event))"
-                (blur)="markTouched('phone')"
-                autocomplete="tel"
-                inputmode="tel"
-                maxlength="20"
-                [attr.aria-invalid]="showFieldError('phone')"
-                [attr.aria-describedby]="
-                  showFieldError('phone') ? 'checkout-phone-error' : null
-                "
-                placeholder=" "
-              />
-              <label class="float-label" for="checkout-phone">{{
-                t("checkout.field.phone")
-              }}</label>
+              <label class="checkout-phone-label" for="checkout-phone">{{ t("checkout.field.phone") }}</label>
+              <div class="checkout-phone-controls">
+                <select
+                  id="checkout-phone-country"
+                  class="float-input checkout-phone-country"
+                  [value]="form().phoneCountry"
+                  (change)="set('phoneCountry', selectValue($event))"
+                  [attr.aria-label]="t('checkout.field.phoneCountry')"
+                >
+                  @for (c of phoneCountries(); track c) {
+                    <option [value]="c">{{ countryLabel(c) }} {{ phoneCallingCode(c) || '—' }}</option>
+                  }
+                </select>
+                <input
+                  id="checkout-phone"
+                  class="float-input checkout-phone-number"
+                  type="tel"
+                  [value]="form().phone"
+                  (input)="set('phone', inputValue($event))"
+                  (blur)="markTouched('phone')"
+                  autocomplete="tel-national"
+                  inputmode="tel"
+                  [attr.aria-invalid]="showFieldError('phone')"
+                  [attr.aria-describedby]="
+                    showFieldError('phone') ? 'checkout-phone-error' : null
+                  "
+                  placeholder=" "
+                />
+              </div>
               @if (showFieldError("phone")) {
                 <span id="checkout-phone-error" class="field-error">
                   {{ t("checkout.validation.phone") }}
@@ -424,12 +434,14 @@
             </div>
             <div class="float-wrap">
               <select
+                id="checkout-country"
                 class="float-input"
                 [value]="form().country"
                 (change)="set('country', selectValue($event))"
-                style="padding-top: 20px; padding-bottom: 8px; cursor: pointer"
+                [attr.aria-label]="t('checkout.field.country')"
+                style="padding-top: 20px; padding-bottom: 8px; cursor: pointer; color: var(--cream)"
               >
-                @for (c of countries; track c) {
+                @for (c of countries(); track c) {
                   <option [value]="c">{{ countryLabel(c) }}</option>
                 }
               </select>
@@ -585,9 +597,10 @@
               class="btn-outline"
               [disabled]="placing() || redirecting()"
               (click)="back()"
-              style="padding: 14px 24px; flex: 1"
+              style="padding: 14px 24px; flex: 1; color: var(--cream); display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 120px"
             >
-              {{ t("common.back") }}
+              <span aria-hidden="true">←</span>
+              <span>{{ t("common.back") }}</span>
             </button>
           }
           <button

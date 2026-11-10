@@ -13,6 +13,41 @@
   line-height: 1.4;
 }
 
+.checkout-phone-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1.4fr);
+  gap: 8px;
+}
+
+.checkout-phone-label {
+  display: block;
+  margin: 0 0 6px 2px;
+  color: var(--gold);
+  font-family: var(--ff-sans);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.checkout-phone-country {
+  min-width: 0;
+  padding: 20px 10px 8px;
+  color: var(--cream);
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.checkout-phone-number {
+  min-width: 0;
+}
+
+@media (max-width: 420px) {
+  .checkout-phone-controls {
+    grid-template-columns: minmax(122px, 0.9fr) minmax(0, 1.4fr);
+    gap: 6px;
+  }
+}
+
 .checkout-address-grid {
   grid-column: 1 / -1;
   display: grid;
