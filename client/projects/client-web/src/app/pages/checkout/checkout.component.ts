@@ -305,9 +305,15 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   }
 
   private restoreCountryChoices(): void {
+    let raw: string | null = null;
     try {
-      const raw = sessionStorage.getItem(CHECKOUT_COUNTRIES_KEY);
-      if (!raw) return;
+      raw = localStorage.getItem(CHECKOUT_COUNTRIES_KEY);
+    } catch { /* try tab storage below */ }
+    if (!raw) {
+      try { raw = sessionStorage.getItem(CHECKOUT_COUNTRIES_KEY); } catch { /* keep defaults */ }
+    }
+    if (!raw) return;
+    try {
       const saved = JSON.parse(raw) as { country?: string; phoneCountry?: string };
       this.form.update((form) => ({
         ...form,
@@ -318,10 +324,10 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   }
 
   private persistCountryChoices(): void {
-    try {
-      const { country, phoneCountry } = this.form();
-      sessionStorage.setItem(CHECKOUT_COUNTRIES_KEY, JSON.stringify({ country, phoneCountry }));
-    } catch { /* storage can be unavailable in private browsing */ }
+    const { country, phoneCountry } = this.form();
+    const value = JSON.stringify({ country, phoneCountry });
+    try { localStorage.setItem(CHECKOUT_COUNTRIES_KEY, value); } catch { /* storage can be unavailable in private browsing */ }
+    try { sessionStorage.setItem(CHECKOUT_COUNTRIES_KEY, value); } catch { /* keep working when tab storage is blocked */ }
   }
 
   markTouched(field: CustomerField): void {

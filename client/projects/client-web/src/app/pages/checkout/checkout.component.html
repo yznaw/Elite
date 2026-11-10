@@ -289,7 +289,7 @@
                   [attr.aria-label]="t('checkout.field.phoneCountry')"
                 >
                   @for (c of phoneCountries(); track c) {
-                    <option [value]="c">{{ countryLabel(c) }} {{ phoneCallingCode(c) || '—' }}</option>
+                    <option [value]="c" [selected]="c === form().phoneCountry">{{ countryLabel(c) }} {{ phoneCallingCode(c) || '—' }}</option>
                   }
                 </select>
                 <input
@@ -442,7 +442,7 @@
                 style="padding-top: 20px; padding-bottom: 8px; cursor: pointer; color: var(--cream)"
               >
                 @for (c of countries(); track c) {
-                  <option [value]="c">{{ countryLabel(c) }}</option>
+                  <option [value]="c" [selected]="c === form().country">{{ countryLabel(c) }}</option>
                 }
               </select>
               <label
