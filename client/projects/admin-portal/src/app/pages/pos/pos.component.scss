@@ -656,6 +656,62 @@ label input:focus {
   font-weight: 700;
 }
 
+/* Card / Sadad reference: a visible, obviously required box. */
+.reference-field {
+  display: block;
+  margin-top: 12px;
+}
+
+.reference-field span {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.reference-field em {
+  color: #b4531f;
+  font-style: normal;
+  letter-spacing: 0.04em;
+}
+
+.reference-field input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 2px solid #9aa5a1;
+  background: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.reference-field input::placeholder {
+  color: #aab2af;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.reference-field input:focus {
+  outline: 0;
+  border-color: var(--pos-green);
+  box-shadow: 0 0 0 3px rgba(6, 75, 61, 0.12);
+}
+
+.reference-field.valid input { border-color: var(--pos-green); }
+.reference-field.valid em { visibility: hidden; }
+.reference-field.invalid input { border-color: var(--pos-danger, #a8322a); }
+
+.payment-needs-reference {
+  display: block;
+  margin-top: 10px;
+  color: #b4531f;
+  font-size: 11px;
+  text-align: center;
+}
+
 /* ── Customer at checkout ──────────────────────────────────────────────
    Sized for a 12" resistive touch panel at 1024×768: 44px minimum tap
    targets, no hover-only affordances, and the whole block collapses to
@@ -1263,6 +1319,14 @@ label input:focus {
   width: min(100%, 480px);
   padding: 34px;
   animation: sheetIn 0.2s ease-out both;
+}
+
+// The Sadad tender is the tallest (charge box + note + ID field). On a short
+// till screen the centred modal clipped the "Complete sale" button with no way
+// to reach it, so the sheet scrolls inside the viewport instead.
+.payment-sheet {
+  max-height: 100%;
+  overflow-y: auto;
 }
 
 .variant-picker {

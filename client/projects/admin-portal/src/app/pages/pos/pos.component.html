@@ -678,9 +678,9 @@
             Confirm the payment on the external card terminal before completing this sale.
             @if (!online()) { <b> Offline card confirmation cannot be verified by Elite until synchronization.</b> }
           </div>
-          <label class="money-field terminal-reference-field">
-            <span>Terminal reference / approval code</span>
-            <input [ngModel]="terminalReference" (ngModelChange)="onPaymentReferenceInput($event)" placeholder="From the terminal receipt slip" autocomplete="off" />
+          <label class="reference-field" [class.valid]="paymentReady()">
+            <span>Terminal reference / approval code <em>Required</em></span>
+            <input [ngModel]="terminalReference" (ngModelChange)="onPaymentReferenceInput($event)" placeholder="e.g. 482913" autocomplete="off" />
           </label>
           @if (paymentReferenceError(); as problem) { <small class="payment-reference-error" role="alert">{{ problem }}</small> }
         } @else {
@@ -695,12 +695,12 @@
             Ask the customer to pay by Sadad, then check it shows Paid in the Sadad merchant app.
             @if (!online()) { <b> Offline Sadad confirmation cannot be verified by Elite until synchronization.</b> }
           </div>
-          <label class="money-field terminal-reference-field">
-            <span>Sadad transaction ID</span>
+          <label class="reference-field" [class.valid]="paymentReady()" [class.invalid]="!!(paymentReferenceError() || paymentReferenceProblem('sadad', terminalReference))">
+            <span>Sadad transaction ID <em>Required</em></span>
             <input
               [ngModel]="terminalReference"
               (ngModelChange)="onPaymentReferenceInput($event)"
-              placeholder="From the Sadad merchant app"
+              placeholder="e.g. 1234567"
               maxlength="40"
               autocomplete="off"
               autocapitalize="characters"
@@ -725,6 +725,11 @@
             {{ busy() ? 'Posting sale...' : 'Complete sale' }}
           }
         </button>
+        @if (!paymentReady() && needsReference(paymentMethod()) && !cardTerminalActive()) {
+          <small class="payment-needs-reference">
+            {{ paymentMethod() === 'sadad' ? 'Enter the Sadad transaction ID to continue.' : 'Enter the terminal reference to continue.' }}
+          </small>
+        }
       </section>
     </div>
   }
