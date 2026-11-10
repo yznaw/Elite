@@ -20,6 +20,7 @@ const PENDING_ORDER_KEY  = 'elite_pending_order';
 // a bfcache reload. Cleared together with PENDING_ORDER_KEY on resume.
 const PENDING_FORM_KEY   = 'elite_pending_form';
 const PENDING_QUOTE_KEY  = 'elite_pending_quote';
+const CHECKOUT_COUNTRIES_KEY = 'elite_checkout_countries';
 
 const STEPS = ['checkout.step.details', 'checkout.step.delivery', 'checkout.step.payment'] as const;
 const COUNTRY_CODES = `AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW`.split(' ');
@@ -138,7 +139,12 @@ export class CheckoutComponent implements OnInit, OnDestroy {
         const oldCountryCodes: Record<string, string> = {
           Qatar: 'QA', UAE: 'AE', Kuwait: 'KW', 'Saudi Arabia': 'SA', Bahrain: 'BH', Oman: 'OM',
         };
-        this.form.set({ ...restored, country: oldCountryCodes[restored.country] || restored.country, phoneCountry: restored.phoneCountry || 'QA' });
+        const country = oldCountryCodes[restored.country] || restored.country;
+        this.form.set({
+          ...restored,
+          country: COUNTRY_CODES.includes(country) ? country : 'QA',
+          phoneCountry: COUNTRY_CODES.includes(restored.phoneCountry) ? restored.phoneCountry : 'QA',
+        });
       }
 
       const savedQuote = sessionStorage.getItem(PENDING_QUOTE_KEY);
@@ -166,6 +172,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     // The bag may have been filled days ago. Re-read it so lines that sold out
     // since are flagged now, not when the customer presses Proceed to Payment.
     void this.cart.refresh();
+    this.restoreCountryChoices();
     // Covers the normal navigation case (fresh load / SPA route).
     this.silentResume();
     // Covers the bfcache case (browser Back from Sadad restores a frozen page).
@@ -285,6 +292,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
 
   set<K extends keyof CheckoutForm>(key: K, value: CheckoutForm[K]): void {
     this.form.update((f) => ({ ...f, [key]: value }));
+    if (key === 'country' || key === 'phoneCountry') this.persistCountryChoices();
     if (['phone', 'phoneCountry', 'address', 'zone', 'street', 'building', 'city', 'country'].includes(String(key))) {
       this.quoteRequestVersion += 1;
       this.quotedDeliveryKey = '';
@@ -294,6 +302,26 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     // Any field change invalidates the pending order — a different submission
     // must create a new order, not return the old one via idempotency dedup.
     this.idempotencyKey = null;
+  }
+
+  private restoreCountryChoices(): void {
+    try {
+      const raw = sessionStorage.getItem(CHECKOUT_COUNTRIES_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { country?: string; phoneCountry?: string };
+      this.form.update((form) => ({
+        ...form,
+        country: COUNTRY_CODES.includes(saved.country || '') ? saved.country! : form.country,
+        phoneCountry: COUNTRY_CODES.includes(saved.phoneCountry || '') ? saved.phoneCountry! : form.phoneCountry,
+      }));
+    } catch { /* keep the checkout defaults */ }
+  }
+
+  private persistCountryChoices(): void {
+    try {
+      const { country, phoneCountry } = this.form();
+      sessionStorage.setItem(CHECKOUT_COUNTRIES_KEY, JSON.stringify({ country, phoneCountry }));
+    } catch { /* storage can be unavailable in private browsing */ }
   }
 
   markTouched(field: CustomerField): void {
