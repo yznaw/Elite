@@ -290,17 +290,44 @@ async function bookShipments(client, tenantId, orderId) {
             if (!lines.length)
                 continue;
             await client.query("UPDATE shipments SET booking_state='booking',booking_started_at=now(),booking_error=NULL WHERE id=$1", [s.id]);
+            console.log('[nbox] local shipment booking started', {
+                orderReference: order.public_number,
+                externalReference: s.external_reference,
+                shipmentId: s.id,
+                allocatedItemCount: lines.length,
+            });
             try {
                 const result = await nbox.createShipment({ orderNumber: s.external_reference, externalReference: s.external_reference, origin: s.origin_snapshot,
                     customer: { name: order.customer_name, email: order.customer_email, phone: order.customer_phone }, shippingAddress: s.address,
                     items: lines.map(i => ({ name: i.product_name, quantity: i.allocated_quantity, price: i.unit_price_cents / 100, metadata: i.metadata })), shippingQuote: s.quote_snapshot });
                 assertPos(result.id || result.orderId || result.trackingNumber, 502, 'MISSING_SHIPMENT_ID', 'NBOX response did not identify the shipment. Reconcile before retrying.');
-                await client.query(`UPDATE shipments SET booking_state='booked',provider_shipment_id=$2,tracking_number=$3,tracking_url=$4,service=$5,booking_error=NULL WHERE id=$1`, [s.id, result.id || result.orderId || result.trackingNumber, result.trackingNumber || null, /^https:\/\//i.test(result.trackingUrl || '') ? result.trackingUrl : null, result.serviceName || 'NBOX']);
+                const providerShipmentId = result.id || result.orderId || result.trackingNumber;
+                await client.query(`UPDATE shipments SET booking_state='booked',provider_shipment_id=$2,tracking_number=$3,tracking_url=$4,service=$5,booking_error=NULL WHERE id=$1`, [s.id, providerShipmentId, result.trackingNumber || null, /^https:\/\//i.test(result.trackingUrl || '') ? result.trackingUrl : null, result.serviceName || 'NBOX']);
+                console.log('[nbox] local shipment booking persisted', {
+                    orderReference: order.public_number,
+                    externalReference: s.external_reference,
+                    shipmentId: s.id,
+                    bookingState: 'booked',
+                    providerShipmentId,
+                    hasTrackingNumber: Boolean(result.trackingNumber),
+                    hasTrackingUrl: Boolean(/^https:\/\//i.test(result.trackingUrl || '')),
+                });
             }
             catch (err) {
                 const status = Number(err.details?.status);
                 const safeFailure = [400, 401, 403, 404, 422, 429].includes(status);
-                await client.query('UPDATE shipments SET booking_state=$2,booking_error=$3 WHERE id=$1', [s.id, safeFailure ? 'failed' : 'uncertain', String(err.message).slice(0, 500)]);
+                const bookingState = safeFailure ? 'failed' : 'uncertain';
+                await client.query('UPDATE shipments SET booking_state=$2,booking_error=$3 WHERE id=$1', [s.id, bookingState, String(err.message).slice(0, 500)]);
+                console.warn('[nbox] local shipment booking recorded as unsuccessful', {
+                    traceId: err.details?.traceId || null,
+                    orderReference: order.public_number,
+                    externalReference: s.external_reference,
+                    shipmentId: s.id,
+                    bookingState,
+                    errorType: err.name || 'Error',
+                    httpStatus: Number.isFinite(status) ? status : null,
+                    errorCode: err.code || err.details?.code || null,
+                });
             }
         }
         const list = await deliveryList(client, tenantId, orderId, true);

@@ -129,6 +129,11 @@ async function bookNboxForPaidOrder(client, tenantId, orderId) {
     );
 
     let shipment;
+    console.log('[nbox] local shipment booking started', {
+      orderReference: order.public_number,
+      externalReference: order.public_number,
+      itemCount: itemResult.rows.length,
+    });
     try {
       shipment = await nbox.createShipment({
         orderNumber: order.public_number,
@@ -143,6 +148,14 @@ async function bookNboxForPaidOrder(client, tenantId, orderId) {
       });
     } catch (err) {
       await recordNboxBookingFailure(client, tenantId, orderId, err);
+      console.warn('[nbox] local shipment booking failed', {
+        traceId: err.details?.traceId || null,
+        orderReference: order.public_number,
+        externalReference: order.public_number,
+        errorType: err.name || 'Error',
+        httpStatus: Number.isFinite(Number(err.details?.status)) ? Number(err.details.status) : null,
+        errorCode: err.code || err.details?.code || null,
+      });
       return {
         created: false,
         failed: true,
@@ -212,6 +225,14 @@ async function bookNboxForPaidOrder(client, tenantId, orderId) {
         JSON.stringify({ provider: 'nbox', shipment }),
       ],
     );
+
+    console.log('[nbox] local shipment booking persisted', {
+      orderReference: order.public_number,
+      externalReference: order.public_number,
+      providerShipmentId: shipment.id || shipment.orderId || shipment.trackingNumber || null,
+      trackingNumber: shipment.trackingNumber || null,
+      bookingState: 'booked',
+    });
 
     return { created: true, shipment };
   });

@@ -1,3 +1,5 @@
+const { randomUUID } = require('node:crypto');
+
 const DEFAULT_ITEM_WEIGHT_GRAMS = 1000;
 const DEFAULT_ITEM_LENGTH_CM = 35;
 const DEFAULT_ITEM_WIDTH_CM = 25;
@@ -15,6 +17,45 @@ class NboxError extends Error {
 
 function env(name, fallback = '') {
   return String(process.env[name] || fallback).trim();
+}
+
+function safeLogValue(value, maxLength = 180) {
+  if (value === null || value === undefined || typeof value === 'object') return null;
+  const normalized = String(value).replace(/[\r\n\t]/g, ' ').trim();
+  return normalized ? normalized.slice(0, maxLength) : null;
+}
+
+function safeEndpoint(url) {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return '[invalid endpoint]';
+  }
+}
+
+function providerResponseSummary(data) {
+  const nested = data?.data || data?.payload || data;
+  const identifiers = {};
+  const candidates = {
+    shipmentId: ['shipment_id', 'shipmentId'],
+    orderId: ['orderId', 'order_id'],
+    orderReference: ['orderReference', 'order_reference'],
+    trackingNumber: ['tracking_number', 'trackingNumber', 'awb', 'waybill'],
+    id: ['id'],
+  };
+
+  for (const [label, keys] of Object.entries(candidates)) {
+    const value = keys.map((key) => nested?.[key]).find((candidate) => safeLogValue(candidate));
+    if (value !== undefined) identifiers[label] = safeLogValue(value);
+  }
+
+  return {
+    bodyStatus: safeLogValue(nested?.status || data?.status, 60),
+    topLevelKeys: data && typeof data === 'object' ? Object.keys(data).slice(0, 30) : [],
+    resultKeys: nested && typeof nested === 'object' ? Object.keys(nested).slice(0, 30) : [],
+    identifiers,
+  };
 }
 
 function isConfigured() {
@@ -468,7 +509,7 @@ function buildOrderPayload({ orderNumber, customer, shippingAddress, items, ship
   });
 }
 
-async function postJson(path, payload, { retried = false } = {}) {
+async function postJson(path, payload, { retried = false, traceId = randomUUID() } = {}) {
   if (!isConfigured()) {
     throw new NboxError('NBOX API is not configured.', { configured: false });
   }
@@ -492,7 +533,11 @@ async function postJson(path, payload, { retried = false } = {}) {
     throw new NboxError('NBOX API credentials are invalid.', { message: err.message });
   }
 
-  console.log('[nbox] outgoing request', { url });
+  console.log('[nbox] outgoing request', {
+    traceId,
+    endpoint: safeEndpoint(url),
+    attempt: retried ? 2 : 1,
+  });
 
   let response;
   try {
@@ -504,8 +549,10 @@ async function postJson(path, payload, { retried = false } = {}) {
     });
   } catch (err) {
     throw new NboxError('NBOX API request failed before a response was received.', {
-      url,
-      message: err.message,
+      endpoint: safeEndpoint(url),
+      traceId,
+      errorType: err.name || 'Error',
+      errorCode: err.code || null,
     });
   }
   const text = await response.text();
@@ -515,16 +562,21 @@ async function postJson(path, payload, { retried = false } = {}) {
   } catch {
     data = { raw: text };
   }
-  console.log('[nbox] response', { status: response.status });
+  console.log('[nbox] response', {
+    traceId,
+    status: response.status,
+    ...providerResponseSummary(data),
+  });
 
   if (response.status === 401 || response.status === 403) {
     if (!retried) {
-      console.warn('[nbox] Auth rejected — re-logging in and retrying.');
+      console.warn('[nbox] Auth rejected — re-logging in and retrying.', { traceId });
       await invalidateToken();
-      return postJson(path, payload, { retried: true });
+      return postJson(path, payload, { retried: true, traceId });
     }
     throw new NboxError(`NBOX API authentication failed after re-login.`, {
       status: response.status,
+      traceId,
       data,
     });
   }
@@ -532,19 +584,20 @@ async function postJson(path, payload, { retried = false } = {}) {
   const bodyStatus = String(data?.status || '').trim().toLowerCase();
   if (['unauthorized', 'unauthenticated'].includes(bodyStatus)) {
     if (!retried) {
-      console.warn('[nbox] Auth rejected in body — re-logging in and retrying.');
+      console.warn('[nbox] Auth rejected in body — re-logging in and retrying.', { traceId });
       await invalidateToken();
-      return postJson(path, payload, { retried: true });
+      return postJson(path, payload, { retried: true, traceId });
     }
     throw new NboxError(
       data?.message || 'NBOX API authentication failed after re-login.',
-      { data },
+      { data, traceId },
     );
   }
 
   if (!response.ok) {
     throw new NboxError(`NBOX API returned ${response.status}.`, {
       status: response.status,
+      traceId,
       data,
     });
   }
@@ -702,7 +755,41 @@ async function createShipment({ orderNumber, customer, shippingAddress, items, s
     items,
     shippingQuote,
   });
-  return normalizeShipment(await postJson(endpoint, payload));
+  const traceId = randomUUID();
+  console.log('[nbox] shipment request prepared', {
+    traceId,
+    externalReference: safeLogValue(externalReference || orderNumber),
+    shopDomain: safeLogValue(env('NBOX_SHOP_DOMAIN')),
+    orderNumber: safeLogValue(payload.order?.orderNumber),
+    orderReference: safeLogValue(payload.order?.orderReference),
+    currency: safeLogValue(payload.order?.currency, 12),
+    productCount: Array.isArray(payload.products) ? payload.products.length : 0,
+    hasOrigin: Boolean(payload.origin),
+    hasDestination: Boolean(payload.destination),
+  });
+  let response;
+  try {
+    response = await postJson(endpoint, payload, { traceId });
+  } catch (err) {
+    if (err instanceof NboxError) err.details = { ...err.details, traceId };
+    throw err;
+  }
+  let shipment;
+  try {
+    shipment = normalizeShipment(response);
+  } catch (err) {
+    if (err instanceof NboxError) err.details = { ...err.details, traceId };
+    throw err;
+  }
+  console.log('[nbox] shipment response normalized', {
+    traceId,
+    externalReference: safeLogValue(externalReference || orderNumber),
+    providerId: safeLogValue(shipment.id || shipment.orderId || shipment.trackingNumber),
+    trackingNumber: safeLogValue(shipment.trackingNumber),
+    hasTrackingUrl: Boolean(shipment.trackingUrl),
+    serviceName: safeLogValue(shipment.serviceName, 80),
+  });
+  return shipment;
 }
 
 module.exports = {
